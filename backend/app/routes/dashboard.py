@@ -42,8 +42,7 @@ async def dashboard_stats():
                 for node in rack.get("DataNodes", []):
                     stats["volumeServers"] += 1
                     stats["totalVolumes"] += node.get("Volumes", 0)
-                    if node.get("Volumes", 0) > 0:
-                        stats["healthyNodes"] += 1
+                    stats["healthyNodes"] += 1
     except Exception:
         logger.error("stats_fetch_failed", exc_info=True)
 
