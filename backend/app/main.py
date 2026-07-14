@@ -42,7 +42,10 @@ app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.add_middleware(CsrfMiddleware)
 
 from app.routes.auth import router as auth_router
+from app.routes.dashboard import router as dashboard_router
+
 app.include_router(auth_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 
 
 @app.get("/api/health")

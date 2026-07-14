@@ -3,7 +3,9 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider, App as AntApp, theme, Spin } from 'antd'
 import { useAuthStore } from './stores/authStore'
 import LoginPage from './pages/Login'
+import DashboardPage from './pages/Dashboard'
 import DashboardLayout from './layouts/DashboardLayout'
+import { SseProvider } from './components/SseProvider'
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { isLoggedIn, user, loading } = useAuthStore()
@@ -33,11 +35,13 @@ function App() {
           <Route
             element={
               <ProtectedRoute>
-                <DashboardLayout />
+                <SseProvider>
+                  <DashboardLayout />
+                </SseProvider>
               </ProtectedRoute>
             }
           >
-            <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/cluster" element={<Placeholder title="Cluster" />} />
             <Route path="/volumes" element={<Placeholder title="Volumes" />} />
             <Route path="/collections" element={<Placeholder title="Collections" />} />
