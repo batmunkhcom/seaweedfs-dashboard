@@ -1,0 +1,281 @@
+import axios from 'axios'
+import type {
+  ClusterStatus,
+  Topology,
+  Volume,
+  VolumeDetail,
+  Collection,
+  FilerListResponse,
+  S3Bucket,
+  S3User,
+  S3Policy,
+  BackupStatus,
+  Snapshot,
+  WorkerStatus,
+  WorkerJob,
+  DashboardStats,
+  AlertEvent,
+  AlertConfig,
+  DiskHealthSummary,
+  DiskHealthDetail,
+  DiskHealthHistory,
+  LoginRequest,
+  LoginResponse,
+  User,
+} from '../types'
+
+const api = axios.create({
+  baseURL: '/api',
+  withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+let csrfToken = ''
+
+export function setCsrfToken(token: string) {
+  csrfToken = token
+}
+
+api.interceptors.request.use((config) => {
+  if (csrfToken && config.method && !['get', 'head', 'options'].includes(config.method.toLowerCase())) {
+    config.headers['X-CSRF-Token'] = csrfToken
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+export default api
+
+export async function healthCheck() {
+  const { data } = await api.get('/health')
+  return data
+}
+
+export async function login(req: LoginRequest): Promise<LoginResponse> {
+  const { data } = await api.post('/auth/login', req)
+  setCsrfToken(data.csrfToken)
+  return data
+}
+
+export async function logout() {
+  await api.post('/auth/logout')
+  setCsrfToken('')
+}
+
+export async function getMe(): Promise<User> {
+  const { data } = await api.get('/auth/me')
+  return data
+}
+
+export async function getCsrfToken(): Promise<string> {
+  const { data } = await api.get('/auth/csrf-token')
+  setCsrfToken(data.token)
+  return data.token
+}
+
+export async function getClusterStatus(): Promise<ClusterStatus> {
+  const { data } = await api.get('/cluster/status')
+  return data
+}
+
+export async function getClusterHealth() {
+  const { data } = await api.get('/cluster/health')
+  return data
+}
+
+export async function getTopology(): Promise<Topology> {
+  const { data } = await api.get('/cluster/topology')
+  return data
+}
+
+export async function getVolumes(params?: Record<string, string>): Promise<{ volumes: Volume[]; total: number }> {
+  const { data } = await api.get('/volumes', { params })
+  return data
+}
+
+export async function getVolume(id: number): Promise<VolumeDetail> {
+  const { data } = await api.get(`/volumes/${id}`)
+  return data
+}
+
+export async function growVolumes(body: Record<string, unknown>) {
+  const { data } = await api.post('/volumes/grow', body)
+  return data
+}
+
+export async function vacuumVolumes(body: Record<string, unknown>) {
+  const { data } = await api.post('/volumes/vacuum', body)
+  return data
+}
+
+export async function getCollections(): Promise<Collection[]> {
+  const { data } = await api.get('/collections')
+  return data
+}
+
+export async function deleteCollection(name: string) {
+  await api.delete(`/collections/${encodeURIComponent(name)}`)
+}
+
+export async function listFiler(path: string, page = 1, pageSize = 50): Promise<FilerListResponse> {
+  const { data } = await api.get(`/filer/list/${encodeURIComponent(path)}`, {
+    params: { page, pageSize },
+  })
+  return data
+}
+
+export async function createFilerDir(path: string) {
+  await api.post(`/filer/mkdir/${encodeURIComponent(path)}`)
+}
+
+export async function deleteFilerEntry(path: string) {
+  await api.delete(`/filer/delete/${encodeURIComponent(path)}`)
+}
+
+export async function uploadFilerFile(path: string, formData: FormData) {
+  const { data } = await api.post(`/filer/upload/${encodeURIComponent(path)}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+export async function getS3Buckets(): Promise<S3Bucket[]> {
+  const { data } = await api.get('/s3/buckets')
+  return data
+}
+
+export async function createS3Bucket(name: string, quota?: number) {
+  const { data } = await api.post('/s3/buckets', { name, quota })
+  return data
+}
+
+export async function deleteS3Bucket(name: string) {
+  await api.delete(`/s3/buckets/${encodeURIComponent(name)}`)
+}
+
+export async function getS3Users(): Promise<S3User[]> {
+  const { data } = await api.get('/s3/users')
+  return data
+}
+
+export async function createS3User(name: string) {
+  const { data } = await api.post('/s3/users', { name })
+  return data
+}
+
+export async function deleteS3User(id: string) {
+  await api.delete(`/s3/users/${id}`)
+}
+
+export async function getS3Policies(): Promise<S3Policy[]> {
+  const { data } = await api.get('/s3/policies')
+  return data
+}
+
+export async function updateS3Policy(name: string, policy: Record<string, unknown>) {
+  const { data } = await api.put(`/s3/policies/${encodeURIComponent(name)}`, policy)
+  return data
+}
+
+export async function getBackupStatus(): Promise<BackupStatus> {
+  const { data } = await api.get('/backup/status')
+  return data
+}
+
+export async function triggerBackupSync() {
+  const { data } = await api.post('/backup/sync')
+  return data
+}
+
+export async function getSnapshots(): Promise<Snapshot[]> {
+  const { data } = await api.get('/backup/snapshots')
+  return data
+}
+
+export async function createSnapshot(name: string) {
+  const { data } = await api.post('/backup/snapshots', { name })
+  return data
+}
+
+export async function deleteSnapshot(id: string) {
+  await api.delete(`/backup/snapshots/${id}`)
+}
+
+export async function getWorkerStatus(): Promise<WorkerStatus[]> {
+  const { data } = await api.get('/workers/status')
+  return data
+}
+
+export async function getWorkerJobs(): Promise<WorkerJob[]> {
+  const { data } = await api.get('/workers/jobs')
+  return data
+}
+
+export async function getWorkerJob(id: string): Promise<WorkerJob> {
+  const { data } = await api.get(`/workers/jobs/${id}`)
+  return data
+}
+
+export async function triggerWorkerDetect() {
+  const { data } = await api.post('/workers/jobs/detect')
+  return data
+}
+
+export async function triggerWorkerExecute(jobType: string) {
+  const { data } = await api.post('/workers/jobs/execute', { type: jobType })
+  return data
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const { data } = await api.get('/dashboard/stats')
+  return data
+}
+
+export async function getAlerts(params?: Record<string, string>): Promise<AlertEvent[]> {
+  const { data } = await api.get('/dashboard/alerts', { params })
+  return data
+}
+
+export async function acknowledgeAlert(id: number) {
+  await api.put(`/dashboard/alerts/${id}/acknowledge`)
+}
+
+export async function getAlertConfig(): Promise<AlertConfig[]> {
+  const { data } = await api.get('/dashboard/alerts/config')
+  return data
+}
+
+export async function updateAlertConfig(config: AlertConfig[]) {
+  await api.put('/dashboard/alerts/config', config)
+}
+
+export async function getDashboardHistory(hours = 24) {
+  const { data } = await api.get('/dashboard/history', { params: { hours } })
+  return data
+}
+
+export async function getDiskHealthStatus(): Promise<DiskHealthSummary[]> {
+  const { data } = await api.get('/disk-health/status')
+  return data
+}
+
+export async function getDiskHealthDetail(node: string, device: string): Promise<DiskHealthDetail> {
+  const { data } = await api.get(`/disk-health/${encodeURIComponent(node)}/${encodeURIComponent(device)}`)
+  return data
+}
+
+export async function getDiskHealthHistory(node: string, device: string, days = 30): Promise<DiskHealthHistory> {
+  const { data } = await api.get(`/disk-health/history/${encodeURIComponent(node)}/${encodeURIComponent(device)}`, {
+    params: { days },
+  })
+  return data
+}
