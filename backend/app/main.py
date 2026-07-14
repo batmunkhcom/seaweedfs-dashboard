@@ -51,6 +51,7 @@ from app.routes.s3 import router as s3_router
 from app.routes.backup import router as backup_router
 from app.routes.workers import router as workers_router
 from app.routes.disk_health import router as disk_health_router
+from app.routes.metrics import router as metrics_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -62,6 +63,7 @@ app.include_router(s3_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(workers_router, prefix="/api")
 app.include_router(disk_health_router, prefix="/api")
+app.include_router(metrics_router, prefix="/api")
 
 
 @app.get("/api/health")
