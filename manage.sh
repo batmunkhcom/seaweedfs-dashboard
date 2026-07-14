@@ -29,8 +29,11 @@ _setup_nginx() {
 
 _start_backend() {
   _ensure_venv
-  cd "$BACKEND_DIR" && nohup "$VENV_UVICORN" app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 2 > /tmp/seaweed-dashboard.log 2>&1 &
-  sleep 1
+  cd "$BACKEND_DIR"
+  source venv/bin/activate
+  nohup uvicorn app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 1 > /tmp/seaweed-dashboard.log 2>&1 &
+  disown
+  sleep 2
 }
 
 _stop_backend() {
