@@ -1,0 +1,97 @@
+from fastapi import APIRouter, Depends, UploadFile, File, Form
+
+from app.services.seaweed_client import get_seaweed_client
+from app.middleware.auth_middleware import require_admin
+from app.config import settings
+from app.logging_config import get_logger
+
+router = APIRouter(prefix="/filer", tags=["filer"])
+logger = get_logger("filer")
+
+
+@router.get("/list/{path:path}")
+async def list_filer(path: str, page: int = 1, pageSize: int = 50):
+    client = get_seaweed_client()
+    try:
+        resp = await client.filer_get(f"/{path}?pretty=y")
+        data = resp.json()
+        entries = []
+        if isinstance(data, dict) and "Entries" in data:
+            for e in data["Entries"]:
+                entries.append({
+                    "name": e.get("name", ""),
+                    "isDirectory": e.get("isDirectory", False),
+                    "size": e.get("fileSize", 0) or e.get("totalSize", 0),
+                    "mtime": e.get("mtime", ""),
+                    "mode": e.get("mode", 0),
+                    "path": e.get("fullPath", ""),
+                })
+        elif isinstance(data, dict):
+            entries.append({
+                "name": path.split("/")[-1] or path,
+                "isDirectory": True,
+                "size": data.get("fileSize", 0),
+                "mtime": "",
+                "mode": 0,
+                "path": path,
+            })
+
+        total = len(entries)
+        start = (page - 1) * pageSize
+        end = start + pageSize
+        return {"entries": entries[start:end], "path": path, "total": total, "page": page, "pageSize": pageSize}
+    except Exception:
+        logger.error("filer_list_failed", path=path, exc_info=True)
+        return {"entries": [], "path": path, "total": 0, "page": page, "pageSize": pageSize}
+
+
+@router.post("/mkdir/{path:path}")
+async def mkdir_filer(path: str, _: bool = Depends(require_admin)):
+    client = get_seaweed_client()
+    try:
+        resp = await client.request("POST", f"/{path}?op=mkdir", master=False)
+        return {"ok": True}
+    except Exception:
+        logger.error("filer_mkdir_failed", path=path, exc_info=True)
+        return {"error": "mkdir failed"}
+
+
+@router.delete("/delete/{path:path}")
+async def delete_filer(path: str, _: bool = Depends(require_admin)):
+    client = get_seaweed_client()
+    try:
+        resp = await client.request("DELETE", f"/{path}", master=False)
+        return {"ok": True}
+    except Exception:
+        logger.error("filer_delete_failed", path=path, exc_info=True)
+        return {"error": "delete failed"}
+
+
+@router.post("/upload/{path:path}")
+async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool = Depends(require_admin)):
+    if len(files) > settings.max_files_per_upload:
+        return {"error": f"Max {settings.max_files_per_upload} files per upload"}
+
+    client = get_seaweed_client()
+    results = []
+    for file in files:
+        ext = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+        allowed = settings.allowed_extensions_list
+        if allowed and ext and ext not in allowed:
+            results.append({"file": file.filename, "error": f"Extension {ext} not allowed"})
+            continue
+
+        content = await file.read()
+        if len(content) > settings.max_upload_size_mb * 1024 * 1024:
+            results.append({"file": file.filename, "error": f"File exceeds {settings.max_upload_size_mb}MB"})
+            continue
+
+        try:
+            upload_path = f"{path.rstrip('/')}/{file.filename}"
+            resp = await client.request("POST", f"/{upload_path}", master=False, content=content)
+            results.append({"file": file.filename, "ok": True})
+        except Exception:
+            logger.error("filer_upload_failed", file=file.filename, exc_info=True)
+            results.append({"file": file.filename, "error": "Upload failed"})
+
+    return {"results": results}

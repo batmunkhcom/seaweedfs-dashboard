@@ -4,6 +4,16 @@ import { ConfigProvider, App as AntApp, theme, Spin } from 'antd'
 import { useAuthStore } from './stores/authStore'
 import LoginPage from './pages/Login'
 import DashboardPage from './pages/Dashboard'
+import ClusterPage from './pages/Cluster'
+import VolumesPage from './pages/Volumes'
+import CollectionsPage from './pages/Collections'
+import FilerPage from './pages/Filer'
+import S3BucketsPage from './pages/S3/Buckets'
+import S3UsersPage from './pages/S3/Users'
+import S3PoliciesPage from './pages/S3/Policies'
+import BackupPage from './pages/Backup'
+import WorkersPage from './pages/Workers'
+import SettingsPage from './pages/Settings'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -14,10 +24,6 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   if (!isLoggedIn) return <Navigate to="/login" replace />
   if (adminOnly && user?.role !== 'admin') return <Navigate to="/dashboard" replace />
   return <>{children}</>
-}
-
-function Placeholder({ title }: { title: string }) {
-  return <div style={{ padding: 24 }}><h2>{title}</h2><p>Coming soon.</p></div>
 }
 
 function App() {
@@ -42,16 +48,16 @@ function App() {
             }
           >
             <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/cluster" element={<Placeholder title="Cluster" />} />
-            <Route path="/volumes" element={<Placeholder title="Volumes" />} />
-            <Route path="/collections" element={<Placeholder title="Collections" />} />
-            <Route path="/filer/*" element={<Placeholder title="Filer" />} />
-            <Route path="/s3/buckets" element={<Placeholder title="S3 Buckets" />} />
-            <Route path="/s3/users" element={<Placeholder title="S3 Users" />} />
-            <Route path="/s3/policies" element={<Placeholder title="S3 Policies" />} />
-            <Route path="/backup" element={<Placeholder title="Backup" />} />
-            <Route path="/workers" element={<Placeholder title="Workers" />} />
-            <Route path="/settings" element={<Placeholder title="Settings" />} />
+            <Route path="/cluster" element={<ClusterPage />} />
+            <Route path="/volumes" element={<VolumesPage />} />
+            <Route path="/collections" element={<CollectionsPage />} />
+            <Route path="/filer/*" element={<FilerPage />} />
+            <Route path="/s3/buckets" element={<S3BucketsPage />} />
+            <Route path="/s3/users" element={<S3UsersPage />} />
+            <Route path="/s3/policies" element={<S3PoliciesPage />} />
+            <Route path="/backup" element={<BackupPage />} />
+            <Route path="/workers" element={<WorkersPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

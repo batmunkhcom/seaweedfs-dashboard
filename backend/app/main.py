@@ -43,9 +43,23 @@ app.add_middleware(CsrfMiddleware)
 
 from app.routes.auth import router as auth_router
 from app.routes.dashboard import router as dashboard_router
+from app.routes.cluster import router as cluster_router
+from app.routes.volumes import router as volumes_router
+from app.routes.collections import router as collections_router
+from app.routes.filer import router as filer_router
+from app.routes.s3 import router as s3_router
+from app.routes.backup import router as backup_router
+from app.routes.workers import router as workers_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(cluster_router, prefix="/api")
+app.include_router(volumes_router, prefix="/api")
+app.include_router(collections_router, prefix="/api")
+app.include_router(filer_router, prefix="/api")
+app.include_router(s3_router, prefix="/api")
+app.include_router(backup_router, prefix="/api")
+app.include_router(workers_router, prefix="/api")
 
 
 @app.get("/api/health")

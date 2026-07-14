@@ -221,5 +221,5 @@ Apache License 2.0 — use, modify, and distribute freely. Attribution must be r
 ---
 
 <p align="center">
-  Built by <a href="https://www.mbm.technology">mBm TECHNOLOGY</a>
+  Developed by <a href="https://console.mbm.mn">mBm AI Assistant</a> at <a href="https://www.mbm.technology">mBm TECHNOLOGY</a>
 </p>
