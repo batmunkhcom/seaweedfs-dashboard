@@ -7,13 +7,21 @@ from app.middleware.rate_limit import limiter
 from app.middleware.auth_middleware import get_current_user
 from app.logging_config import get_logger
 
+from pydantic import BaseModel
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = get_logger("auth")
 
 
 @router.post("/login")
 @limiter.limit("5/15minute")
-async def login(request: Request, body: LoginRequest):
+async def login(request: Request, body: LoginBody):
     if body.username == settings.admin_user and body.password == settings.admin_password:
         role = "admin"
     elif body.username == settings.readonly_user and body.password == settings.readonly_password:
