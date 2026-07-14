@@ -41,6 +41,9 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.add_middleware(CsrfMiddleware)
 
+from app.routes.auth import router as auth_router
+app.include_router(auth_router, prefix="/api")
+
 
 @app.get("/api/health")
 async def health():
