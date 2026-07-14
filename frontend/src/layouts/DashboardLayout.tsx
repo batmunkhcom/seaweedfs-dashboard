@@ -16,6 +16,7 @@ import {
   LogoutOutlined,
   SunOutlined,
   MoonOutlined,
+  MedicineBoxOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 
@@ -39,6 +40,7 @@ const menuItems = [
   },
   { key: '/backup', icon: <SafetyOutlined />, label: 'Backup' },
   { key: '/workers', icon: <ToolOutlined />, label: 'Workers' },
+  { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]
 

@@ -14,6 +14,7 @@ import S3PoliciesPage from './pages/S3/Policies'
 import BackupPage from './pages/Backup'
 import WorkersPage from './pages/Workers'
 import SettingsPage from './pages/Settings'
+import DiskHealthPage from './pages/DiskHealth'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -58,6 +59,7 @@ function App() {
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/workers" element={<WorkersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/disk-health" element={<DiskHealthPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
