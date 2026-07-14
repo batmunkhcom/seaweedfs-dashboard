@@ -27,6 +27,23 @@ dev() {
   wait
 }
 
+prod() {
+  stop
+  _ensure_venv
+  echo "Building frontend..."
+  (cd "$FRONTEND_DIR" && npm ci && npm run build)
+  echo "Starting backend..."
+  (cd "$BACKEND_DIR" && nohup "$VENV_UVICORN" app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 2 > /tmp/seaweed-dashboard.log 2>&1) &
+  sleep 2
+  echo "Starting nginx on :$PORT_PUBLIC..."
+  if ! grep -q "listen $PORT_PUBLIC" /etc/nginx/conf.d/seaweed-dashboard.conf 2>/dev/null; then
+    cp "$PROJECT_ROOT/nginx.conf" /etc/nginx/conf.d/seaweed-dashboard.conf
+    sed -i "s|root /app/static|root $FRONTEND_DIR/dist|" /etc/nginx/conf.d/seaweed-dashboard.conf
+  fi
+  nginx -t && (systemctl reload nginx 2>/dev/null || nginx -s reload)
+  echo "Ready at http://$DOMAIN:$PORT_PUBLIC"
+}
+
 start() {
   _ensure_venv
   echo "Starting backend on 127.0.0.1:$PORT_BACKEND"
@@ -89,6 +106,7 @@ info() {
 
 case "${1:-}" in
   dev)      dev ;;
+  prod)     prod ;;
   start)    start ;;
   stop)     stop ;;
   restart)  restart ;;
@@ -99,6 +117,6 @@ case "${1:-}" in
   logs)     logs ;;
   info)     info ;;
   *)
-    echo "Usage: ./manage.sh {dev|start|stop|restart|status|build|lint|test|logs|info}"
+    echo "Usage: ./manage.sh {dev|prod|start|stop|restart|status|build|lint|test|logs|info}"
     ;;
 esac
