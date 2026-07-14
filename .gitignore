@@ -2,7 +2,8 @@ node_modules/
 dist/
 build/
 .env
-.env.*
+.env.local
+.env.production
 *.log
 .DS_Store
 __pycache__/
@@ -23,3 +24,5 @@ CLAUDE.md
 .windsurf/
 *.aide.md
 todo.md
+backend/data/
+backend/venv/
