@@ -279,3 +279,12 @@ export async function getDiskHealthHistory(node: string, device: string, days = 
   })
   return data
 }
+
+export async function getSettings(): Promise<{ categories: Record<string, { key: string; value: string; description: string }[]> }> {
+  const { data } = await api.get('/settings')
+  return data
+}
+
+export async function updateSettings(settings: Record<string, string>) {
+  await api.put('/settings', settings)
+}
