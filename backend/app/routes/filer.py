@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form
 from app.services.seaweed_client import get_seaweed_client
 from app.middleware.auth_middleware import require_admin
 from app.config import settings
+from app.settings_service import get_setting_int, get_setting_list
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/filer", tags=["filer"])
@@ -69,21 +70,24 @@ async def delete_filer(path: str, _: bool = Depends(require_admin)):
 
 @router.post("/upload/{path:path}")
 async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool = Depends(require_admin)):
-    if len(files) > settings.max_files_per_upload:
-        return {"error": f"Max {settings.max_files_per_upload} files per upload"}
+    max_files = await get_setting_int("max_files_per_upload", 10)
+    max_size_mb = await get_setting_int("max_upload_size_mb", 500)
+    allowed = await get_setting_list("allowed_extensions", [])
+
+    if len(files) > max_files:
+        return {"error": f"Max {max_files} files per upload"}
 
     client = get_seaweed_client()
     results = []
     for file in files:
         ext = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
-        allowed = settings.allowed_extensions_list
         if allowed and ext and ext not in allowed:
             results.append({"file": file.filename, "error": f"Extension {ext} not allowed"})
             continue
 
         content = await file.read()
-        if len(content) > settings.max_upload_size_mb * 1024 * 1024:
-            results.append({"file": file.filename, "error": f"File exceeds {settings.max_upload_size_mb}MB"})
+        if len(content) > max_size_mb * 1024 * 1024:
+            results.append({"file": file.filename, "error": f"File exceeds {max_size_mb}MB"})
             continue
 
         try:

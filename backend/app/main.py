@@ -9,6 +9,7 @@ from app.database import setup_database, shutdown_database, get_db
 from app.services.seaweed_client import startup_seaweed_client, shutdown_seaweed_client
 from app.middleware.rate_limit import limiter
 from app.middleware.csrf_middleware import CsrfMiddleware
+from app.settings_service import load_runtime_settings
 from slowapi import _rate_limit_exceeded_handler
 
 setup_logging()
@@ -19,6 +20,7 @@ logger = get_logger("main")
 async def lifespan(app: FastAPI):
     logger.info("startup")
     await setup_database()
+    await load_runtime_settings()
     await startup_seaweed_client()
     yield
     logger.info("shutdown")
@@ -52,6 +54,7 @@ from app.routes.backup import router as backup_router
 from app.routes.workers import router as workers_router
 from app.routes.disk_health import router as disk_health_router
 from app.routes.metrics import router as metrics_router
+from app.routes.settings import router as settings_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -64,6 +67,7 @@ app.include_router(backup_router, prefix="/api")
 app.include_router(workers_router, prefix="/api")
 app.include_router(disk_health_router, prefix="/api")
 app.include_router(metrics_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 @app.get("/api/health")

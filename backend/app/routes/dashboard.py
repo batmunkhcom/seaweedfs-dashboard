@@ -94,7 +94,9 @@ async def acknowledge_alert(alert_id: int, _: bool = Depends(require_admin)):
 @router.get("/alerts/config")
 async def get_alert_config():
     db = await get_db()
-    cursor = await db.execute("SELECT key, value FROM alert_config")
+    cursor = await db.execute(
+        "SELECT key, value FROM runtime_settings WHERE category = 'alerts'"
+    )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
@@ -102,11 +104,10 @@ async def get_alert_config():
 @router.put("/alerts/config")
 async def update_alert_config(config: list[dict], _: bool = Depends(require_admin)):
     db = await get_db()
-    await db.execute("DELETE FROM alert_config")
     for item in config:
         await db.execute(
-            "INSERT OR REPLACE INTO alert_config (key, value) VALUES (?, ?)",
-            (item["key"], item["value"]),
+            "UPDATE runtime_settings SET value = ? WHERE key = ? AND category = 'alerts'",
+            (item["value"], item["key"]),
         )
     await db.commit()
     return {"ok": True}

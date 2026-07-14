@@ -4,6 +4,7 @@ import time
 
 from app.config import settings
 from app.database import get_db
+from app.settings_service import get_setting_int
 from app.logging_config import get_logger
 
 logger = get_logger("disk_health")
@@ -62,7 +63,7 @@ class DiskHealthService:
                 self._update_heartbeat()
             except Exception:
                 logger.error("disk_health_scan_failed", exc_info=True)
-            await asyncio.sleep(settings.disk_health_scan_interval_hours * 3600)
+            await asyncio.sleep(await get_setting_int("disk_health_scan_interval_hours", 24) * 3600)
 
     async def _scan_all_nodes(self):
         hosts = [h.split(":")[0] for h in settings.master_list]
