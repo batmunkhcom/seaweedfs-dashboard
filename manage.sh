@@ -29,11 +29,14 @@ _setup_nginx() {
 
 _start_backend() {
   _ensure_venv
-  cd "$BACKEND_DIR"
-  source venv/bin/activate
-  nohup uvicorn app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 1 > /tmp/seaweed-dashboard.log 2>&1 &
-  disown
+  setsid "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 1 \
+    < /dev/null > /tmp/seaweed-dashboard.log 2>&1 &
   sleep 2
+  if curl -s http://127.0.0.1:$PORT_BACKEND/api/health > /dev/null 2>&1; then
+    echo "  Backend started (PID $!)"
+  else
+    echo "  Backend failed to start — check /tmp/seaweed-dashboard.log"
+  fi
 }
 
 _stop_backend() {
