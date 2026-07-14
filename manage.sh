@@ -24,23 +24,34 @@ _setup_nginx() {
     cp "$PROJECT_ROOT/nginx.conf" /etc/nginx/conf.d/seaweed-dashboard.conf
     sed -i "s|root /app/static|root $FRONTEND_DIR/dist|" /etc/nginx/conf.d/seaweed-dashboard.conf
   fi
-  nginx -t && (systemctl reload nginx 2>/dev/null || nginx -s reload)
+  nginx -t 2>/dev/null && (systemctl start nginx 2>/dev/null || nginx 2>/dev/null) && nginx -s reload 2>/dev/null
+  echo "  nginx → :$PORT_PUBLIC"
 }
 
-_start_backend() {
-  _ensure_venv
+_restart_backend() {
+  echo "Restarting backend..."
+  pkill -9 -f "uvicorn app.main" 2>/dev/null && sleep 1 || true
+  cd "$BACKEND_DIR"
   setsid "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 1 \
     < /dev/null > /tmp/seaweed-dashboard.log 2>&1 &
   sleep 2
   if curl -s http://127.0.0.1:$PORT_BACKEND/api/health > /dev/null 2>&1; then
-    echo "  Backend started (PID $!)"
+    echo "  Backend → :$PORT_BACKEND"
   else
-    echo "  Backend failed to start — check /tmp/seaweed-dashboard.log"
+    echo "  Backend FAILED — see /tmp/seaweed-dashboard.log"
   fi
 }
 
-_stop_backend() {
-  pkill -f "uvicorn app.main:app" 2>/dev/null && echo "Backend stopped." || true
+_restart_nginx() {
+  echo "Restarting nginx..."
+  systemctl restart nginx 2>/dev/null || (nginx -s stop 2>/dev/null; nginx)
+  echo "  nginx → :$PORT_PUBLIC"
+}
+
+_restart_frontend() {
+  echo "Building frontend..."
+  (cd "$FRONTEND_DIR" && npm ci 2>/dev/null && npm run build)
+  echo "  Frontend → $FRONTEND_DIR/dist"
 }
 
 # ── commands ──
@@ -134,6 +145,9 @@ case "${1:-}" in
   up)       up ;;
   stop)     stop ;;
   restart)  restart ;;
+  restart-backend)  _restart_backend ;;
+  restart-frontend) _restart_frontend ;;
+  restart-nginx)    _restart_nginx ;;
   build)    build ;;
   status)   status ;;
   lint)     lint ;;
@@ -146,7 +160,10 @@ case "${1:-}" in
     echo "  dev       Start in dev mode (hot-reload, both backend + frontend)"
     echo "  up        Start everything (backend + nginx on :$PORT_PUBLIC)"
     echo "  stop      Stop everything"
-    echo "  restart   Stop + up"
+    echo "  restart               Stop + up (all)"
+    echo "  restart-backend       Restart only backend"
+    echo "  restart-frontend      Rebuild frontend"
+    echo "  restart-nginx         Restart only nginx"
     echo "  build     Build frontend for production"
     echo "  status    Show what's running"
     echo "  logs      Tail backend logs"
