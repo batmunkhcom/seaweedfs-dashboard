@@ -2,6 +2,29 @@ import { create } from 'zustand'
 import type { User } from '../types'
 import { login as apiLogin, logout as apiLogout, getMe, getCsrfToken } from '../services/api'
 
+const SESSION_KEY = 'seaweedfs_session'
+
+function loadSession(): { user: User | null; csrfToken: string } | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveSession(user: User | null, csrfToken: string) {
+  try {
+    if (user) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ user, csrfToken }))
+    } else {
+      localStorage.removeItem(SESSION_KEY)
+    }
+  } catch {}
+}
+
+const cached = loadSession()
+
 interface AuthState {
   isLoggedIn: boolean
   user: User | null
@@ -14,13 +37,14 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  isLoggedIn: false,
-  user: null,
-  csrfToken: '',
-  loading: true,
+  isLoggedIn: !!cached?.user,
+  user: cached?.user || null,
+  csrfToken: cached?.csrfToken || '',
+  loading: !cached?.user,
 
   login: async (username: string, password: string) => {
     const data = await apiLogin({ username, password })
+    saveSession(data.user, data.csrfToken)
     set({
       isLoggedIn: true,
       user: data.user,
@@ -33,6 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await apiLogout()
     } finally {
+      saveSession(null, '')
       set({ isLoggedIn: false, user: null, csrfToken: '', loading: false })
     }
   },
@@ -40,8 +65,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkSession: async () => {
     try {
       const user = await getMe()
+      saveSession(user, useAuthStore.getState().csrfToken)
       set({ isLoggedIn: true, user, loading: false })
     } catch {
+      saveSession(null, '')
       set({ isLoggedIn: false, user: null, loading: false })
     }
   },
@@ -49,6 +76,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   refreshCsrf: async () => {
     try {
       const token = await getCsrfToken()
+      const current = useAuthStore.getState().user
+      saveSession(current, token)
       set({ csrfToken: token })
     } catch {}
   },
