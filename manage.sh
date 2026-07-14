@@ -66,7 +66,7 @@ up() {
   _setup_nginx
   echo ""
   echo "  Backend :  http://127.0.0.1:$PORT_BACKEND"
-  echo "  Public  :  http://$DOMAIN:$PORT_PUBLIC"
+  echo "  Public  :  http://172.16.0.10:$PORT_PUBLIC"
 }
 
 stop() {
@@ -122,7 +122,8 @@ logs() {
 
 info() {
   echo "SeaweedFS Dashboard"
-  echo "  Domain:        $DOMAIN → :$PORT_PUBLIC"
+  echo "  External URL:  https://$DOMAIN  (via Cloudflared)"
+  echo "  Local server:  http://172.16.0.10:$PORT_PUBLIC"
   echo "  Backend port:  $PORT_BACKEND (internal 127.0.0.1)"
   echo "  Frontend dev:  $PORT_FRONTEND_DEV"
   echo "  Project:       $PROJECT_ROOT"
