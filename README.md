@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/fastapi-0.115-009688?logo=fastapi" />
   <img src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python" />
   <img src="https://img.shields.io/badge/antd-5-0170FE?logo=antdesign" />
-  <img src="https://img.shields.io/badge/license-MIT-green" />
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue" />
 </p>
 
 ---
@@ -216,7 +216,7 @@ Full list in `backend/.env.example`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+Apache License 2.0 — use, modify, and distribute freely. Attribution must be retained. See [LICENSE](./LICENSE).
 
 ---
 
