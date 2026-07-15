@@ -3,15 +3,23 @@ from pydantic import BaseModel
 import bcrypt
 import secrets
 
+from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
 from app.database import get_db
-from app.middleware.auth_middleware import require_admin, get_current_user
-from app.rbac import get_roles, get_default_role
-from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
+import asyncio
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger("users")
 
+
+def _trigger_sync():
+    async def _do():
+        try:
+            from app.services.s3_sync import sync_to_all_gateways
+            await sync_to_all_gateways()
+        except Exception:
+            pass
+    asyncio.create_task(_do())
 
 class CreateUserRequest(BaseModel):
     username: str
@@ -108,6 +116,8 @@ async def create_user(body: CreateUserRequest, _: bool = Depends(require_admin))
     if body.create_bucket:
         bucket_created = await _create_s3_bucket(body.username)
 
+    _trigger_sync()
+
     return {
         "username": body.username,
         "role": role,
@@ -151,6 +161,8 @@ async def update_user(user_id: int, body: UpdateUserRequest, _: bool = Depends(r
         await db.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
         await db.commit()
 
+    _trigger_sync()
+
     return {"ok": True}
 
 
@@ -165,6 +177,9 @@ async def delete_user(user_id: int, _: bool = Depends(require_admin)):
         raise HTTPException(400, "Cannot delete system admin")
     await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
     await db.commit()
+
+    _trigger_sync()
+
     return {"ok": True}
 
 

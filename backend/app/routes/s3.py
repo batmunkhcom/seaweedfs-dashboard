@@ -164,3 +164,16 @@ async def get_s3_config():
         "endpoint": await get_setting("public_s3_url", "https://s3.mbm.mn"),
         "region": "dc03",
     }
+
+
+@router.post("/sync-iam")
+async def sync_iam_to_gateways(_: bool = Depends(require_permission("s3:write"))):
+    try:
+        from app.services.s3_sync import sync_to_all_gateways
+        results = await sync_to_all_gateways()
+        ok = all(results.values()) if isinstance(results, dict) and not results.get("skipped") else results.get("skipped", False)
+        logger.info("s3_iam_sync_results", results=str(results))
+        return {"ok": ok, "results": results}
+    except Exception as e:
+        logger.error("s3_iam_sync_error", exc_info=True)
+        return {"ok": False, "error": str(e)}

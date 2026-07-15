@@ -68,7 +68,23 @@ export default function S3UsersPage() {
     <div>
       <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
         <h3>S3 Users</h3>
-        <Button icon={<ReloadOutlined />} size="small" onClick={fetch}>Refresh</Button>
+        <Space>
+          <Button
+            icon={<KeyOutlined />}
+            size="small"
+            type="primary"
+            onClick={async () => {
+              try {
+                const r = await api.post('/s3/sync-iam')
+                if (r.data.ok) message.success('IAM synced to all gateways')
+                else message.warning(r.data.error || 'Partial sync')
+              } catch { message.error('Sync failed') }
+            }}
+          >
+            Sync to Gateways
+          </Button>
+          <Button icon={<ReloadOutlined />} size="small" onClick={fetch}>Refresh</Button>
+        </Space>
       </Space>
 
       <Table dataSource={users} columns={columns} rowKey="id" loading={loading} size="small" pagination={false} />
