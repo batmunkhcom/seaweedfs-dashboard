@@ -48,7 +48,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const url = error.config?.url || ''
-      if (!url.includes('/auth/logout') && !url.includes('/auth/me')) {
+      if (!url.includes('/auth/logout') && !url.includes('/auth/me') && !url.includes('/auth/login')) {
         import('../stores/authStore').then(({ useAuthStore }) => {
           useAuthStore.getState().logout()
         })
