@@ -95,6 +95,7 @@ export interface BackupStatus {
   running: boolean
   lastSyncAt: string | null
   lastError: string | null
+  bytesSynced?: number
 }
 
 export interface Snapshot {
@@ -109,6 +110,10 @@ export interface WorkerStatus {
   capabilities: string[]
   lastSeen: string
   healthy: boolean
+  address?: string
+  volumes?: number
+  ecShards?: number
+  maxVolumes?: number
 }
 
 export interface WorkerJob {
@@ -118,6 +123,7 @@ export interface WorkerJob {
   durationMs: number | null
   error: string | null
   createdAt: string
+  node?: string
 }
 
 export interface DashboardStats {

@@ -198,13 +198,15 @@ export async function triggerBackupSync() {
   return data
 }
 
-export async function getSnapshots(): Promise<Snapshot[]> {
+export async function listSnapshots(): Promise<Snapshot[]> {
   const { data } = await api.get('/backup/snapshots')
   return Array.isArray(data) ? data : []
 }
 
-export async function createSnapshot(name: string) {
-  const { data } = await api.post('/backup/snapshots', { name })
+export const getSnapshots = listSnapshots
+
+export async function createSnapshot(name: string, path: string = '/') {
+  const { data } = await api.post('/backup/snapshots', { name, path })
   return data
 }
 
@@ -222,6 +224,8 @@ export async function getWorkerJobs(): Promise<WorkerJob[]> {
   return data
 }
 
+export const listWorkerJobs = getWorkerJobs
+
 export async function getWorkerJob(id: string): Promise<WorkerJob> {
   const { data } = await api.get(`/workers/jobs/${id}`)
   return data
@@ -232,8 +236,8 @@ export async function triggerWorkerDetect() {
   return data
 }
 
-export async function triggerWorkerExecute(jobType: string) {
-  const { data } = await api.post('/workers/jobs/execute', { type: jobType })
+export async function triggerWorkerExecute(jobType: string, node?: string) {
+  const { data } = await api.post('/workers/jobs/execute', { type: jobType, node: node || '' })
   return data
 }
 
