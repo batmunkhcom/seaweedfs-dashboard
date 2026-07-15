@@ -286,8 +286,13 @@ export default function FilerPage() {
           multiple
           name="files"
           fileList={fileList}
-          beforeUpload={(file) => { setFileList((prev) => [...prev, file as UploadFile]); return false }}
-          onRemove={(file) => { setFileList((prev) => prev.filter((f) => f.uid !== file.uid)) }}
+          beforeUpload={(file: any) => { 
+            setFileList((prev: any[]) => [...prev, file])
+            return false 
+          }}
+          onRemove={(file: any) => { 
+            setFileList((prev: any[]) => prev.filter((f: any) => f.uid !== file.uid)) 
+          }}
           showUploadList={false}
           disabled={uploading}
         >
