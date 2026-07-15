@@ -70,8 +70,11 @@ async def delete_filer(path: str, _: bool = Depends(require_admin)):
 
 @router.post("/upload/{path:path}")
 async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool = Depends(require_admin)):
+    import os as _os
+
     max_files = await get_setting_int("max_files_per_upload", 10)
     max_size_mb = await get_setting_int("max_upload_size_mb", 500)
+    max_bytes = max_size_mb * 1024 * 1024
     allowed = await get_setting_list("allowed_extensions", [])
 
     if len(files) > max_files:
@@ -80,22 +83,31 @@ async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool =
     client = get_seaweed_client()
     results = []
     for file in files:
-        ext = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+        safe_name = _os.path.basename(file.filename or "upload")
+        ext = "." + safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
+
         if allowed and ext and ext not in allowed:
-            results.append({"file": file.filename, "error": f"Extension {ext} not allowed"})
+            results.append({"file": safe_name, "error": f"Extension {ext} not allowed"})
             continue
 
-        content = await file.read()
-        if len(content) > max_size_mb * 1024 * 1024:
-            results.append({"file": file.filename, "error": f"File exceeds {max_size_mb}MB"})
-            continue
-
-        try:
-            upload_path = f"{path.rstrip('/')}/{file.filename}"
-            resp = await client.request("POST", f"/{upload_path}", master=False, content=content)
-            results.append({"file": file.filename, "ok": True})
-        except Exception:
-            logger.error("filer_upload_failed", file=file.filename, exc_info=True)
-            results.append({"file": file.filename, "error": "Upload failed"})
+        accumulated = bytearray()
+        total = 0
+        while True:
+            chunk = await file.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                results.append({"file": safe_name, "error": f"File exceeds {max_size_mb}MB"})
+                break
+            accumulated.extend(chunk)
+        else:
+            try:
+                upload_path = f"{path.rstrip('/')}/{safe_name}"
+                await client.request("POST", f"/{upload_path}", master=False, content=bytes(accumulated))
+                results.append({"file": safe_name, "ok": True})
+            except Exception:
+                logger.error("filer_upload_failed", file=safe_name, exc_info=True)
+                results.append({"file": safe_name, "error": "Upload failed"})
 
     return {"results": results}

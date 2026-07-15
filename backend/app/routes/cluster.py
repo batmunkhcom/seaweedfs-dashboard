@@ -33,7 +33,7 @@ async def cluster_health():
                         "url": node.get("Url", ""),
                         "volumes": node.get("Volumes", 0),
                         "max": node.get("Max", 0),
-                        "free": node.get("Max", 0) - node.get("Volumes", 0),
+                        "free": node.get("Free", node.get("Max", 0) - node.get("Volumes", 0)),
                         "status": "healthy",
                         "dc": dc.get("Id", ""),
                         "rack": rack.get("Id", ""),

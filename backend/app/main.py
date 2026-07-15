@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.logging_config import setup_logging, get_logger
@@ -9,8 +11,8 @@ from app.database import setup_database, shutdown_database, get_db
 from app.services.seaweed_client import startup_seaweed_client, shutdown_seaweed_client
 from app.middleware.rate_limit import limiter
 from app.middleware.csrf_middleware import CsrfMiddleware
+from app.middleware.auth_middleware import AuthMiddleware
 from app.settings_service import load_runtime_settings
-from slowapi import _rate_limit_exceeded_handler
 
 setup_logging()
 logger = get_logger("main")
@@ -32,15 +34,17 @@ app = FastAPI(title="SeaweedFS Dashboard", version="0.1.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(429, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|10\.10\.\d+\.\d+|seaweed\.mbm\.mn)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
+app.add_middleware(AuthMiddleware)
 app.add_middleware(CsrfMiddleware)
 
 from app.routes.auth import router as auth_router

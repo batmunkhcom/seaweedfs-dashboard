@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Button, Dropdown, Typography, Space, Avatar } from 'antd'
+import { Layout, Menu, Button, Dropdown, Typography, Avatar } from 'antd'
 import {
   DashboardOutlined,
   ClusterOutlined,
@@ -16,7 +16,9 @@ import {
   LogoutOutlined,
   MedicineBoxOutlined,
   UserOutlined,
-  ApiOutlined,
+  KeyOutlined,
+  IdcardOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 
@@ -58,21 +60,33 @@ export default function DashboardLayout() {
 
   const userMenuItems = [
     {
-      key: 'role',
+      key: 'header',
       label: (
-        <Space>
-          <ApiOutlined style={{ color: '#a855f7' }} />
-          <span>{user?.role === 'admin' ? 'System Admin' : 'Viewer'}</span>
-        </Space>
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{user?.username}</div>
+          <div style={{ fontSize: 12, color: '#a855f7' }}>
+            {user?.role === 'admin' ? 'System Administrator' : 'Read-only Viewer'}
+          </div>
+        </div>
       ),
       disabled: true,
     },
     { type: 'divider' as const },
     {
       key: 'profile',
-      icon: <UserOutlined />,
-      label: user?.username || 'User',
-      disabled: true,
+      icon: <IdcardOutlined />,
+      label: 'Profile',
+    },
+    {
+      key: 'password',
+      icon: <KeyOutlined />,
+      label: 'Change Password',
+    },
+    { type: 'divider' as const },
+    {
+      key: 'about',
+      icon: <InfoCircleOutlined />,
+      label: 'About SeaweedFS Dashboard',
     },
     { type: 'divider' as const },
     {

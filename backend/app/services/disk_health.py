@@ -66,17 +66,17 @@ class DiskHealthService:
             await asyncio.sleep(await get_setting_int("disk_health_scan_interval_hours", 24) * 3600)
 
     async def _scan_all_nodes(self):
-        hosts = [h.split(":")[0] for h in settings.master_list]
-        import paramiko
+        hosts = [h.split(":")[0] for h in settings.master_list + settings.filer_list]
+        hosts = list(dict.fromkeys(hosts))
+        import os as _os, paramiko
 
-        key_path = settings.disk_health_ssh_key_path
-        if key_path.startswith("~"):
-            key_path = key_path.replace("~", "/root")
+        key_path = _os.path.expanduser(settings.disk_health_ssh_key_path)
 
         for host in hosts:
             try:
                 ssh = paramiko.SSHClient()
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.load_system_host_keys()
+                ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
                 ssh.connect(
                     host,
                     username=settings.disk_health_ssh_user,
