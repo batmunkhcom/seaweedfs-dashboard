@@ -1,0 +1,35 @@
+{
+  "roles": {
+    "admin": {
+      "description": "Full system access",
+      "permissions": [
+        "dashboard:read", "cluster:read", "volumes:read", "volumes:write",
+        "collections:read", "collections:delete", "filer:read", "filer:write",
+        "s3:read", "s3:write", "backup:read", "backup:write",
+        "workers:read", "workers:write", "settings:read", "settings:write",
+        "users:read", "users:write", "alerts:read", "alerts:write",
+        "disk_health:read", "audit:read", "sse:read"
+      ]
+    },
+    "operator": {
+      "description": "Operational management without user/settings changes",
+      "permissions": [
+        "dashboard:read", "cluster:read", "volumes:read", "volumes:write",
+        "collections:read", "filer:read", "filer:write",
+        "s3:read", "s3:write", "backup:read", "backup:write",
+        "workers:read", "workers:write", "alerts:read", "alerts:write",
+        "disk_health:read", "sse:read"
+      ]
+    },
+    "viewer": {
+      "description": "Read-only monitoring access",
+      "permissions": [
+        "dashboard:read", "cluster:read", "volumes:read",
+        "collections:read", "filer:read",
+        "s3:read", "backup:read", "workers:read",
+        "alerts:read", "disk_health:read", "sse:read"
+      ]
+    }
+  },
+  "default_role": "viewer"
+}

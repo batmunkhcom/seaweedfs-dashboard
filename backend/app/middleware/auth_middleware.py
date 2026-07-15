@@ -1,6 +1,6 @@
-from fastapi import Request, HTTPException, Depends
+from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from typing import Optional
 
 PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/csrf-token", "/docs", "/openapi.json"}
 
@@ -12,7 +12,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         session = request.session
         if not session or not session.get("user"):
-            raise HTTPException(status_code=401, detail="Not authenticated")
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
         request.state.user = session["user"]
         request.state.role = session.get("role", "readonly")
@@ -20,7 +20,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 def require_admin(request: Request):
-    role = getattr(request.state, "role", "readonly")
+    role = getattr(request.state, "role", None)
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return True

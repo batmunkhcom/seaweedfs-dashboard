@@ -34,8 +34,8 @@ app = FastAPI(title="SeaweedFS Dashboard", version="0.1.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(429, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|10\.10\.\d+\.\d+|seaweed\.mbm\.mn)(:\d+)?",
@@ -43,9 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
-app.add_middleware(AuthMiddleware)
 app.add_middleware(CsrfMiddleware)
+app.add_middleware(AuthMiddleware)
+app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
 
 from app.routes.auth import router as auth_router
 from app.routes.dashboard import router as dashboard_router
@@ -59,6 +59,7 @@ from app.routes.workers import router as workers_router
 from app.routes.disk_health import router as disk_health_router
 from app.routes.metrics import router as metrics_router
 from app.routes.settings import router as settings_router
+from app.routes.users import router as users_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -72,6 +73,7 @@ app.include_router(workers_router, prefix="/api")
 app.include_router(disk_health_router, prefix="/api")
 app.include_router(metrics_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
 
 
 @app.get("/api/health")

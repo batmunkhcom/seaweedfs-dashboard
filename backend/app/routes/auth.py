@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException, Depends
 from starlette.responses import JSONResponse
+import bcrypt
 
-from app.config import settings
+from app.database import get_db
 from app.middleware.csrf_middleware import generate_csrf_token
 from app.middleware.rate_limit import limiter
 from app.middleware.auth_middleware import get_current_user
@@ -22,28 +23,34 @@ logger = get_logger("auth")
 @router.post("/login")
 @limiter.limit("5/15minute")
 async def login(request: Request, body: LoginBody):
-    if body.username == settings.admin_user and body.password == settings.admin_password:
-        role = "admin"
-    elif body.username == settings.readonly_user and body.password == settings.readonly_password:
-        role = "readonly"
-    else:
-        logger.warning("login_failed", username=body.username)
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT username, password_hash, role, enabled FROM users WHERE username = ?",
+        (body.username,),
+    )
+    row = await cursor.fetchone()
+
+    if not row or not row["enabled"]:
+        logger.warning("login_failed", username=body.username, reason="not_found_or_disabled")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not bcrypt.checkpw(body.password.encode(), row["password_hash"].encode()):
+        logger.warning("login_failed", username=body.username, reason="wrong_password")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     csrf_token = generate_csrf_token()
     request.session["user"] = body.username
-    request.session["role"] = role
+    request.session["role"] = row["role"]
     request.session["csrf_token"] = csrf_token
 
     response = JSONResponse(
         content={
-            "user": {"username": body.username, "role": role},
+            "user": {"username": body.username, "role": row["role"]},
             "csrfToken": csrf_token,
         }
     )
-    response.set_cookie("session_id", "set", httponly=True, samesite="strict")
 
-    logger.info("login_success", username=body.username, role=role)
+    logger.info("login_success", username=body.username, role=row["role"])
     return response
 
 
