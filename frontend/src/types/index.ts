@@ -131,6 +131,8 @@ export interface DashboardStats {
   masterLeader: string
   filerStatus: string
   version: string
+  totalDiskGB: number
+  totalUsableGB: number
 }
 
 export interface AlertEvent {

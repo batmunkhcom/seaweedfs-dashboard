@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, Depends
 
 from app.services.seaweed_client import get_seaweed_client
 from app.database import get_db
+from app.settings_service import get_setting_int
 from app.logging_config import get_logger
 from app.routes.sse import sse_endpoint, publish_stats
 from app.middleware.auth_middleware import require_permission, get_current_user
@@ -10,10 +11,14 @@ from app.middleware.auth_middleware import require_permission, get_current_user
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 logger = get_logger("dashboard")
 
+REPLICATION_FACTOR = 2
+
 
 @router.get("/stats")
 async def dashboard_stats():
     client = get_seaweed_client()
+    volume_size_mb = await get_setting_int("volume_size_mb", 30000)
+
     stats = {
         "totalVolumes": 0,
         "totalFiles": 0,
@@ -25,6 +30,8 @@ async def dashboard_stats():
         "masterLeader": "",
         "filerStatus": "disconnected",
         "version": "",
+        "totalDiskGB": 0,
+        "totalUsableGB": 0,
     }
 
     try:
@@ -35,9 +42,11 @@ async def dashboard_stats():
         stats["maxSpace"] = topology.get("Max", 0)
         stats["version"] = data.get("Version", "")
 
-        dc_count = 0
+        total_max = topology.get("Max", 0)
+        stats["totalDiskGB"] = round((total_max * volume_size_mb) / 1024, 1)
+        stats["totalUsableGB"] = round(stats["totalDiskGB"] / REPLICATION_FACTOR, 1)
+
         for dc in topology.get("DataCenters", []):
-            dc_count += 1
             for rack in dc.get("Racks", []):
                 for node in rack.get("DataNodes", []):
                     stats["volumeServers"] += 1
