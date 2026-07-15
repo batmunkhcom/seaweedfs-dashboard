@@ -9,11 +9,16 @@ router = APIRouter(prefix="/filer", tags=["filer"])
 logger = get_logger("filer")
 
 
+def _clean_path(p: str) -> str:
+    return p.strip("/")
+
+
 @router.get("/list/{path:path}")
 async def list_filer(path: str, page: int = 1, pageSize: int = 50):
     client = get_seaweed_client()
+    clean = _clean_path(path)
     try:
-        resp = await client.filer_get(f"/{path}?pretty=y")
+        resp = await client.filer_get(f"/{clean}?pretty=y")
         data = resp.json()
         entries = []
         if isinstance(data, dict) and "Entries" in data:
@@ -31,17 +36,18 @@ async def list_filer(path: str, page: int = 1, pageSize: int = 50):
         total = len(entries)
         start = (page - 1) * pageSize
         end = start + pageSize
-        return {"entries": entries[start:end], "path": f"/{path}", "total": total, "page": page, "pageSize": pageSize}
+        return {"entries": entries[start:end], "path": f"/{clean}", "total": total, "page": page, "pageSize": pageSize}
     except Exception:
         logger.error("filer_list_failed", path=path, exc_info=True)
-        return {"entries": [], "path": f"/{path}", "total": 0, "page": page, "pageSize": pageSize}
+        return {"entries": [], "path": f"/{clean}", "total": 0, "page": page, "pageSize": pageSize}
 
 
 @router.post("/mkdir/{path:path}")
 async def mkdir_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
+    clean = _clean_path(path)
     try:
-        await client.request("POST", f"/{path}/?op=mkdir", master=False)
+        await client.request("POST", f"/{clean}/?op=mkdir", master=False)
         return {"ok": True}
     except Exception:
         logger.error("filer_mkdir_failed", path=path, exc_info=True)
@@ -51,8 +57,9 @@ async def mkdir_filer(path: str, _: bool = Depends(require_permission("filer:wri
 @router.delete("/delete/{path:path}")
 async def delete_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
+    clean = _clean_path(path)
     try:
-        await client.request("DELETE", f"/{path}", master=False)
+        await client.request("DELETE", f"/{clean}", master=False)
         return {"ok": True}
     except Exception:
         logger.error("filer_delete_failed", path=path, exc_info=True)
@@ -71,6 +78,7 @@ async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool =
     if len(files) > max_files:
         return {"error": f"Max {max_files} files per upload"}
 
+    clean = _clean_path(path)
     client = get_seaweed_client()
     results = []
     for file in files:
@@ -94,7 +102,7 @@ async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool =
             accumulated.extend(chunk)
         else:
             try:
-                upload_path = f"{path.rstrip('/')}/{safe_name}"
+                upload_path = f"{clean}/{safe_name}"
                 await client.request("POST", f"/{upload_path}", master=False, content=bytes(accumulated))
                 results.append({"file": safe_name, "ok": True})
             except Exception:

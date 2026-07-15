@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Card, Tabs, Table, Tag, Typography, Alert } from 'antd'
-import { ApiOutlined, KeyOutlined, SafetyOutlined, CodeOutlined } from '@ant-design/icons'
+import { ApiOutlined, KeyOutlined } from '@ant-design/icons'
 import api from '../../services/api'
 
-const { Title, Paragraph, Text } = Typography
+const { Title, Paragraph } = Typography
 
 export default function ApiDocPage() {
   const [info, setInfo] = useState<any>(null)
