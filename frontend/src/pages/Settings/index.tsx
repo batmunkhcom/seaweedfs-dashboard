@@ -21,11 +21,14 @@ export default function SettingsPage() {
   useEffect(() => {
     getSettings()
       .then((data) => {
-        setCategories(data.categories)
+        const cats = (data && data.categories) ? data.categories : {}
+        setCategories(cats)
         const vals: Record<string, string> = {}
-        for (const items of Object.values(data.categories)) {
-          for (const item of items) {
-            vals[item.key] = item.value
+        for (const items of Object.values(cats)) {
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              vals[item.key] = item.value
+            }
           }
         }
         setValues(vals)
@@ -54,6 +57,7 @@ export default function SettingsPage() {
     disk_health: 'Disk Health',
     cluster: 'Cluster',
     general: 'General',
+    timezone: 'Timezone',
   }
 
   return (

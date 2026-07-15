@@ -38,7 +38,7 @@ def require_admin(request: Request) -> bool:
 
 
 def get_current_user(request: Request) -> dict:
-    user = getattr(request.state, "user", None)
-    if not user:
+    username = getattr(request.state, "user", None)
+    if not username:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
+    return {"username": username, "role": getattr(request.state, "role", "viewer")}

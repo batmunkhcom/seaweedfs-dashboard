@@ -13,8 +13,9 @@ export function useAuth() {
         await login(username, password)
         message.success('Login successful')
         navigate('/dashboard')
-      } catch {
-        message.error('Invalid username or password')
+      } catch (e: any) {
+        const msg = e?.response?.data?.detail || 'Invalid username or password'
+        message.error(msg)
       }
     },
     [login, navigate]
