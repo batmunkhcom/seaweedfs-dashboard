@@ -159,8 +159,8 @@ async def update_policy(name: str, body: dict, _: bool = Depends(require_permiss
 
 @router.get("/config")
 async def get_s3_config():
-    from app.config import settings
+    from app.settings_service import get_setting
     return {
-        "endpoint": "https://s3.mbm.mn",
+        "endpoint": await get_setting("public_s3_url", "https://s3.mbm.mn"),
         "region": "dc03",
     }
