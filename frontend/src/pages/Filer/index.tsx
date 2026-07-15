@@ -13,6 +13,7 @@ import {
   CloseOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -39,6 +40,7 @@ export default function FilerPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [uploading, setUploading] = useState(false)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [maxUploadSize, setMaxUploadSize] = useState(500)
   const [vpnUrl, setVpnUrl] = useState('')
   const [allowedExts, setAllowedExts] = useState('')
@@ -77,10 +79,47 @@ export default function FilerPage() {
     })),
   ]
 
-  const doDelete = async (entryPath: string) => {
-    await deleteFilerEntry(entryPath)
-    message.success('Deleted')
-    fetch()
+  const doDelete = (entryPath: string) => {
+    Modal.confirm({
+      title: 'Delete this entry?',
+      icon: <ExclamationCircleOutlined />,
+      content: `Are you sure you want to delete "${entryPath}"?`,
+      okText: 'Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        await deleteFilerEntry(entryPath)
+        message.success('Deleted')
+        fetch()
+      },
+    })
+  }
+
+  const batchDelete = () => {
+    if (selectedRowKeys.length === 0) return
+    const items = selectedRowKeys.map((k) => String(k)).join(', ')
+    Modal.confirm({
+      title: `Delete ${selectedRowKeys.length} entries?`,
+      icon: <ExclamationCircleOutlined />,
+      content: `Are you sure you want to delete: ${items}?`,
+      okText: 'Delete All',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        let count = 0
+        for (const key of selectedRowKeys) {
+          try {
+            const entry = entries.find((e) => e.name === String(key))
+            const entryPath = entry?.path || `${path === '/' ? '' : path}/${String(key)}`
+            await deleteFilerEntry(entryPath)
+            count++
+          } catch { /* skip */ }
+        }
+        message.success(`${count} entries deleted`)
+        setSelectedRowKeys([])
+        fetch()
+      },
+    })
   }
 
   const doMkdir = async () => {
@@ -238,6 +277,11 @@ export default function FilerPage() {
         <Space>
           {canWrite && (
             <>
+              {selectedRowKeys.length > 0 && (
+                <Button icon={<DeleteOutlined />} size="small" danger onClick={batchDelete}>
+                  Delete ({selectedRowKeys.length})
+                </Button>
+              )}
               <Button icon={<FolderAddOutlined />} size="small" onClick={() => setMkdirOpen(true)}>
                 New Folder
               </Button>
@@ -250,7 +294,19 @@ export default function FilerPage() {
         </Space>
       </div>
 
-      <Table dataSource={entries} columns={columns} rowKey="name" loading={loading} size="small" pagination={false} locale={{ emptyText: 'Directory is empty' }} />
+      <Table
+        dataSource={entries}
+        columns={columns}
+        rowKey="name"
+        loading={loading}
+        size="small"
+        pagination={false}
+        locale={{ emptyText: 'Directory is empty' }}
+        rowSelection={canWrite ? {
+          selectedRowKeys,
+          onChange: (keys) => setSelectedRowKeys(keys),
+        } : undefined}
+      />
 
       <Modal open={mkdirOpen} title="Create Folder" onOk={doMkdir} onCancel={() => setMkdirOpen(false)}>
         <Input value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder="Folder name" />
