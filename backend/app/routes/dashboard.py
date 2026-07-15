@@ -42,16 +42,17 @@ async def dashboard_stats():
         stats["maxSpace"] = topology.get("Max", 0)
         stats["version"] = data.get("Version", "")
 
-        total_max = topology.get("Max", 0)
-        stats["totalDiskGB"] = round((total_max * volume_size_mb) / 1024, 1)
-        stats["totalUsableGB"] = round(stats["totalDiskGB"] / REPLICATION_FACTOR, 1)
-
+        total_max = 0
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):
                 for node in rack.get("DataNodes", []):
+                    total_max += node.get("Max", 0)
                     stats["volumeServers"] += 1
                     stats["totalVolumes"] += node.get("Volumes", 0)
                     stats["healthyNodes"] += 1
+
+        stats["totalDiskGB"] = round((total_max * volume_size_mb) / 1024, 1)
+        stats["totalUsableGB"] = round(stats["totalDiskGB"] / REPLICATION_FACTOR, 1)
     except Exception:
         logger.error("stats_fetch_failed", exc_info=True)
 
