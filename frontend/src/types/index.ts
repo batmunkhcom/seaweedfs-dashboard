@@ -193,7 +193,7 @@ export interface DiskHealthHistory {
 
 export interface User {
   username: string
-  role: 'admin' | 'readonly'
+  role: 'admin' | 'operator' | 'viewer'
 }
 
 export interface LoginRequest {

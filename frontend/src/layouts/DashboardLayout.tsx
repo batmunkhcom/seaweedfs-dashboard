@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Button, Dropdown, Typography, Avatar } from 'antd'
+import { Layout, Menu, Button, Dropdown, Typography, Avatar, Input, Modal, message } from 'antd'
 import {
   DashboardOutlined,
   ClusterOutlined,
@@ -22,6 +22,7 @@ import {
   TeamOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
+import { changeMyPassword } from '../services/api'
 
 const { Header, Sider, Content } = Layout
 
@@ -50,12 +51,41 @@ const menuItems = [
 
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false)
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
 
   const handleMenuClick = ({ key }: { key: string }) => navigate(key)
+
+  const handleChangePassword = async () => {
+    if (!currentPw || !newPw) {
+      message.error('All fields are required')
+      return
+    }
+    if (newPw !== confirmPw) {
+      message.error('Passwords do not match')
+      return
+    }
+    setPwLoading(true)
+    try {
+      await changeMyPassword(currentPw, newPw)
+      message.success('Password changed')
+      setPasswordOpen(false)
+      setCurrentPw('')
+      setNewPw('')
+      setConfirmPw('')
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || 'Failed to change password')
+    } finally {
+      setPwLoading(false)
+    }
+  }
 
   const selectedKeys = [location.pathname]
   const openKeys = ['/s3']
@@ -67,7 +97,7 @@ export default function DashboardLayout() {
         <div style={{ padding: '4px 0' }}>
           <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{user?.username}</div>
           <div style={{ fontSize: 12, color: '#a855f7' }}>
-            {user?.role === 'admin' ? 'System Administrator' : 'Read-only Viewer'}
+            {user?.role === 'admin' ? 'System Administrator' : user?.role === 'operator' ? 'Operator' : 'Read-only Viewer'}
           </div>
         </div>
       ),
@@ -83,6 +113,7 @@ export default function DashboardLayout() {
       key: 'password',
       icon: <KeyOutlined />,
       label: 'Change Password',
+      onClick: () => setPasswordOpen(true),
     },
     { type: 'divider' as const },
     {
@@ -194,6 +225,38 @@ export default function DashboardLayout() {
           </Content>
         </Layout>
       </Layout>
+
+      <Modal
+        open={passwordOpen}
+        title="Change Password"
+        onOk={handleChangePassword}
+        onCancel={() => {
+          setPasswordOpen(false)
+          setCurrentPw('')
+          setNewPw('')
+          setConfirmPw('')
+        }}
+        confirmLoading={pwLoading}
+        okText="Change"
+      >
+        <Input.Password
+          placeholder="Current password"
+          value={currentPw}
+          onChange={(e) => setCurrentPw(e.target.value)}
+          style={{ marginBottom: 12 }}
+        />
+        <Input.Password
+          placeholder="New password"
+          value={newPw}
+          onChange={(e) => setNewPw(e.target.value)}
+          style={{ marginBottom: 12 }}
+        />
+        <Input.Password
+          placeholder="Confirm new password"
+          value={confirmPw}
+          onChange={(e) => setConfirmPw(e.target.value)}
+        />
+      </Modal>
     </>
   )
 }

@@ -290,3 +290,11 @@ export async function getSettings(): Promise<{ categories: Record<string, { key:
 export async function updateSettings(settings: Record<string, string>) {
   await api.put('/settings', settings)
 }
+
+export async function changeMyPassword(currentPassword: string, newPassword: string) {
+  const { data } = await api.post('/users/me/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  })
+  return data
+}
