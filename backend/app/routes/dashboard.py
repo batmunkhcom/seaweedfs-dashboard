@@ -5,7 +5,7 @@ from app.services.seaweed_client import get_seaweed_client
 from app.database import get_db
 from app.logging_config import get_logger
 from app.routes.sse import sse_endpoint, publish_stats
-from app.middleware.auth_middleware import require_admin, get_current_user
+from app.middleware.auth_middleware import require_permission, get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 logger = get_logger("dashboard")
@@ -80,7 +80,7 @@ async def get_alerts(status: str | None = None):
 
 
 @router.put("/alerts/{alert_id}/acknowledge")
-async def acknowledge_alert(alert_id: int, _: bool = Depends(require_admin)):
+async def acknowledge_alert(alert_id: int, _: bool = Depends(require_permission("alerts:write"))):
     db = await get_db()
     await db.execute(
         "UPDATE alerts SET status = 'acknowledged', acknowledged_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -101,7 +101,7 @@ async def get_alert_config():
 
 
 @router.put("/alerts/config")
-async def update_alert_config(config: list[dict], _: bool = Depends(require_admin)):
+async def update_alert_config(config: list[dict], _: bool = Depends(require_permission("alerts:write"))):
     db = await get_db()
     for item in config:
         await db.execute(

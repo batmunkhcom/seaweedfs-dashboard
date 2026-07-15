@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.services.seaweed_client import get_seaweed_client
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/s3", tags=["s3"])
@@ -32,7 +32,7 @@ async def list_buckets():
 
 
 @router.post("/buckets")
-async def create_bucket(body: dict, _: bool = Depends(require_admin)):
+async def create_bucket(body: dict, _: bool = Depends(require_permission("s3:write"))):
     client = get_seaweed_client()
     try:
         resp = await client.request("POST", f"/{body['name']}?op=mkdir", master=False)
@@ -43,7 +43,7 @@ async def create_bucket(body: dict, _: bool = Depends(require_admin)):
 
 
 @router.delete("/buckets/{name}")
-async def delete_bucket(name: str, _: bool = Depends(require_admin)):
+async def delete_bucket(name: str, _: bool = Depends(require_permission("s3:write"))):
     client = get_seaweed_client()
     try:
         resp = await client.request("DELETE", f"/{name}?recursive=true", master=False)
@@ -59,12 +59,12 @@ async def list_users():
 
 
 @router.post("/users")
-async def create_user(body: dict, _: bool = Depends(require_admin)):
+async def create_user(body: dict, _: bool = Depends(require_permission("s3:write"))):
     return {"id": "new", "name": body.get("name", ""), "accessKey": "generated-key", "createdAt": ""}
 
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: str, _: bool = Depends(require_admin)):
+async def delete_user(user_id: str, _: bool = Depends(require_permission("s3:write"))):
     return {"ok": True}
 
 
@@ -74,5 +74,5 @@ async def list_policies():
 
 
 @router.put("/policies/{name}")
-async def update_policy(name: str, body: dict, _: bool = Depends(require_admin)):
+async def update_policy(name: str, body: dict, _: bool = Depends(require_permission("s3:write"))):
     return {"ok": True, "name": name}

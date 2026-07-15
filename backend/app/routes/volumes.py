@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.services.seaweed_client import get_seaweed_client
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/volumes", tags=["volumes"])
@@ -32,7 +32,7 @@ async def get_volume(volume_id: int):
 
 
 @router.post("/grow")
-async def grow_volumes(body: dict, _: bool = Depends(require_admin)):
+async def grow_volumes(body: dict, _: bool = Depends(require_permission("volumes:write"))):
     client = get_seaweed_client()
     params = {
         "count": body.get("count", 1),
@@ -51,7 +51,7 @@ async def grow_volumes(body: dict, _: bool = Depends(require_admin)):
 
 
 @router.post("/vacuum")
-async def vacuum_volumes(body: dict, _: bool = Depends(require_admin)):
+async def vacuum_volumes(body: dict, _: bool = Depends(require_permission("volumes:write"))):
     client = get_seaweed_client()
     threshold = body.get("garbageThreshold", 0.3)
     try:

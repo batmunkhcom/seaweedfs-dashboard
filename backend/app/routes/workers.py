@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/workers", tags=["workers"])
@@ -23,10 +23,10 @@ async def get_job(job_id: str):
 
 
 @router.post("/jobs/detect")
-async def trigger_detect(_: bool = Depends(require_admin)):
+async def trigger_detect(_: bool = Depends(require_permission("workers:write"))):
     return {"ok": True}
 
 
 @router.post("/jobs/execute")
-async def trigger_execute(body: dict, _: bool = Depends(require_admin)):
+async def trigger_execute(body: dict, _: bool = Depends(require_permission("workers:write"))):
     return {"ok": True}

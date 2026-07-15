@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/backup", tags=["backup"])
@@ -13,7 +13,7 @@ async def backup_status():
 
 
 @router.post("/sync")
-async def trigger_sync(_: bool = Depends(require_admin)):
+async def trigger_sync(_: bool = Depends(require_permission("backup:write"))):
     return {"ok": True, "message": "Sync triggered"}
 
 
@@ -23,10 +23,10 @@ async def list_snapshots():
 
 
 @router.post("/snapshots")
-async def create_snapshot(body: dict, _: bool = Depends(require_admin)):
+async def create_snapshot(body: dict, _: bool = Depends(require_permission("backup:write"))):
     return {"id": "new", "name": body.get("name", ""), "size": 0, "createdAt": ""}
 
 
 @router.delete("/snapshots/{snapshot_id}")
-async def delete_snapshot(snapshot_id: str, _: bool = Depends(require_admin)):
+async def delete_snapshot(snapshot_id: str, _: bool = Depends(require_permission("backup:write"))):
     return {"ok": True}

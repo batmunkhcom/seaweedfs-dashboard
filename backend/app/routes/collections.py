@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.services.seaweed_client import get_seaweed_client
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/collections", tags=["collections"])
@@ -29,7 +29,7 @@ async def list_collections():
 
 
 @router.delete("/{name}")
-async def delete_collection(name: str, _: bool = Depends(require_admin)):
+async def delete_collection(name: str, _: bool = Depends(require_permission("collections:delete"))):
     client = get_seaweed_client()
     try:
         resp = await client.request("DELETE", f"/col/delete?collection={name}", master=True)

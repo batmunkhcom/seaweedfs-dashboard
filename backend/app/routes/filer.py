@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 
 from app.services.seaweed_client import get_seaweed_client
-from app.middleware.auth_middleware import require_admin
+from app.middleware.auth_middleware import require_permission
 from app.config import settings
 from app.settings_service import get_setting_int, get_setting_list
 from app.logging_config import get_logger
@@ -47,7 +47,7 @@ async def list_filer(path: str, page: int = 1, pageSize: int = 50):
 
 
 @router.post("/mkdir/{path:path}")
-async def mkdir_filer(path: str, _: bool = Depends(require_admin)):
+async def mkdir_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
     try:
         resp = await client.request("POST", f"/{path}?op=mkdir", master=False)
@@ -58,7 +58,7 @@ async def mkdir_filer(path: str, _: bool = Depends(require_admin)):
 
 
 @router.delete("/delete/{path:path}")
-async def delete_filer(path: str, _: bool = Depends(require_admin)):
+async def delete_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
     try:
         resp = await client.request("DELETE", f"/{path}", master=False)
@@ -69,7 +69,7 @@ async def delete_filer(path: str, _: bool = Depends(require_admin)):
 
 
 @router.post("/upload/{path:path}")
-async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool = Depends(require_admin)):
+async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool = Depends(require_permission("filer:write"))):
     import os as _os
 
     max_files = await get_setting_int("max_files_per_upload", 10)

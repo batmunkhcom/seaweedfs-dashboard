@@ -2,6 +2,8 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.rbac import has_permission
+
 PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/csrf-token", "/docs", "/openapi.json"}
 
 
@@ -15,11 +17,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
 
         request.state.user = session["user"]
-        request.state.role = session.get("role", "readonly")
+        request.state.role = session.get("role", "viewer")
         return await call_next(request)
 
 
-def require_admin(request: Request):
+def require_permission(permission: str):
+    def checker(request: Request) -> bool:
+        role = getattr(request.state, "role", None)
+        if not role or not has_permission(role, permission):
+            raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
+        return True
+    return checker
+
+
+def require_admin(request: Request) -> bool:
     role = getattr(request.state, "role", None)
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
