@@ -14,7 +14,16 @@ async def list_volumes():
     try:
         resp = await client.master_get("/vol/status")
         data = resp.json()
-        return {"volumes": data.get("Volumes", []), "total": len(data.get("Volumes", []))}
+        volumes = []
+        for dc_name, dc in data.get("Volumes", {}).get("DataCenters", {}).items():
+            for rack_name, rack in dc.items():
+                for node_url, node_vols in rack.items():
+                    if isinstance(node_vols, list):
+                        for v in node_vols:
+                            v["ServerUrl"] = node_url
+                            v["Collection"] = v.get("Collection", "")
+                            volumes.append(v)
+        return {"volumes": volumes, "total": len(volumes)}
     except Exception:
         logger.error("volumes_list_failed", exc_info=True)
         return {"volumes": [], "total": 0}
@@ -24,8 +33,17 @@ async def list_volumes():
 async def get_volume(volume_id: int):
     client = get_seaweed_client()
     try:
-        resp = await client.master_get(f"/vol/status?volume={volume_id}")
-        return resp.json()
+        resp = await client.master_get("/vol/status")
+        data = resp.json()
+        for dc_name, dc in data.get("Volumes", {}).get("DataCenters", {}).items():
+            for rack_name, rack in dc.items():
+                for node_url, node_vols in rack.items():
+                    if isinstance(node_vols, list):
+                        for v in node_vols:
+                            if v.get("Id") == volume_id:
+                                v["ServerUrl"] = node_url
+                                return v
+        return {}
     except Exception:
         logger.error("volume_get_failed", volume_id=volume_id, exc_info=True)
         return {}
