@@ -15,7 +15,7 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<any>({})
   const [newUser, setNewUser] = useState({
     username: '', password: '', firstname: '', lastname: '', email: '', phone: '',
-    role: 'viewer', create_bucket: false,
+    role: 'viewer', create_bucket: false, s3_permission: 'readwrite',
   })
   const role = useAuthStore((s) => s.user?.role)
 
@@ -48,7 +48,7 @@ export default function UsersPage() {
         })
       }
       setCreateOpen(false)
-      setNewUser({ username: '', password: '', firstname: '', lastname: '', email: '', phone: '', role: 'viewer', create_bucket: false })
+      setNewUser({ username: '', password: '', firstname: '', lastname: '', email: '', phone: '', role: 'viewer', create_bucket: false, s3_permission: 'readwrite' })
       fetchUsers()
     } catch (e: any) {
       message.error(e.response?.data?.detail || 'Failed')
@@ -148,6 +148,15 @@ export default function UsersPage() {
         <Input placeholder="Phone (optional)" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} style={{ marginBottom: 10 }} />
         <Input.Password placeholder="Password *" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} style={{ marginBottom: 10 }} />
         <Select value={newUser.role} onChange={(v) => setNewUser({ ...newUser, role: v })} options={roleOptions} style={{ width: '100%', marginBottom: 10 }} />
+        <Select
+          value={newUser.s3_permission}
+          onChange={(v) => setNewUser({ ...newUser, s3_permission: v })}
+          style={{ width: '100%', marginBottom: 10 }}
+          options={[
+            { value: 'readwrite', label: 'S3: Read + Write (full access)' },
+            { value: 'readonly', label: 'S3: Read Only (list + download)' },
+          ]}
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input type="checkbox" id="create_bucket" checked={newUser.create_bucket} onChange={(e) => setNewUser({ ...newUser, create_bucket: e.target.checked })} />
           <label htmlFor="create_bucket">Create S3 bucket (user-{newUser.username || 'username'})</label>

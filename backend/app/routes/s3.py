@@ -1,13 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from app.services.seaweed_client import get_seaweed_client
-from app.middleware.auth_middleware import require_permission
+from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
+import bcrypt
 
 router = APIRouter(prefix="/s3", tags=["s3"])
 logger = get_logger("s3")
+
+
+class RevealSecretRequest(BaseModel):
+    admin_password: str
 
 
 @router.get("/buckets")
@@ -74,10 +79,39 @@ async def set_bucket_quota(name: str, body: dict, _: bool = Depends(require_perm
 async def list_s3_users():
     db = await get_db()
     cursor = await db.execute(
-        "SELECT id, username, email, role, enabled, s3_access_key, s3_secret_key, created_at FROM users WHERE s3_access_key != '' ORDER BY username"
+        "SELECT id, username, email, role, enabled, s3_access_key, s3_permission, created_at FROM users WHERE s3_access_key != '' ORDER BY username"
     )
     rows = await cursor.fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["s3_secret_key"] = "********" if d.get("s3_access_key") else ""
+        result.append(d)
+    return result
+
+
+@router.post("/users/{user_id}/reveal-secret")
+async def reveal_secret(user_id: int, body: RevealSecretRequest, _: bool = Depends(require_admin), current_user: dict = Depends(get_current_user)):
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT password_hash FROM users WHERE username = ? AND enabled = 1",
+        (current_user["username"],),
+    )
+    row = await cursor.fetchone()
+    if not row or not bcrypt.checkpw(body.admin_password.encode(), row["password_hash"].encode()):
+        logger.warning("reveal_secret_failed", username=current_user["username"], reason="wrong_admin_password")
+        raise HTTPException(403, "Invalid admin password")
+
+    cursor = await db.execute(
+        "SELECT s3_secret_key, s3_access_key FROM users WHERE id = ?",
+        (user_id,),
+    )
+    user_row = await cursor.fetchone()
+    if not user_row:
+        raise HTTPException(404, "User not found")
+
+    logger.info("secret_revealed", admin=current_user["username"], target_user_id=user_id)
+    return {"s3_access_key": user_row["s3_access_key"], "s3_secret_key": user_row["s3_secret_key"]}
 
 
 @router.post("/users/{user_id}/credentials")
@@ -98,19 +132,22 @@ async def regenerate_credentials(user_id: int, _: bool = Depends(require_permiss
 async def list_policies():
     db = await get_db()
     cursor = await db.execute(
-        "SELECT username, s3_access_key FROM users WHERE s3_access_key != '' AND enabled = 1 ORDER BY username"
+        "SELECT username, s3_access_key, s3_permission FROM users WHERE s3_access_key != '' AND enabled = 1 ORDER BY username"
     )
     rows = await cursor.fetchall()
     policies = []
     for row in rows:
         username = row["username"]
+        perm = row.get("s3_permission", "readwrite")
+        actions = ["s3:Get*", "s3:List*"] if perm == "readonly" else ["s3:*"]
         policies.append({
             "name": f"user-{username}",
-            "description": f"Access policy for {username} — restricts to user-{username} bucket",
+            "description": f"{'Read-only' if perm == 'readonly' else 'Read+Write'} access for {username}",
             "effect": "Allow",
-            "actions": ["s3:*"],
+            "actions": actions,
             "resources": [f"arn:aws:s3:::user-{username}/*", f"arn:aws:s3:::user-{username}"],
             "principal": username,
+            "permission": perm,
         })
     return policies
 
@@ -122,13 +159,8 @@ async def update_policy(name: str, body: dict, _: bool = Depends(require_permiss
 
 @router.get("/config")
 async def get_s3_config():
+    from app.config import settings
     return {
         "endpoint": "https://s3.mbm.mn",
         "region": "dc03",
-        "internal_gateways": [
-            "http://172.16.0.2:8333",
-            "http://172.16.0.4:8333",
-            "http://172.16.0.6:8333",
-            "http://172.16.0.7:8333",
-        ],
     }

@@ -22,6 +22,7 @@ class CreateUserRequest(BaseModel):
     phone: str = ""
     role: str | None = None
     create_bucket: bool = False
+    s3_permission: str = "readwrite"
 
 
 class UpdateUserRequest(BaseModel):
@@ -67,7 +68,7 @@ async def _create_s3_bucket(username: str) -> bool:
 async def list_users():
     db = await get_db()
     cursor = await db.execute(
-        "SELECT id, username, firstname, lastname, email, phone, role, enabled, s3_access_key, created_at FROM users ORDER BY username"
+        "SELECT id, username, firstname, lastname, email, phone, role, enabled, s3_access_key, s3_permission, created_at FROM users ORDER BY username"
     )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
@@ -95,9 +96,9 @@ async def create_user(body: CreateUserRequest, _: bool = Depends(require_admin))
 
     try:
         await db.execute(
-            "INSERT INTO users (username, password_hash, firstname, lastname, email, phone, role, s3_access_key, s3_secret_key) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (body.username, hashed, body.firstname, body.lastname, body.email, body.phone or "", role, access_key, secret_key),
+            "INSERT INTO users (username, password_hash, firstname, lastname, email, phone, role, s3_access_key, s3_secret_key, s3_permission) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (body.username, hashed, body.firstname, body.lastname, body.email, body.phone or "", role, access_key, secret_key, body.s3_permission),
         )
         await db.commit()
     except Exception:
