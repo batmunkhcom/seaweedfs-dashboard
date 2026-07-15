@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Breadcrumb, Modal, Input, Upload, message, Space, Tag, Progress, List, Typography } from 'antd'
+import { Table, Button, Breadcrumb, Modal, Input, Upload, message, Space, Tag, Progress, List, Typography, Alert } from 'antd'
 import {
   FolderAddOutlined,
   UploadOutlined,
@@ -16,7 +16,7 @@ import {
 } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import { useParams, useNavigate } from 'react-router-dom'
-import { listFiler, createFilerDir, deleteFilerEntry } from '../../services/api'
+import { listFiler, createFilerDir, deleteFilerEntry, getSettings } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
 const { Dragger } = Upload
@@ -39,6 +39,8 @@ export default function FilerPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [uploading, setUploading] = useState(false)
+  const [maxUploadSize, setMaxUploadSize] = useState(500)
+  const [vpnUrl, setVpnUrl] = useState('')
   const navigate = useNavigate()
   const role = useAuthStore((s) => s.user?.role)
   const csrfToken = useAuthStore((s) => s.csrfToken)
@@ -50,6 +52,19 @@ export default function FilerPage() {
   }
 
   useEffect(() => { fetch() }, [path])
+
+  useEffect(() => {
+    getSettings().then((data: any) => {
+      if (data?.categories) {
+        const all: Record<string, string> = {}
+        for (const items of Object.values(data.categories)) {
+          if (Array.isArray(items)) for (const item of items as any[]) all[item.key] = item.value
+        }
+        if (all.max_upload_size_mb) setMaxUploadSize(Number(all.max_upload_size_mb))
+        if (all.vpn_upload_url) setVpnUrl(all.vpn_upload_url)
+      }
+    }).catch(() => {})
+  }, [])
 
   const pathParts = path.split('/').filter(Boolean)
   const breadcrumbItems = [
@@ -223,6 +238,14 @@ export default function FilerPage() {
         ]}
         width={520}
       >
+        {maxUploadSize >= 1024 && (
+          <Alert
+            type="info"
+            showIcon
+            message={`Large files (over 100MB) may fail via Cloudflare. For files up to ${maxUploadSize}MB, use VPN direct access: ${vpnUrl || 'http://172.16.0.10:8081'}`}
+            style={{ marginBottom: 12 }}
+          />
+        )}
         <Dragger
           multiple
           name="files"

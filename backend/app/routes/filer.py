@@ -76,7 +76,7 @@ async def upload_filer(path: str, files: list[UploadFile] = File(None), file: Up
         return {"error": "No files provided"}
 
     max_files = await get_setting_int("max_files_per_upload", 10)
-    max_size_mb = await get_setting_int("max_upload_size_mb", 500)
+    max_size_mb = await get_setting_int("max_upload_size_mb", 10240)
     max_bytes = max_size_mb * 1024 * 1024
     allowed = await get_setting_list("allowed_extensions", [])
 
@@ -86,33 +86,41 @@ async def upload_filer(path: str, files: list[UploadFile] = File(None), file: Up
     clean = _clean_path(path)
     client = get_seaweed_client()
     results = []
-    for file in uploads:
-        safe_name = _os.path.basename(file.filename or "upload")
+    for upload in uploads:
+        safe_name = _os.path.basename(upload.filename or "upload")
         ext = "." + safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
 
         if allowed and ext and ext not in allowed:
             results.append({"file": safe_name, "error": f"Extension {ext} not allowed"})
             continue
 
-        accumulated = bytearray()
-        total = 0
-        while True:
-            chunk = await file.read(65536)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > max_bytes:
-                results.append({"file": safe_name, "error": f"File exceeds {max_size_mb}MB"})
-                break
-            accumulated.extend(chunk)
-        else:
-            try:
-                upload_path = f"{clean}/{safe_name}"
-                resp = await client.request("PUT", f"/{upload_path}", master=False, content=bytes(accumulated))
-                logger.info("filer_upload_ok", path=upload_path, size=total, status=resp.status_code)
-                results.append({"file": safe_name, "ok": True})
-            except Exception:
-                logger.error("filer_upload_failed", file=safe_name, exc_info=True)
-                results.append({"file": safe_name, "error": "Upload failed"})
+        if upload.size is not None and upload.size > max_bytes:
+            results.append({"file": safe_name, "error": f"File exceeds {max_size_mb}MB"})
+            continue
+
+        async def chunk_generator(f=upload, limit=max_bytes):
+            total = 0
+            while True:
+                chunk = await f.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise ValueError(f"File exceeds {max_size_mb}MB")
+                yield chunk
+
+        try:
+            upload_path = f"{clean}/{safe_name}"
+            filer_host = await client.get_filer()
+            url = f"http://{filer_host}/{upload_path}"
+            resp = await client.client.put(url, content=chunk_generator())
+            resp.raise_for_status()
+            logger.info("filer_upload_ok", path=upload_path, status=resp.status_code)
+            results.append({"file": safe_name, "ok": True})
+        except ValueError as e:
+            results.append({"file": safe_name, "error": str(e)})
+        except Exception:
+            logger.error("filer_upload_failed", file=safe_name, exc_info=True)
+            results.append({"file": safe_name, "error": "Upload failed"})
 
     return {"results": results}
