@@ -20,6 +20,7 @@ import {
   IdcardOutlined,
   InfoCircleOutlined,
   TeamOutlined,
+  ReadOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -46,6 +47,7 @@ const menuItems = [
   { key: '/workers', icon: <ToolOutlined />, label: 'Workers' },
   { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
+  { key: '/help', icon: <ReadOutlined />, label: 'Docs' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]
 

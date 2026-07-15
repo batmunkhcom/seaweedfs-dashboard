@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Popconfirm, message } from 'antd'
+import { Table, Button, Popconfirm, message, Alert } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import { getCollections, deleteCollection } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
@@ -41,5 +41,15 @@ export default function CollectionsPage() {
       : []),
   ]
 
-  return <Table dataSource={collections} columns={columns} rowKey="name" loading={loading} size="small" />
+  return (
+    <div>
+      <Alert
+        type="info"
+        message="Collections are namespaces for grouping volumes — use them to separate storage for different VMs, apps, or environments."
+        style={{ marginBottom: 16 }}
+        showIcon
+      />
+      <Table dataSource={collections} columns={columns} rowKey="name" loading={loading} size="small" />
+    </div>
+  )
 }

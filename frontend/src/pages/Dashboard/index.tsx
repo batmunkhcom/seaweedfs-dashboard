@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Row, Col, Card, Tag } from 'antd'
+import { Row, Col, Card, Tag, Tooltip } from 'antd'
 import { getDashboardStats, getAlerts } from '../../services/api'
 import { useSSE } from '../../hooks/useSSE'
 import StatCards from '../../components/StatCard'
@@ -60,10 +60,10 @@ export default function DashboardPage() {
           <Card title="Cluster Health">
             {stats ? (
               <div>
-                <p>Master Leader: <Tag color="green">{stats.masterLeader}</Tag></p>
-                <p>Filer: <Tag color={stats.filerStatus === 'connected' ? 'green' : 'red'}>{stats.filerStatus}</Tag></p>
+                <p><Tooltip title="Current elected Raft leader">Master Leader</Tooltip>: <Tag color="green">{stats.masterLeader}</Tag></p>
+                <p><Tooltip title="Filer HA group connection status">Filer</Tooltip>: <Tag color={stats.filerStatus === 'connected' ? 'green' : 'red'}>{stats.filerStatus}</Tag></p>
                 <p>Version: <Tag>{stats.version}</Tag></p>
-                <p>Free / Max: {stats.freeSpace} / {stats.maxSpace}</p>
+                <p><Tooltip title="Free max volumes (1 volume = ~15GB)">Free / Max</Tooltip>: {stats.freeSpace} / {stats.maxSpace}</p>
               </div>
             ) : (
               <p>Loading...</p>

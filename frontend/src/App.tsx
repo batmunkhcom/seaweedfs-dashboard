@@ -16,6 +16,7 @@ import WorkersPage from './pages/Workers'
 import SettingsPage from './pages/Settings'
 import DiskHealthPage from './pages/DiskHealth'
 import UsersPage from './pages/Users'
+import HelpPage from './pages/Help'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -75,6 +76,7 @@ function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/disk-health" element={<DiskHealthPage />} />
+            <Route path="/help" element={<HelpPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
