@@ -22,7 +22,8 @@ async def list_filer(path: str, page: int = 1, pageSize: int = 50):
         data = resp.json()
         entries = []
         if isinstance(data, dict) and "Entries" in data:
-            for e in data["Entries"]:
+            raw = data["Entries"] or []
+            for e in raw:
                 entries.append({
                     "name": e.get("FullPath", "").split("/")[-1] or e.get("Name", "") or "/",
                     "isDirectory": e.get("Mode", 0) & 0x80000000 != 0,
@@ -67,21 +68,25 @@ async def delete_filer(path: str, _: bool = Depends(require_permission("filer:wr
 
 
 @router.post("/upload/{path:path}")
-async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool = Depends(require_permission("filer:write"))):
+async def upload_filer(path: str, files: list[UploadFile] = File(None), file: UploadFile | None = File(None), _: bool = Depends(require_permission("filer:write"))):
     import os as _os
+
+    uploads = files if files else ([file] if file else [])
+    if not uploads:
+        return {"error": "No files provided"}
 
     max_files = await get_setting_int("max_files_per_upload", 10)
     max_size_mb = await get_setting_int("max_upload_size_mb", 500)
     max_bytes = max_size_mb * 1024 * 1024
     allowed = await get_setting_list("allowed_extensions", [])
 
-    if len(files) > max_files:
+    if len(uploads) > max_files:
         return {"error": f"Max {max_files} files per upload"}
 
     clean = _clean_path(path)
     client = get_seaweed_client()
     results = []
-    for file in files:
+    for file in uploads:
         safe_name = _os.path.basename(file.filename or "upload")
         ext = "." + safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
 

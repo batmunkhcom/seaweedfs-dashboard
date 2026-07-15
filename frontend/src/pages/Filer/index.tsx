@@ -130,6 +130,7 @@ export default function FilerPage() {
                 New Folder
               </Button>
               <Upload
+                name="files"
                 action={`/api/filer/upload${path}`}
                 showUploadList={false}
                 onChange={(info) => {
