@@ -18,6 +18,19 @@ import DiskHealthPage from './pages/DiskHealth'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
+const darkTheme = {
+  algorithm: theme.darkAlgorithm,
+  token: {
+    colorPrimary: '#a855f7',
+    colorSuccess: '#22c55e',
+    colorWarning: '#f59e0b',
+    colorError: '#ef4444',
+    colorInfo: '#3b82f6',
+    borderRadius: 8,
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+  },
+}
+
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { isLoggedIn, user, loading } = useAuthStore()
 
@@ -35,7 +48,7 @@ function App() {
   }, [])
 
   return (
-    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
+    <ConfigProvider theme={darkTheme}>
       <AntApp>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
