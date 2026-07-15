@@ -103,7 +103,7 @@ async def upload_filer(path: str, files: list[UploadFile] = File(...), _: bool =
         else:
             try:
                 upload_path = f"{clean}/{safe_name}"
-                await client.request("POST", f"/{upload_path}", master=False, content=bytes(accumulated))
+                await client.request("PUT", f"/{upload_path}", master=False, content=bytes(accumulated))
                 results.append({"file": safe_name, "ok": True})
             except Exception:
                 logger.error("filer_upload_failed", file=safe_name, exc_info=True)
