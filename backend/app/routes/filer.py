@@ -41,7 +41,7 @@ async def list_filer(path: str, page: int = 1, pageSize: int = 50):
 async def mkdir_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
     try:
-        await client.request("POST", f"/{path}?op=mkdir", master=False)
+        await client.request("POST", f"/{path}/?op=mkdir", master=False)
         return {"ok": True}
     except Exception:
         logger.error("filer_mkdir_failed", path=path, exc_info=True)

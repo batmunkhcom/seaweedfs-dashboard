@@ -45,7 +45,7 @@ async def create_bucket(body: dict, _: bool = Depends(require_permission("s3:wri
     if not name:
         raise HTTPException(400, "Bucket name is required")
     try:
-        await client.request("POST", f"/buckets/{name}?op=mkdir", master=False)
+        await client.request("POST", f"/buckets/{name}/?op=mkdir", master=False)
         return {"ok": True, "name": name}
     except Exception:
         logger.error("s3_bucket_create_failed", name=name, exc_info=True)
