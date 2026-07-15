@@ -66,19 +66,22 @@ export default function DashboardPage() {
                 <p>Version: <Tag>{stats.version}</Tag></p>
                 <p><Tooltip title="Free volume slots / Max volume slots. 1 volume ≈ 30GB">Free / Max Slots</Tooltip>: {stats.freeSpace} / {stats.maxSpace}</p>
                 <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(168,85,247,0.06)', borderRadius: 8, border: '1px solid rgba(168,85,247,0.12)' }}>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
-                    <Tooltip title="Max volumes × 30GB volume size. 7 nodes × 1.8TB ≈ 12.6TB raw">
-                      Disk Capacity <QuestionCircleOutlined style={{ fontSize: 11 }} />
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+                    <Tooltip title="Max volume slots × volume size (30GB/vol). Current provisioned capacity.">
+                      Storage Capacity <QuestionCircleOutlined style={{ fontSize: 11 }} />
                     </Tooltip>
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#e2e8f0' }}>
-                    {stats.totalDiskGB} <span style={{ fontSize: 14, fontWeight: 400, color: '#64748b' }}>GB raw</span>
-                  </div>
-                  <div style={{ fontSize: 13, color: '#a855f7', marginTop: 4 }}>
-                    {stats.totalUsableGB} GB usable
-                    <Tooltip title="After replication 001 (2 copies). Usable = Raw / 2">
-                      <QuestionCircleOutlined style={{ marginLeft: 4, fontSize: 11, color: '#64748b' }} />
-                    </Tooltip>
+                  <div style={{ display: 'flex', gap: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>Provisioned</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: '#e2e8f0' }}>{stats.totalDiskGB} GB</div>
+                      <div style={{ fontSize: 12, color: '#a855f7' }}>{stats.totalUsableGB} GB usable</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>Physical</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: '#e2e8f0' }}>{stats.physicalRawGB} GB</div>
+                      <div style={{ fontSize: 12, color: '#22c55e' }}>{stats.physicalUsableGB} GB usable</div>
+                    </div>
                   </div>
                 </div>
               </div>

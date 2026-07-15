@@ -18,6 +18,7 @@ REPLICATION_FACTOR = 2
 async def dashboard_stats():
     client = get_seaweed_client()
     volume_size_mb = await get_setting_int("volume_size_mb", 30000)
+    per_node_disk_gb = await get_setting_int("per_node_disk_gb", 1800)
 
     stats = {
         "totalVolumes": 0,
@@ -32,6 +33,8 @@ async def dashboard_stats():
         "version": "",
         "totalDiskGB": 0,
         "totalUsableGB": 0,
+        "physicalRawGB": 0,
+        "physicalUsableGB": 0,
     }
 
     try:
@@ -53,6 +56,10 @@ async def dashboard_stats():
 
         stats["totalDiskGB"] = round((total_max * volume_size_mb) / 1024, 1)
         stats["totalUsableGB"] = round(stats["totalDiskGB"] / REPLICATION_FACTOR, 1)
+
+        physical_raw = stats["volumeServers"] * per_node_disk_gb
+        stats["physicalRawGB"] = round(physical_raw, 1)
+        stats["physicalUsableGB"] = round(physical_raw / REPLICATION_FACTOR, 1)
     except Exception:
         logger.error("stats_fetch_failed", exc_info=True)
 

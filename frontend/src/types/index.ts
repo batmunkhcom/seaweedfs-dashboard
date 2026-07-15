@@ -133,6 +133,8 @@ export interface DashboardStats {
   version: string
   totalDiskGB: number
   totalUsableGB: number
+  physicalRawGB: number
+  physicalUsableGB: number
 }
 
 export interface AlertEvent {
