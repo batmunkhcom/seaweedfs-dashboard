@@ -88,9 +88,13 @@ export default function FilerPage() {
       okType: 'danger',
       cancelText: 'Cancel',
       onOk: async () => {
-        await deleteFilerEntry(entryPath)
-        message.success('Deleted')
-        fetch()
+        try {
+          await deleteFilerEntry(entryPath)
+          message.success('Deleted')
+          fetch()
+        } catch {
+          message.error('Delete failed')
+        }
       },
     })
   }
@@ -106,16 +110,15 @@ export default function FilerPage() {
       okType: 'danger',
       cancelText: 'Cancel',
       onOk: async () => {
-        let count = 0
+        let ok = 0
+        let fail = 0
         for (const key of selectedRowKeys) {
-          try {
-            const entry = entries.find((e) => e.name === String(key))
-            const entryPath = entry?.path || `${path === '/' ? '' : path}/${String(key)}`
-            await deleteFilerEntry(entryPath)
-            count++
-          } catch { /* skip */ }
+          const entry = entries.find((e) => e.name === String(key))
+          const entryPath = entry?.path || `${path === '/' ? '' : path}/${String(key)}`
+          try { await deleteFilerEntry(entryPath); ok++ } catch { fail++ }
         }
-        message.success(`${count} entries deleted`)
+        if (fail > 0) message.warning(`${ok} deleted, ${fail} failed`)
+        else message.success(`${ok} entries deleted`)
         setSelectedRowKeys([])
         fetch()
       },
