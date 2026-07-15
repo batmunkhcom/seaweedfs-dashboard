@@ -77,7 +77,9 @@ class SeaweedClient:
         return await self.request("GET", path, master=True, **kwargs)
 
     async def filer_get(self, path: str, **kwargs) -> httpx.Response:
-        return await self.request("GET", path, master=False, **kwargs)
+        headers = kwargs.pop("headers", {})
+        headers["Accept"] = "application/json"
+        return await self.request("GET", path, master=False, headers=headers, **kwargs)
 
 
 _seaweed_client: SeaweedClient | None = None

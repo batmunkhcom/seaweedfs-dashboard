@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File
 
 from app.services.seaweed_client import get_seaweed_client
 from app.middleware.auth_middleware import require_permission
-from app.config import settings
 from app.settings_service import get_setting_int, get_setting_list
 from app.logging_config import get_logger
 
@@ -20,37 +19,29 @@ async def list_filer(path: str, page: int = 1, pageSize: int = 50):
         if isinstance(data, dict) and "Entries" in data:
             for e in data["Entries"]:
                 entries.append({
-                    "name": e.get("name", ""),
-                    "isDirectory": e.get("isDirectory", False),
-                    "size": e.get("fileSize", 0) or e.get("totalSize", 0),
-                    "mtime": e.get("mtime", ""),
-                    "mode": e.get("mode", 0),
-                    "path": e.get("fullPath", ""),
+                    "name": e.get("FullPath", "").split("/")[-1] or e.get("Name", "") or "/",
+                    "isDirectory": e.get("Mode", 0) & 0x80000000 != 0,
+                    "size": e.get("FileSize", 0) or e.get("TotalSize", 0),
+                    "mtime": e.get("Mtime", ""),
+                    "path": e.get("FullPath", ""),
                 })
-        elif isinstance(data, dict):
-            entries.append({
-                "name": path.split("/")[-1] or path,
-                "isDirectory": True,
-                "size": data.get("fileSize", 0),
-                "mtime": "",
-                "mode": 0,
-                "path": path,
-            })
+        elif isinstance(data, list):
+            entries = data
 
         total = len(entries)
         start = (page - 1) * pageSize
         end = start + pageSize
-        return {"entries": entries[start:end], "path": path, "total": total, "page": page, "pageSize": pageSize}
+        return {"entries": entries[start:end], "path": f"/{path}", "total": total, "page": page, "pageSize": pageSize}
     except Exception:
         logger.error("filer_list_failed", path=path, exc_info=True)
-        return {"entries": [], "path": path, "total": 0, "page": page, "pageSize": pageSize}
+        return {"entries": [], "path": f"/{path}", "total": 0, "page": page, "pageSize": pageSize}
 
 
 @router.post("/mkdir/{path:path}")
 async def mkdir_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
     try:
-        resp = await client.request("POST", f"/{path}?op=mkdir", master=False)
+        await client.request("POST", f"/{path}?op=mkdir", master=False)
         return {"ok": True}
     except Exception:
         logger.error("filer_mkdir_failed", path=path, exc_info=True)
@@ -61,7 +52,7 @@ async def mkdir_filer(path: str, _: bool = Depends(require_permission("filer:wri
 async def delete_filer(path: str, _: bool = Depends(require_permission("filer:write"))):
     client = get_seaweed_client()
     try:
-        resp = await client.request("DELETE", f"/{path}", master=False)
+        await client.request("DELETE", f"/{path}", master=False)
         return {"ok": True}
     except Exception:
         logger.error("filer_delete_failed", path=path, exc_info=True)
