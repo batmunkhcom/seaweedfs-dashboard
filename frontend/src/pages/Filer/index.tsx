@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Breadcrumb, Modal, Input, Upload, message, Space, Tag } from 'antd'
+import { Table, Button, Breadcrumb, Modal, Input, Upload, message, Space, Tag, Progress, List, Typography } from 'antd'
 import {
   FolderAddOutlined,
   UploadOutlined,
@@ -9,10 +9,18 @@ import {
   FileOutlined,
   DownloadOutlined,
   ReloadOutlined,
+  InboxOutlined,
+  CloseOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
 } from '@ant-design/icons'
+import type { UploadFile } from 'antd'
 import { useParams, useNavigate } from 'react-router-dom'
 import { listFiler, createFilerDir, deleteFilerEntry } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+
+const { Dragger } = Upload
+const { Text } = Typography
 
 function formatSize(bytes: number): string {
   if (!bytes) return '—'
@@ -28,8 +36,12 @@ export default function FilerPage() {
   const [loading, setLoading] = useState(true)
   const [mkdirOpen, setMkdirOpen] = useState(false)
   const [mkdirName, setMkdirName] = useState('')
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [fileList, setFileList] = useState<UploadFile[]>([])
+  const [uploading, setUploading] = useState(false)
   const navigate = useNavigate()
   const role = useAuthStore((s) => s.user?.role)
+  const csrfToken = useAuthStore((s) => s.csrfToken)
   const canWrite = role === 'admin' || role === 'operator'
 
   const fetch = () => {
@@ -61,6 +73,61 @@ export default function FilerPage() {
     setMkdirOpen(false)
     setMkdirName('')
     fetch()
+  }
+
+  const handleUpload = () => {
+    if (fileList.length === 0) return
+    setUploading(true)
+
+    const xhr = new XMLHttpRequest()
+    const formData = new FormData()
+    fileList.forEach((f) => {
+      if (f.originFileObj) formData.append('files', f.originFileObj)
+    })
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100)
+        setFileList((prev) =>
+          prev.map((f) => ({ ...f, percent: pct, status: pct === 100 ? 'done' : 'uploading' }))
+        )
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      setUploading(false)
+      try {
+        const data = JSON.parse(xhr.responseText)
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const failed = data.results?.filter((r: any) => r.error) || []
+          if (failed.length > 0) {
+            failed.forEach((r: any) => message.error(`${r.file}: ${r.error}`))
+          } else {
+            message.success(`${data.results?.length || fileList.length} file(s) uploaded`)
+          }
+          setFileList([])
+          setUploadOpen(false)
+          setTimeout(() => fetch(), 500)
+        } else {
+          message.error(data.error || data.detail || 'Upload failed')
+          setFileList((prev) => prev.map((f) => ({ ...f, status: 'error' })))
+        }
+      } catch {
+        message.error('Upload failed')
+        setFileList((prev) => prev.map((f) => ({ ...f, status: 'error' })))
+      }
+    })
+
+    xhr.addEventListener('error', () => {
+      setUploading(false)
+      message.error('Network error')
+      setFileList((prev) => prev.map((f) => ({ ...f, status: 'error' })))
+    })
+
+    xhr.open('POST', `/api/filer/upload${path}`)
+    xhr.withCredentials = true
+    xhr.setRequestHeader('X-CSRF-Token', csrfToken)
+    xhr.send(formData)
   }
 
   const downloadUrl = (entryPath: string) => `/api/filer/list${entryPath}`
@@ -129,19 +196,9 @@ export default function FilerPage() {
               <Button icon={<FolderAddOutlined />} size="small" onClick={() => setMkdirOpen(true)}>
                 New Folder
               </Button>
-              <Upload
-                name="files"
-                action={`/api/filer/upload${path}`}
-                showUploadList={false}
-                onChange={(info) => {
-                  if (info.file.status === 'done') { message.success(`${info.file.name} uploaded`); fetch() }
-                  else if (info.file.status === 'error') { message.error(`${info.file.name} upload failed`) }
-                }}
-                withCredentials
-                headers={{ 'X-CSRF-Token': useAuthStore.getState().csrfToken }}
-              >
-                <Button icon={<UploadOutlined />} size="small">Upload</Button>
-              </Upload>
+              <Button icon={<UploadOutlined />} size="small" type="primary" onClick={() => setUploadOpen(true)}>
+                Upload
+              </Button>
             </>
           )}
           <Button icon={<ReloadOutlined />} size="small" onClick={fetch}>Refresh</Button>
@@ -152,6 +209,63 @@ export default function FilerPage() {
 
       <Modal open={mkdirOpen} title="Create Folder" onOk={doMkdir} onCancel={() => setMkdirOpen(false)}>
         <Input value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder="Folder name" />
+      </Modal>
+
+      <Modal
+        open={uploadOpen}
+        title={`Upload to ${path}`}
+        onCancel={() => { setUploadOpen(false); setFileList([]) }}
+        footer={[
+          <Button key="cancel" onClick={() => { setUploadOpen(false); setFileList([]) }}>Cancel</Button>,
+          <Button key="upload" type="primary" loading={uploading} disabled={fileList.length === 0} onClick={handleUpload}>
+            Upload {fileList.length > 0 ? `(${fileList.length})` : ''}
+          </Button>,
+        ]}
+        width={520}
+      >
+        <Dragger
+          multiple
+          name="files"
+          fileList={fileList}
+          beforeUpload={(file) => { setFileList((prev) => [...prev, file as UploadFile]); return false }}
+          onRemove={(file) => { setFileList((prev) => prev.filter((f) => f.uid !== file.uid)) }}
+          showUploadList={false}
+          disabled={uploading}
+        >
+          <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+          <p className="ant-upload-text">Click or drag files here</p>
+          <p className="ant-upload-hint">Support for multiple file upload</p>
+        </Dragger>
+
+        {fileList.length > 0 && (
+          <List
+            style={{ marginTop: 16 }}
+            size="small"
+            dataSource={fileList}
+            renderItem={(file: UploadFile) => (
+              <List.Item
+                actions={[
+                  file.status === 'done' ? <CheckCircleFilled style={{ color: '#52c41a' }} /> : null,
+                  file.status === 'error' ? <CloseCircleFilled style={{ color: '#ff4d4f' }} /> : null,
+                  <CloseOutlined onClick={() => setFileList((prev) => prev.filter((f) => f.uid !== file.uid))} style={{ cursor: 'pointer' }} />,
+                ]}
+              >
+                <List.Item.Meta
+                  avatar={<FileOutlined />}
+                  title={<Text ellipsis style={{ maxWidth: 280 }}>{file.name}</Text>}
+                  description={
+                    <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{formatSize(file.size || 0)}</Text>
+                      {file.status === 'uploading' && file.percent !== undefined && (
+                        <Progress percent={Math.round(file.percent)} size="small" style={{ width: 200 }} />
+                      )}
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        )}
       </Modal>
     </div>
   )
