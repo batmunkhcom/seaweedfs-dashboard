@@ -192,8 +192,17 @@ export interface DiskHealthHistory {
 }
 
 export interface User {
+  id?: number
   username: string
+  firstname?: string
+  lastname?: string
+  email?: string
+  phone?: string
   role: 'admin' | 'operator' | 'viewer'
+  enabled?: boolean
+  s3_access_key?: string
+  s3_secret_key?: string
+  created_at?: string
 }
 
 export interface LoginRequest {

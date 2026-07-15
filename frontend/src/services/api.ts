@@ -298,3 +298,43 @@ export async function changeMyPassword(currentPassword: string, newPassword: str
   })
   return data
 }
+
+export async function getMyProfile() {
+  const { data } = await api.get('/users/me/profile')
+  return data
+}
+
+export async function updateMyProfile(profile: { firstname?: string; lastname?: string; email?: string; phone?: string }) {
+  const { data } = await api.put('/users/me/profile', profile)
+  return data
+}
+
+export async function createMyBucket() {
+  const { data } = await api.post('/users/me/bucket')
+  return data
+}
+
+export async function listUsers(): Promise<User[]> {
+  const { data } = await api.get('/users')
+  return data
+}
+
+export async function createUser(body: {
+  username: string; password: string; firstname: string; lastname: string; email: string;
+  phone?: string; role?: string; create_bucket?: boolean
+}) {
+  const { data } = await api.post('/users', body)
+  return data
+}
+
+export async function updateUser(id: number, body: {
+  firstname?: string; lastname?: string; email?: string; phone?: string; role?: string; enabled?: boolean
+}) {
+  const { data } = await api.put(`/users/${id}`, body)
+  return data
+}
+
+export async function deleteUser(id: number) {
+  const { data } = await api.delete(`/users/${id}`)
+  return data
+}

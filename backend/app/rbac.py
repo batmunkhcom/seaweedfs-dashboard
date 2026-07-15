@@ -8,7 +8,7 @@ def load_rbac() -> dict:
     global _rbac
     if _rbac is not None:
         return _rbac
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "rbac.json")
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "rbac.json")
     with open(path) as f:
         _rbac = json.load(f)
     return _rbac
