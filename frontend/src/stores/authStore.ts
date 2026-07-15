@@ -54,12 +54,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    try {
-      await apiLogout()
-    } finally {
-      saveSession(null, '')
-      set({ isLoggedIn: false, user: null, csrfToken: '', loading: false })
-    }
+    saveSession(null, '')
+    set({ isLoggedIn: false, user: null, csrfToken: '', loading: false })
+    try { await apiLogout() } catch { /* session already dead */ }
   },
 
   checkSession: async () => {
