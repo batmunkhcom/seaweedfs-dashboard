@@ -98,9 +98,19 @@ export default function FilerPage() {
 
     const xhr = new XMLHttpRequest()
     const formData = new FormData()
-    fileList.forEach((f) => {
-      if (f.originFileObj) formData.append('files', f.originFileObj)
+    fileList.forEach((f: any) => {
+      if (f instanceof File) {
+        formData.append('files', f, f.name || 'file')
+      } else if (f.originFileObj instanceof File) {
+        formData.append('files', f.originFileObj, f.name || f.originFileObj.name || 'file')
+      }
     })
+
+    if (Array.from(formData.entries()).filter(([k]) => k === 'files').length === 0) {
+      message.error('No valid files selected', 4)
+      setUploading(false)
+      return
+    }
 
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
@@ -119,20 +129,31 @@ export default function FilerPage() {
           const results = data.results || []
           const failed = results.filter((r: any) => r.error)
           const ok = results.filter((r: any) => r.ok)
+          const topError = data.error
+
+          if (topError) {
+            message.error(topError, 6)
+          }
           if (failed.length > 0) {
-            failed.forEach((r: any) => message.warning(`${r.file}: ${r.error}`, 5))
+            failed.forEach((r: any) => { if (r.file) message.warning(`${r.file}: ${r.error}`, 5) })
           }
           if (ok.length > 0) {
             message.success(`${ok.length} file(s) uploaded`)
           }
-          if (failed.length > 0 && ok.length === 0) {
-            message.error('All files rejected — check file extensions and size limits', 6)
+          if (results.length === 0 && !topError) {
+            message.warning('No files received by server — try again', 4)
           }
-          setFileList([])
-          setUploadOpen(false)
-          setTimeout(() => fetch(), 500)
+          if (ok.length > 0 || failed.length > 0) {
+            setFileList([])
+            setUploadOpen(false)
+            setTimeout(() => fetch(), 500)
+          }
+        } else if (xhr.status === 401) {
+          message.error('Authentication expired — please log in again', 5)
+        } else if (xhr.status === 403) {
+          message.error('Permission denied — CSRF token mismatch, refresh the page', 5)
         } else {
-          const errMsg = data.error || data.detail || `HTTP ${xhr.status}`
+          const errMsg = data?.error || data?.detail || `HTTP ${xhr.status}`
           message.error(`Upload failed: ${errMsg}`, 5)
           setFileList((prev) => prev.map((f) => ({ ...f, status: 'error' })))
         }

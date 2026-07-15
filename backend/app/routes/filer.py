@@ -73,7 +73,7 @@ async def upload_filer(path: str, files: list[UploadFile] = File(None), file: Up
 
     uploads = files if files else ([file] if file else [])
     if not uploads:
-        return {"error": "No files provided"}
+        return {"results": [{"file": "", "error": "No files provided"}]}
 
     max_files = await get_setting_int("max_files_per_upload", 10)
     max_size_mb = await get_setting_int("max_upload_size_mb", 10240)
@@ -81,7 +81,7 @@ async def upload_filer(path: str, files: list[UploadFile] = File(None), file: Up
     allowed = await get_setting_list("allowed_extensions", [])
 
     if len(uploads) > max_files:
-        return {"error": f"Max {max_files} files per upload"}
+        return {"results": [{"file": "", "error": f"Max {max_files} files per upload"}]}
 
     clean = _clean_path(path)
     client = get_seaweed_client()
