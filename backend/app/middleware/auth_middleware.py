@@ -4,7 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.rbac import has_permission
 
-PUBLIC_PATHS = {"/api/health", "/api/auth/login", "/api/auth/csrf-token", "/docs", "/openapi.json"}
+PUBLIC_PATHS = {"/api/health", "/api/info", "/api/auth/login", "/api/auth/csrf-token", "/docs", "/openapi.json"}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

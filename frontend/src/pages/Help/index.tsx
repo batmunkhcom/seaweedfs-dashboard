@@ -1,27 +1,40 @@
+import { useState, useEffect } from 'react'
 import { Card, Tabs, Typography, Alert, Table, Tag } from 'antd'
 import { LinkOutlined, ApiOutlined, CloudServerOutlined } from '@ant-design/icons'
+import api from '../../services/api'
 
 const { Title, Paragraph } = Typography
 
-const endpoints = [
-  { service: 'Dashboard UI', url: 'https://seaweed.mbm.mn', auth: 'Session (login)', note: 'Cluster management dashboard' },
-  { service: 'Dashboard API', url: 'https://seaweed.mbm.mn/api', auth: 'Session + CSRF', note: 'REST API for automation' },
-  { service: 'S3 Object Storage', url: 'https://s3.mbm.mn', auth: 'Access Key + Secret', note: 'S3-compatible object storage' },
-  { service: 'Filer (internal)', url: 'http://172.16.0.2:8888', auth: 'Internal only', note: 'Direct filer API (VPN)' },
-  { service: 'Master API (internal)', url: 'http://172.16.0.5:9333', auth: 'Internal only', note: 'Master API for volume ops (VPN)' },
-]
-
-const columns = [
-  { title: 'Service', dataIndex: 'service', key: 'service' },
-  { title: 'Endpoint', dataIndex: 'url', key: 'url', render: (v: string) => <code>{v}</code> },
-  { title: 'Auth', dataIndex: 'auth', key: 'auth', render: (v: string) => <Tag>{v}</Tag> },
-  { title: 'Note', dataIndex: 'note', key: 'note' },
-]
-
 export default function HelpPage() {
+  const [info, setInfo] = useState<any>(null)
+
+  useEffect(() => {
+    api.get('/info').then((r) => setInfo(r.data)).catch(() => {})
+  }, [])
+
+  const endpoints = info ? [
+    { service: 'Dashboard UI', url: info.endpoints?.public_dashboard || '/', auth: 'Session (login)', note: 'Cluster management dashboard' },
+    { service: 'Dashboard API', url: (info.endpoints?.public_dashboard || '') + '/api', auth: 'Session + CSRF', note: 'REST API for automation' },
+    { service: 'S3 Object Storage', url: info.endpoints?.public_s3 || '', auth: 'Access Key + Secret', note: 'S3-compatible object storage' },
+    { service: 'Filer (internal)', url: info.endpoints?.internal_filer || '', auth: 'Internal only', note: 'Direct filer API (VPN)' },
+    { service: 'Master API (internal)', url: info.endpoints?.internal_master || '', auth: 'Internal only', note: 'Master API for volume ops (VPN)' },
+  ] : []
+
+  const columns = [
+    { title: 'Service', dataIndex: 'service', key: 'service' },
+    { title: 'Endpoint', dataIndex: 'url', key: 'url', render: (v: string) => <code>{v}</code> },
+    { title: 'Auth', dataIndex: 'auth', key: 'auth', render: (v: string) => <Tag>{v}</Tag> },
+    { title: 'Note', dataIndex: 'note', key: 'note' },
+  ]
+
+  const clust = info?.cluster || {}
+  const about = info?.about || {}
+
   return (
     <div>
-      <Title level={3}>Documentation</Title>
+      <Title level={3}>
+        Documentation {info && <Tag color="purple" style={{ marginLeft: 8 }}>v{info.version}</Tag>}
+      </Title>
 
       <Tabs
         defaultActiveKey="overview"
@@ -33,20 +46,19 @@ export default function HelpPage() {
               <div>
                 <Alert
                   type="info"
-                  message="dc03 SeaweedFS Cluster — 7 nodes, 12.6 TB raw storage"
+                  message={`${clust.name || 'dc03'} Cluster — ${clust.nodes || 7} nodes, replication ${clust.replication || '001'}`}
                   style={{ marginBottom: 16 }}
                 />
 
                 <Card title="Cluster Architecture" style={{ marginBottom: 16 }}>
                   <Paragraph>
-                    The dc03 cluster has <strong>7 nodes</strong> with <strong>1.8 TB XFS</strong> disk each,
-                    running <strong>replication 001</strong> (2 copies: primary + 1 replica).
-                    Total usable capacity: <strong>~6.3 TB</strong>.
+                    The <strong>{clust.name || 'dc03'}</strong> cluster has <strong>{clust.nodes || 7} nodes</strong> in
+                    datacenter <strong>{clust.datacenter || 'dc03'}</strong>, rack <strong>{clust.rack || 'rack2'}</strong>,
+                    running <strong>replication {clust.replication || '001'}</strong> (2 copies: primary + 1 replica).
                   </Paragraph>
                   <Paragraph>
-                    <strong>3 Master nodes</strong> (.101, .103, .105) — manage topology, volume assignments, Raft consensus.<br />
-                    <strong>2 Filer nodes</strong> (.102, .104) — POSIX-like file system, S3 gateway backend.<br />
-                    <strong>4 S3 gateways</strong> (.102, .104, .106, .107) — S3-compatible API endpoints.
+                    <strong>Masters:</strong> {Array.isArray(clust.masters) ? clust.masters.join(', ') : '—'}<br />
+                    <strong>Filers:</strong> {Array.isArray(clust.filers) ? clust.filers.join(', ') : '—'}
                   </Paragraph>
                 </Card>
 
@@ -63,9 +75,6 @@ export default function HelpPage() {
                     <strong>Default:</strong> empty string <code>""</code> — all volumes belong here unless specified.<br />
                     <strong>Use cases:</strong> Separate storage for different VMs, apps, or environments.
                   </Paragraph>
-                  <Paragraph>
-                    <strong>Examples:</strong> <code>vm-web-01</code>, <code>vm-db-02</code>, <code>backups</code>, <code>logs</code>
-                  </Paragraph>
                 </Card>
               </div>
             ),
@@ -76,78 +85,52 @@ export default function HelpPage() {
             children: (
               <div>
                 <Card title="Option 1: S3 (easiest)" style={{ marginBottom: 16 }}>
-                  <Paragraph>
-                    Install AWS CLI and point it to the S3 gateway:
-                  </Paragraph>
+                  <Paragraph>Install AWS CLI and point it to the S3 gateway:</Paragraph>
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
 {`# Configure
 aws configure set aws_access_key_id YOUR_ACCESS_KEY
 aws configure set aws_secret_access_key YOUR_SECRET_KEY
 
-# Connect to cluster S3
-aws s3 --endpoint-url=https://s3.mbm.mn ls
-
-# Upload
-aws s3 --endpoint-url=https://s3.mbm.mn cp backup.tar.gz s3://my-bucket/
-
-# Sync directory
-aws s3 --endpoint-url=https://s3.mbm.mn sync /data s3://my-bucket/data`}
+# Use the S3 endpoint
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} ls
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} cp file.tar.gz s3://my-bucket/
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} sync /data s3://my-bucket/data`}
                   </pre>
-                  <Paragraph style={{ marginTop: 8 }}>
-                    <strong>Quota:</strong> Set bucket quota via Dashboard → S3 → Buckets, or via admin API.
-                  </Paragraph>
                 </Card>
 
-                <Card title="Option 2: Filer API" style={{ marginBottom: 16 }}>
-                  <Paragraph>
-                    Use weed filer for POSIX-like operations (list, mkdir, upload, download):
-                  </Paragraph>
+                <Card title="Option 2: Dashboard API" style={{ marginBottom: 16 }}>
+                  <Paragraph>Use Dashboard REST API through the public endpoint:</Paragraph>
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
-{`# Through Dashboard API (recommended)
-curl https://seaweed.mbm.mn/api/filer/list/ \\
+{`# List directory
+curl ${info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'}/api/filer/list/vm-01/ \\
   -H "Cookie: session=..."
 
-# Create directory
-curl -X POST https://seaweed.mbm.mn/api/filer/mkdir/vm-01/backups \\
-  -H "Cookie: session=..." -H "X-CSRF-Token: ..."
-
 # Upload file
-curl -X POST https://seaweed.mbm.mn/api/filer/upload/vm-01/backups/ \\
+curl -X POST ${info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'}/api/filer/upload/vm-01/ \\
   -F "files=@backup.tar.gz" \\
   -H "Cookie: session=..." -H "X-CSRF-Token: ..."`}
                   </pre>
                 </Card>
 
-                <Card title="Option 3: FUSE Mount (Linux only)" style={{ marginBottom: 16 }}>
-                  <Paragraph>
-                    Mount SeaweedFS as a local filesystem:
-                  </Paragraph>
+                <Card title="Option 3: FUSE Mount" style={{ marginBottom: 16 }}>
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
-{`# Install weed
-wget https://github.com/seaweedfs/seaweedfs/releases/download/3.79/linux_amd64.tar.gz
-tar xzf linux_amd64.tar.gz
-
-# Mount (VPN/internal network required)
+{`# Mount (VPN/internal network required)
 ./weed mount \\
-  -filer=172.16.0.2:8888,172.16.0.4:8888 \\
+  -filer=${info?.endpoints?.internal_filer || '172.16.0.2:8888'} \\
   -dir=/mnt/seaweed \\
-  -collection=vm-01
-
-# Use like normal filesystem
-cp data.txt /mnt/seaweed/
-ls /mnt/seaweed/`}
+  -collection=vm-01`}
                   </pre>
                 </Card>
 
                 <Card title="Option 4: WebDAV" style={{ marginBottom: 16 }}>
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
-{`# Mount via WebDAV (VPN/internal network required)
+{`# Run WebDAV server
 ./weed webdav \\
-  -filer=172.16.0.2:8888,172.16.0.4:8888 \\
+  -filer=${info?.endpoints?.internal_filer || '172.16.0.2:8888'} \\
   -port=7333
 
 # Mount on client
-mount -t davfs http://172.16.0.2:7333 /mnt/seaweed`}
+mount -t davfs http://${info?.endpoints?.internal_filer?.split(':')[0] || '172.16.0.2'}:7333 /mnt/seaweed`}
                   </pre>
                 </Card>
               </div>
@@ -159,42 +142,28 @@ mount -t davfs http://172.16.0.2:7333 /mnt/seaweed`}
             children: (
               <div>
                 <Card title="How to give 100GB storage to a VM" style={{ marginBottom: 16 }}>
-                  <Title level={5}>Step 1: Create S3 user (one-time)</Title>
-                  <Paragraph>
-                    Dashboard → Users → Add User, check "Create S3 bucket". This creates:
-                  </Paragraph>
-                  <ul>
-                    <li>S3 access key + secret key</li>
-                    <li>Dedicated bucket: <code>user-vmname</code></li>
-                  </ul>
+                  <Title level={5}>Step 1: Create S3 user</Title>
+                  <Paragraph>Dashboard → Users → Add User, check "Create S3 bucket".</Paragraph>
 
                   <Title level={5}>Step 2: Set bucket quota</Title>
-                  <Paragraph>
-                    Dashboard → S3 → Buckets → click the bucket → set quota.
-                    Or via API:
-                  </Paragraph>
+                  <Paragraph>Dashboard → S3 → Buckets → set quota. Or via API:</Paragraph>
                   <pre style={{ background: '#0f172a', padding: 12, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
-{`curl -X PUT https://seaweed.mbm.mn/api/s3/buckets/user-vmname \\
-  -d '{"quota":107374182400}'  # 100GB in bytes`}
+{`curl -X PUT ${info?.endpoints?.public_dashboard || ''}/api/s3/buckets/user-vmname \\
+  -d '{"quota":107374182400}'  # 100GB`}
                   </pre>
 
                   <Title level={5}>Step 3: Create Collection (optional)</Title>
-                  <Paragraph>
-                    For dedicated volumes with specific replication:
-                  </Paragraph>
                   <pre style={{ background: '#0f172a', padding: 12, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
-{`# Create 7 volumes (~100GB) for the VM
-curl -X POST https://seaweed.mbm.mn/api/volumes/grow \\
-  -H "Cookie: session=..." -H "X-CSRF-Token: ..." \\
+{`# 7 volumes × ~15GB ≈ 105GB
+curl -X POST ${info?.endpoints?.public_dashboard || ''}/api/volumes/grow \\
   -d '{"count":7,"collection":"vm-01","replication":"001"}'`}
                   </pre>
 
                   <Title level={5}>Step 4: Connect from VM</Title>
                   <pre style={{ background: '#0f172a', padding: 12, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
-{`# On the VM:
-aws configure set aws_access_key_id AKxxxxxxxx
-aws configure set aws_secret_access_key yyyyyyyyyyyyyyyy
-aws s3 --endpoint-url=https://s3.mbm.mn ls`}
+{`aws configure set aws_access_key_id AKxxxxxxxx
+aws configure set aws_secret_access_key yyyyyyyyyyyy
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} ls`}
                   </pre>
                 </Card>
               </div>
@@ -204,34 +173,22 @@ aws s3 --endpoint-url=https://s3.mbm.mn ls`}
             key: 'rbac',
             label: 'RBAC & Users',
             children: (
-              <div>
-                <Card title="Role-Based Access Control" style={{ marginBottom: 16 }}>
-                  <Table
-                    dataSource={[
-                      { role: 'admin', desc: 'Full system access', perms: 'All operations, user management, settings' },
-                      { role: 'operator', desc: 'Operational management', perms: 'Volumes, filer, S3, backup, workers (no user/settings changes)' },
-                      { role: 'viewer', desc: 'Read-only monitoring', perms: 'View all pages, no modifications' },
-                    ]}
-                    columns={[
-                      { title: 'Role', dataIndex: 'role', key: 'role', render: (v: string) => <Tag color={v === 'admin' ? 'pink' : v === 'operator' ? 'purple' : 'blue'}>{v}</Tag> },
-                      { title: 'Description', dataIndex: 'desc', key: 'desc' },
-                      { title: 'Permissions', dataIndex: 'perms', key: 'perms' },
-                    ]}
-                    pagination={false}
-                    size="small"
-                  />
-                </Card>
-
-                <Card title="User S3 Bucket Isolation">
-                  <Paragraph>
-                    Each user gets their own S3 bucket: <code>user-{'{username}'}</code>
-                  </Paragraph>
-                  <Paragraph>
-                    IAM policies restrict users to only their own bucket prefix.
-                    Admins can access all buckets.
-                  </Paragraph>
-                </Card>
-              </div>
+              <Card title="Role-Based Access Control" style={{ marginBottom: 16 }}>
+                <Table
+                  dataSource={[
+                    { role: 'admin', desc: 'Full system access', perms: 'All operations, user management, settings' },
+                    { role: 'operator', desc: 'Operational management', perms: 'Volumes, filer, S3, backup, workers (no user/settings changes)' },
+                    { role: 'viewer', desc: 'Read-only monitoring', perms: 'View all pages, no modifications' },
+                  ]}
+                  columns={[
+                    { title: 'Role', dataIndex: 'role', key: 'role', render: (v: string) => <Tag color={v === 'admin' ? 'pink' : v === 'operator' ? 'purple' : 'blue'}>{v}</Tag> },
+                    { title: 'Description', dataIndex: 'desc', key: 'desc' },
+                    { title: 'Permissions', dataIndex: 'perms', key: 'perms' },
+                  ]}
+                  pagination={false}
+                  size="small"
+                />
+              </Card>
             ),
           },
           {
@@ -241,6 +198,7 @@ aws s3 --endpoint-url=https://s3.mbm.mn ls`}
               <Card title="Dashboard REST API">
                 <Table
                   dataSource={[
+                    { method: 'GET', path: '/api/info', auth: 'None', desc: 'Version, endpoints, cluster info' },
                     { method: 'GET', path: '/api/health', auth: 'None', desc: 'Health check' },
                     { method: 'POST', path: '/api/auth/login', auth: 'None', desc: 'Login (rate-limited: 5/15min)' },
                     { method: 'GET', path: '/api/dashboard/stats', auth: 'Session', desc: 'Cluster KPIs' },
@@ -272,6 +230,10 @@ aws s3 --endpoint-url=https://s3.mbm.mn ls`}
           },
         ]}
       />
+
+      <div style={{ marginTop: 32, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+        {about.name} by {about.developer} — {about.website}
+      </div>
     </div>
   )
 }

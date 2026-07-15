@@ -60,6 +60,7 @@ from app.routes.disk_health import router as disk_health_router
 from app.routes.metrics import router as metrics_router
 from app.routes.settings import router as settings_router
 from app.routes.users import router as users_router
+from app.routes.info import router as info_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -74,6 +75,7 @@ app.include_router(disk_health_router, prefix="/api")
 app.include_router(metrics_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(info_router, prefix="/api")
 
 
 @app.get("/api/health")

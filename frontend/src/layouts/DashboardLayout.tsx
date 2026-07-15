@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Button, Dropdown, Typography, Avatar, Input, Modal, message } from 'antd'
 import {
@@ -21,9 +21,11 @@ import {
   InfoCircleOutlined,
   TeamOutlined,
   ReadOutlined,
+  BookOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
+import api from '../services/api'
 
 const { Header, Sider, Content } = Layout
 
@@ -48,6 +50,7 @@ const menuItems = [
   { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/help', icon: <ReadOutlined />, label: 'Docs' },
+  { key: '/glossary', icon: <BookOutlined />, label: 'Glossary' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]
 
@@ -58,10 +61,15 @@ export default function DashboardLayout() {
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
+  const [version, setVersion] = useState('')
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+
+  useEffect(() => {
+    api.get('/info').then((r) => setVersion(r.data?.version || '')).catch(() => {})
+  }, [])
 
   const handleMenuClick = ({ key }: { key: string }) => navigate(key)
 
@@ -148,6 +156,9 @@ export default function DashboardLayout() {
             background: 'rgba(15,23,42,0.9)',
             borderRight: '1px solid rgba(236,72,153,0.08)',
             backdropFilter: 'blur(16px)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
           <div
@@ -174,8 +185,20 @@ export default function DashboardLayout() {
             items={menuItems}
             onClick={handleMenuClick}
             theme="dark"
-            style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8 }}
+            style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8, flex: 1 }}
           />
+          {!collapsed && (
+            <div style={{
+              padding: '8px 16px 12px',
+              borderTop: '1px solid rgba(236,72,153,0.1)',
+              fontSize: 11,
+              color: '#64748b',
+              textAlign: 'center',
+            }}>
+              mBm TECHNOLOGY LLC
+              {version && <div style={{ marginTop: 2, color: '#a855f7' }}>v{version}</div>}
+            </div>
+          )}
         </Sider>
         <Layout style={{ background: 'transparent' }}>
           <Header
