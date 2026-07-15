@@ -21,7 +21,7 @@ logger = get_logger("auth")
 
 
 @router.post("/login")
-@limiter.limit("5/15minute")
+@limiter.limit("20/5minute")
 async def login(request: Request, body: LoginBody):
     db = await get_db()
     cursor = await db.execute(

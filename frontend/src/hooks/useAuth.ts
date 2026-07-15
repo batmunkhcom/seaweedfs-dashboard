@@ -14,8 +14,13 @@ export function useAuth() {
         message.success('Login successful')
         navigate('/dashboard')
       } catch (e: any) {
-        const msg = e?.response?.data?.detail || 'Invalid username or password'
-        message.error(msg)
+        const status = e?.response?.status
+        if (status === 429) {
+          message.warning('Too many attempts. Please wait a moment and try again.', 8)
+        } else {
+          const msg = e?.response?.data?.detail || 'Invalid username or password'
+          message.error(msg)
+        }
       }
     },
     [login, navigate]
