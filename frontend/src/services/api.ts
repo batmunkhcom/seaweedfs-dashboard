@@ -101,7 +101,7 @@ export async function getTopology(): Promise<Topology> {
 
 export async function getVolumes(params?: Record<string, string>): Promise<{ volumes: Volume[]; total: number }> {
   const { data } = await api.get('/volumes', { params })
-  return data
+  return { volumes: Array.isArray(data?.volumes) ? data.volumes : [], total: data?.total || 0 }
 }
 
 export async function getVolume(id: number): Promise<VolumeDetail> {
@@ -121,7 +121,7 @@ export async function vacuumVolumes(body: Record<string, unknown>) {
 
 export async function getCollections(): Promise<Collection[]> {
   const { data } = await api.get('/collections')
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 export async function deleteCollection(name: string) {
@@ -132,7 +132,7 @@ export async function listFiler(path: string, page = 1, pageSize = 50): Promise<
   const { data } = await api.get(`/filer/list/${encodeURIComponent(path)}`, {
     params: { page, pageSize },
   })
-  return data
+  return { entries: Array.isArray(data?.entries) ? data.entries : [], path: data?.path || path, total: data?.total || 0, page: data?.page || page, pageSize: data?.pageSize || pageSize }
 }
 
 export async function createFilerDir(path: string) {
@@ -152,7 +152,7 @@ export async function uploadFilerFile(path: string, formData: FormData) {
 
 export async function getS3Buckets(): Promise<S3Bucket[]> {
   const { data } = await api.get('/s3/buckets')
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 export async function createS3Bucket(name: string, quota?: number) {
@@ -166,7 +166,7 @@ export async function deleteS3Bucket(name: string) {
 
 export async function getS3Users(): Promise<S3User[]> {
   const { data } = await api.get('/s3/users')
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 export async function createS3User(name: string) {
@@ -180,7 +180,7 @@ export async function deleteS3User(id: string) {
 
 export async function getS3Policies(): Promise<S3Policy[]> {
   const { data } = await api.get('/s3/policies')
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 export async function updateS3Policy(name: string, policy: Record<string, unknown>) {
@@ -200,7 +200,7 @@ export async function triggerBackupSync() {
 
 export async function getSnapshots(): Promise<Snapshot[]> {
   const { data } = await api.get('/backup/snapshots')
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 export async function createSnapshot(name: string) {
@@ -316,7 +316,7 @@ export async function createMyBucket() {
 
 export async function listUsers(): Promise<User[]> {
   const { data } = await api.get('/users')
-  return data
+  return Array.isArray(data) ? data : []
 }
 
 export async function createUser(body: {
