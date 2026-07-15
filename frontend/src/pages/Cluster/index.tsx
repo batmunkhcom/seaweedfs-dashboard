@@ -75,9 +75,9 @@ export default function ClusterPage() {
                   </span>
                 }
                 extra={
-                  <Tooltip title={`${rackVolumes} volumes / ${rackMax} slots`}>
+                  <Tooltip title={`${rackVolumes} of ${rackMax} volumes used`}>
                     <span style={{ fontSize: 12, color: '#94a3b8' }}>
-                      {rackVolumes}/{rackMax} vols
+                      {rackVolumes}/{rackMax} vol
                     </span>
                   </Tooltip>
                 }
@@ -85,8 +85,11 @@ export default function ClusterPage() {
               >
                 <Row gutter={[12, 12]}>
                   {rack.DataNodes?.map((node: any, ni: number) => {
-                    const usedPct = node.Max > 0 ? Math.round(((node.Max - (node.Free ?? 0)) / node.Max) * 100) : 0
-                    const barColor = usedPct > 80 ? '#ef4444' : usedPct > 60 ? '#f59e0b' : '#22c55e'
+                    const usedVols = node.Volumes || 0
+                    const maxVols = node.Max || 1
+                    const usedPct = Math.round((usedVols / maxVols) * 100)
+                    const barColor = usedPct > 80 ? '#ef4444' : usedPct > 50 ? '#f59e0b' : '#22c55e'
+                    const freeVols = maxVols - usedVols
                     const nodeUrl = node.Url || node.url || ''
 
                     return (
@@ -123,15 +126,15 @@ export default function ClusterPage() {
                           />
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                            <Tooltip title={`${node.Volumes || 0} active volumes of ${node.Max} max slots`}>
+                            <Tooltip title={`${usedVols} active of ${maxVols} max (~${maxVols * 30} GB capacity)`}>
                               <span style={{ color: '#cbd5e1' }}>
                                 <HddOutlined style={{ marginRight: 3, color: '#64748b' }} />
-                                {node.Volumes || 0}/{node.Max}
+                                {usedVols}/{maxVols}
                               </span>
                             </Tooltip>
-                            <Tooltip title={`${node.Free ?? (node.Max - (node.Volumes || 0))} free slots`}>
-                              <span style={{ color: '#64748b' }}>
-                                {node.Free ?? (node.Max - (node.Volumes || 0))} free
+                            <Tooltip title={`${freeVols} free (~${freeVols * 30} GB available)`}>
+                              <span style={{ color: usedVols < maxVols ? '#22c55e' : '#64748b' }}>
+                                {freeVols} free
                               </span>
                             </Tooltip>
                           </div>
@@ -145,8 +148,8 @@ export default function ClusterPage() {
           })}
 
           <div style={{ padding: '8px 16px 0', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Tag color="purple">{totalFree} free slots</Tag>
-            <Tag color="blue">{totalMax} max slots</Tag>
+            <Tag color="purple">{totalFree} free volumes</Tag>
+            <Tag color="blue">{totalMax} max volumes</Tag>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {totalPct}% capacity remaining
             </Text>
