@@ -1,4 +1,4 @@
-import { Card, Statistic, Row, Col, Tooltip } from 'antd'
+import { Card, Statistic, Row, Col } from 'antd'
 import { HddOutlined, FileOutlined, DatabaseOutlined, CheckCircleOutlined, CloudServerOutlined, PieChartOutlined } from '@ant-design/icons'
 import type { DashboardStats } from '../types'
 
@@ -16,6 +16,8 @@ interface Props {
 }
 
 export default function StatCards({ stats, loading }: Props) {
+  const freePct = stats ? Math.round((stats.freeSpace / Math.max(stats.maxSpace, 1)) * 100) : 0
+
   return (
     <Row gutter={[16, 16]}>
       <Col xs={12} sm={8} lg={4}>
@@ -34,17 +36,9 @@ export default function StatCards({ stats, loading }: Props) {
         </Card>
       </Col>
       <Col xs={12} sm={8} lg={4}>
-        <Tooltip title={`Total ${stats?.totalDiskGB || 0} GB · Usable ${stats?.totalUsableGB || 0} GB (replication 001)`}>
-          <Card>
-            <Statistic
-              title="Disk Capacity"
-              value={stats?.totalDiskGB ? `${stats.totalDiskGB} / ${stats.totalUsableGB}` : '—'}
-              suffix="GB usable"
-              prefix={<PieChartOutlined />}
-              loading={loading}
-            />
-          </Card>
-        </Tooltip>
+        <Card>
+          <Statistic title="Free Space" value={freePct} suffix="%" prefix={<PieChartOutlined />} loading={loading} />
+        </Card>
       </Col>
       <Col xs={12} sm={8} lg={4}>
         <Card>
