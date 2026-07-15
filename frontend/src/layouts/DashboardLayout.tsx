@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Button, Dropdown, Typography, Avatar, Input, Modal, message } from 'antd'
+import { Layout, Menu, Button, Dropdown, Typography, Avatar, Input, Modal, message, Tooltip } from 'antd'
 import {
   DashboardOutlined,
   ClusterOutlined,
@@ -49,9 +49,13 @@ const menuItems = [
   { key: '/workers', icon: <ToolOutlined />, label: 'Workers' },
   { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
-  { key: '/help', icon: <ReadOutlined />, label: 'Docs' },
-  { key: '/glossary', icon: <BookOutlined />, label: 'Glossary' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
+]
+
+const bottomLinks = [
+  { key: '/help', icon: <ReadOutlined />, label: 'Docs', tooltip: 'Documentation & guides' },
+  { key: '/glossary', icon: <BookOutlined />, label: 'Glossary', tooltip: 'SeaweedFS terminology' },
+  { key: '/about', icon: <InfoCircleOutlined />, label: 'About', tooltip: 'About this dashboard' },
 ]
 
 export default function DashboardLayout() {
@@ -189,14 +193,95 @@ export default function DashboardLayout() {
           />
           {!collapsed && (
             <div style={{
-              padding: '8px 16px 12px',
-              borderTop: '1px solid rgba(236,72,153,0.1)',
-              fontSize: 11,
-              color: '#64748b',
-              textAlign: 'center',
+              borderTop: '1px solid rgba(236,72,153,0.08)',
+              padding: '8px 0 0',
             }}>
-              mBm TECHNOLOGY LLC
-              {version && <div style={{ marginTop: 2, color: '#a855f7' }}>v{version}</div>}
+              {bottomLinks.map((link) => {
+                const isActive = location.pathname === link.key
+                return (
+                  <Tooltip key={link.key} title={link.tooltip} placement="right">
+                    <div
+                      onClick={() => navigate(link.key)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 24px',
+                        cursor: 'pointer',
+                        color: isActive ? '#a855f7' : '#94a3b8',
+                        background: isActive ? 'rgba(168,85,247,0.1)' : 'transparent',
+                        borderRight: isActive ? '2px solid #a855f7' : '2px solid transparent',
+                        transition: 'all 0.15s ease',
+                        fontSize: 13,
+                        margin: '0 0 1px',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActive) {
+                          (e.currentTarget as HTMLElement).style.color = '#e2e8f0'
+                          ;(e.currentTarget as HTMLElement).style.background = 'rgba(168,85,247,0.05)'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) {
+                          (e.currentTarget as HTMLElement).style.color = '#94a3b8'
+                          ;(e.currentTarget as HTMLElement).style.background = 'transparent'
+                        }
+                      }}
+                    >
+                      <span style={{ fontSize: 15, width: 20, textAlign: 'center', flexShrink: 0 }}>
+                        {link.icon}
+                      </span>
+                      <span>{link.label}</span>
+                    </div>
+                  </Tooltip>
+                )
+              })}
+              <div style={{
+                padding: '16px 24px 12px',
+                fontSize: 11,
+                color: '#475569',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>mBm TECHNOLOGY LLC</span>
+                  {version && <span style={{ color: '#a855f7', fontWeight: 600 }}>v{version}</span>}
+                </div>
+              </div>
+            </div>
+          )}
+          {collapsed && (
+            <div style={{
+              borderTop: '1px solid rgba(236,72,153,0.08)',
+              padding: '8px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+            }}>
+              {bottomLinks.map((link) => (
+                <Tooltip key={link.key} title={link.tooltip} placement="right">
+                  <div
+                    onClick={() => navigate(link.key)}
+                    style={{
+                      cursor: 'pointer',
+                      color: location.pathname === link.key ? '#a855f7' : '#64748b',
+                      padding: 6,
+                      borderRadius: 6,
+                      fontSize: 18,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#a855f7' }}
+                    onMouseLeave={(e) => {
+                      if (location.pathname !== link.key)
+                        (e.currentTarget as HTMLElement).style.color = '#64748b'
+                    }}
+                  >
+                    {link.icon}
+                  </div>
+                </Tooltip>
+              ))}
             </div>
           )}
         </Sider>

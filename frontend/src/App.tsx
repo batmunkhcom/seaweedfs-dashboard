@@ -18,6 +18,7 @@ import DiskHealthPage from './pages/DiskHealth'
 import UsersPage from './pages/Users'
 import HelpPage from './pages/Help'
 import GlossaryPage from './pages/Glossary'
+import AboutPage from './pages/About'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -79,6 +80,7 @@ function App() {
             <Route path="/disk-health" element={<DiskHealthPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/glossary" element={<GlossaryPage />} />
+            <Route path="/about" element={<AboutPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
