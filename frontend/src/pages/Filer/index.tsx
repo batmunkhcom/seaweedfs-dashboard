@@ -41,6 +41,7 @@ export default function FilerPage() {
   const [uploading, setUploading] = useState(false)
   const [maxUploadSize, setMaxUploadSize] = useState(500)
   const [vpnUrl, setVpnUrl] = useState('')
+  const [allowedExts, setAllowedExts] = useState('')
   const navigate = useNavigate()
   const role = useAuthStore((s) => s.user?.role)
   const csrfToken = useAuthStore((s) => s.csrfToken)
@@ -62,6 +63,7 @@ export default function FilerPage() {
         }
         if (all.max_upload_size_mb) setMaxUploadSize(Number(all.max_upload_size_mb))
         if (all.vpn_upload_url) setVpnUrl(all.vpn_upload_url)
+        if (all.allowed_extensions !== undefined) setAllowedExts(all.allowed_extensions)
       }
     }).catch(() => {})
   }, [])
@@ -114,21 +116,28 @@ export default function FilerPage() {
       try {
         const data = JSON.parse(xhr.responseText)
         if (xhr.status >= 200 && xhr.status < 300) {
-          const failed = data.results?.filter((r: any) => r.error) || []
+          const results = data.results || []
+          const failed = results.filter((r: any) => r.error)
+          const ok = results.filter((r: any) => r.ok)
           if (failed.length > 0) {
-            failed.forEach((r: any) => message.error(`${r.file}: ${r.error}`))
-          } else {
-            message.success(`${data.results?.length || fileList.length} file(s) uploaded`)
+            failed.forEach((r: any) => message.warning(`${r.file}: ${r.error}`, 5))
+          }
+          if (ok.length > 0) {
+            message.success(`${ok.length} file(s) uploaded`)
+          }
+          if (failed.length > 0 && ok.length === 0) {
+            message.error('All files rejected — check file extensions and size limits', 6)
           }
           setFileList([])
           setUploadOpen(false)
           setTimeout(() => fetch(), 500)
         } else {
-          message.error(data.error || data.detail || 'Upload failed')
+          const errMsg = data.error || data.detail || `HTTP ${xhr.status}`
+          message.error(`Upload failed: ${errMsg}`, 5)
           setFileList((prev) => prev.map((f) => ({ ...f, status: 'error' })))
         }
       } catch {
-        message.error('Upload failed')
+        message.error('Upload failed — invalid server response', 5)
         setFileList((prev) => prev.map((f) => ({ ...f, status: 'error' })))
       }
     })
@@ -245,6 +254,12 @@ export default function FilerPage() {
             message={`Large files (over 100MB) may fail via Cloudflare. For files up to ${maxUploadSize}MB, use VPN direct access: ${vpnUrl || 'http://172.16.0.10:8081'}`}
             style={{ marginBottom: 12 }}
           />
+        )}
+        {allowedExts && allowedExts !== '' && (
+          <Tag color="blue" style={{ marginBottom: 12, fontSize: 12 }}>Allowed types: {allowedExts}</Tag>
+        )}
+        {allowedExts === '' && (
+          <Tag color="green" style={{ marginBottom: 12, fontSize: 12 }}>All file types allowed</Tag>
         )}
         <Dragger
           multiple

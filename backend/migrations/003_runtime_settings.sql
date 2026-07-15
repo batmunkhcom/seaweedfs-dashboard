@@ -10,7 +10,7 @@ INSERT OR IGNORE INTO runtime_settings (key, value, description, category) VALUE
   ('alert_garbage_ratio', '0.5', 'Garbage ratio threshold', 'alerts'),
   ('alert_max_readonly_volumes', '3', 'Max allowed readonly volumes', 'alerts'),
   ('max_upload_size_mb', '10240', 'Max upload file size (MB)', 'uploads'),
-  ('allowed_extensions', '.jpg,.png,.pdf,.zip,.gz', 'Allowed file extensions', 'uploads'),
+  ('allowed_extensions', '', 'Allowed file extensions (empty = all allowed)', 'uploads'),
   ('max_files_per_upload', '10', 'Max files per batch upload', 'uploads'),
   ('snapshot_interval_seconds', '60', 'Metrics polling interval (seconds)', 'snapshot'),
   ('snapshot_retention_days', '30', 'Snapshot retention period (days)', 'snapshot'),
