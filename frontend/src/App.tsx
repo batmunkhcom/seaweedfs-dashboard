@@ -19,6 +19,7 @@ import UsersPage from './pages/Users'
 import HelpPage from './pages/Help'
 import GlossaryPage from './pages/Glossary'
 import AboutPage from './pages/About'
+import ApiDocPage from './pages/ApiDoc'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -81,6 +82,7 @@ function App() {
             <Route path="/help" element={<HelpPage />} />
             <Route path="/glossary" element={<GlossaryPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/api-doc" element={<ApiDocPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

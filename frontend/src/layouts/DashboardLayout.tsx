@@ -22,6 +22,7 @@ import {
   TeamOutlined,
   ReadOutlined,
   BookOutlined,
+  ApiOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -54,6 +55,7 @@ const menuItems = [
 
 const bottomLinks = [
   { key: '/help', icon: <ReadOutlined />, label: 'Docs', tooltip: 'Documentation & guides' },
+  { key: '/api-doc', icon: <ApiOutlined />, label: 'API Doc', tooltip: 'REST API reference' },
   { key: '/glossary', icon: <BookOutlined />, label: 'Glossary', tooltip: 'SeaweedFS terminology' },
   { key: '/about', icon: <InfoCircleOutlined />, label: 'About', tooltip: 'About this dashboard' },
 ]
