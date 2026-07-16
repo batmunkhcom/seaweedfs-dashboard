@@ -33,9 +33,10 @@ interface DiskDevice {
   capacity?: number
   temp?: number
   health?: 'ok' | 'warning' | 'critical'
-  raw_read_error?: number
+  power_on_hours?: number
   reallocated?: number
   wear_pct?: number
+  tbw_bytes?: number
 }
 
 export default function DiskHealthPage() {
@@ -53,24 +54,29 @@ export default function DiskHealthPage() {
       const data = await getDiskHealthStatus()
       setStatus(data)
       if (data?.enabled && Array.isArray(data.devices)) {
-        const enriched: DiskDevice[] = []
+            const enriched: DiskDevice[] = []
         for (const d of data.devices) {
           try {
             const deviceName = d.device.split('/').pop() || d.device
             const detail = await getDiskHealthDetail(d.node, deviceName)
             const smart = detail?.smart ? JSON.parse(detail.smart) : null
+            const attrs = smart?.ata_smart_attributes?.table || []
+            const findAttr = (id: number) => attrs.find((a: any) => a.id === id)
+            const wearId = [177, 233, 202].find((id) => findAttr(id))
+            const wearAttr = wearId ? findAttr(wearId) : null
             enriched.push({
               node: d.node,
               device: d.device,
               last_scan: d.last_scan,
-              model: smart?.model_name || smart?.model_family || '',
+              model: smart?.model_name || smart?.model_family || 'Virtual Disk',
               serial: smart?.serial_number || '',
               capacity: smart?.user_capacity?.bytes || (smart?.nvme_total_capacity || 0),
               temp: smart?.temperature?.current || 0,
               health: smart?.smart_status?.passed === false ? 'critical' : 'ok',
-              raw_read_error: 0,
-              reallocated: 0,
-              wear_pct: 0,
+              power_on_hours: findAttr(9)?.raw?.value || 0,
+              reallocated: findAttr(5)?.raw?.value || 0,
+              wear_pct: wearAttr ? (100 - (typeof wearAttr.value === 'number' ? wearAttr.value : 0)) : (smart?.nvme_total_capacity ? 0 : undefined),
+              tbw_bytes: findAttr(241)?.raw?.value ? (findAttr(241).raw.value * 512) : 0,
             })
           } catch {
             enriched.push({ node: d.node, device: d.device, last_scan: d.last_scan, health: 'ok' })
@@ -116,7 +122,8 @@ export default function DiskHealthPage() {
     },
     { title: 'Temp', dataIndex: 'temp', key: 'temp', render: (v: number) => v ? `${v}°C` : '—' },
     { title: 'Size', dataIndex: 'capacity', key: 'capacity', render: (v: number) => formatBytes(v) },
-    { title: 'Wear', dataIndex: 'wear_pct', key: 'wear_pct', render: (v: number) => v ? <Progress percent={v} size="small" status={v > 85 ? 'exception' : 'normal'} /> : '—' },
+    { title: 'Wear', dataIndex: 'wear_pct', key: 'wear_pct', render: (v: number | undefined) => v === undefined ? '—' : <Progress percent={Math.round(v)} size="small" status={v > 85 ? 'exception' : v > 70 ? 'normal' : 'success'} format={() => `${v}%`} /> },
+    { title: 'Hours', dataIndex: 'power_on_hours', key: 'power_on_hours', render: (v: number | undefined) => v === undefined ? '—' : v >= 87600 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString()}h</span> : v >= 43800 ? <span style={{ color: '#faad14' }}>{v.toLocaleString()}h</span> : v.toLocaleString() + 'h' },
     { title: 'Last Scan', dataIndex: 'last_scan', key: 'last_scan', render: (v: number) => formatDate(v) },
   ]
 
@@ -182,23 +189,37 @@ export default function DiskHealthPage() {
         <Card title={`${selected.node} — ${selected.device}`} style={{ marginTop: 16 }}>
           <Row gutter={[16, 16]}>
             <Col span={12}>
-              <Descriptions size="small" column={1}>
+              <Descriptions size="small" column={1} bordered>
                 <Descriptions.Item label="Model">{selected.model || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Serial">{selected.serial || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Capacity">{formatBytes(selected.capacity || 0)}</Descriptions.Item>
                 <Descriptions.Item label="Temperature">{selected.temp ? `${selected.temp}°C` : '—'}</Descriptions.Item>
-                <Descriptions.Item label="Reallocated Sectors">{selected.reallocated || 0}</Descriptions.Item>
-                <Descriptions.Item label="Wear Level">{selected.wear_pct ? `${selected.wear_pct}%` : '—'}</Descriptions.Item>
-              </Descriptions>
-            </Col>
-            <Col span={12}>
-              <Descriptions size="small" column={1}>
                 <Descriptions.Item label="Health">
                   {selected.health === 'ok' ? <Tag color="success">OK</Tag> :
                    selected.health === 'warning' ? <Tag color="warning">Warning</Tag> :
                    <Tag color="error">Critical</Tag>}
                 </Descriptions.Item>
-                <Descriptions.Item label="Last Scan">{formatDate(selected.last_scan)}</Descriptions.Item>
+              </Descriptions>
+            </Col>
+            <Col span={12}>
+              <Descriptions size="small" column={1} bordered>
+                <Descriptions.Item label="Power-On Hours">
+                  {selected.power_on_hours ? selected.power_on_hours.toLocaleString() + ' h' : '—'}
+                  {selected.power_on_hours && (selected.power_on_hours > 43800 ? ` (${Math.round(selected.power_on_hours / 8760)} yrs)` : '')}
+                </Descriptions.Item>
+                <Descriptions.Item label="Wear Level">
+                  {selected.wear_pct !== undefined ? (
+                    <Progress percent={Math.round(selected.wear_pct)} size="small" status={selected.wear_pct > 85 ? 'exception' : selected.wear_pct > 70 ? 'normal' : 'success'} />
+                  ) : '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Reallocated Sectors">
+                  {selected.reallocated !== undefined ? (
+                    selected.reallocated > 0 ? <Tag color="error">{selected.reallocated}</Tag> : <Tag color="success">0</Tag>
+                  ) : '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Data Written">
+                  {selected.tbw_bytes ? formatBytes(selected.tbw_bytes) : '—'}
+                </Descriptions.Item>
               </Descriptions>
             </Col>
           </Row>
