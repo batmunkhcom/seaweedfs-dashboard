@@ -4,8 +4,6 @@ import { PlusOutlined, DeleteOutlined, WarningOutlined, CheckCircleOutlined, Thu
 import { getVolumesStats, growVolumes, vacuumVolumes } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
-const { Text } = Typography
-
 interface NodeStat {
   url: string
   dc: string
@@ -131,7 +129,7 @@ export default function VolumesPage() {
       render: (_: any, record: NodeStat) => {
         const free = Math.max(0, record.effective_max - record.used)
         const color = record.status === 'critical' ? '#ef4444' : record.status === 'warning' ? '#f59e0b' : '#22c55e'
-        return <Text strong style={{ color }}>{free}</Text>
+        return <Typography.Text strong style={{ color }}>{free}</Typography.Text>
        },
       },
     ]
@@ -166,25 +164,25 @@ export default function VolumesPage() {
        <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
          <Col xs={24} sm={12} md={6}>
            <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.15)' }}>
-             <Text type="secondary" style={{ fontSize: 12 }}>Total Volumes</Text>
+             <Typography.Text type="secondary" style={{ fontSize: 12 }}>Total Volumes</Typography.Text>
              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700 }}>{totalVolumes}</div>
            </Card>
          </Col>
          <Col xs={24} sm={12} md={6}>
            <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.15)' }}>
-             <Text type="secondary" style={{ fontSize: 12 }}>Nodes</Text>
+             <Typography.Text type="secondary" style={{ fontSize: 12 }}>Nodes</Typography.Text>
              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700 }}>{nodeCount}</div>
            </Card>
          </Col>
          <Col xs={24} sm={12} md={6}>
            <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(34,197,94,0.2)' }}>
-             <Text type="secondary" style={{ fontSize: 12 }}>Available Slots</Text>
+             <Typography.Text type="secondary" style={{ fontSize: 12 }}>Available Slots</Typography.Text>
              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700, color: '#22c55e' }}>{totalFree}</div>
            </Card>
          </Col>
          <Col xs={24} sm={12} md={6}>
            <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: criticalNodes > 0 ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(99,102,241,0.15)' }}>
-             <Text type="secondary" style={{ fontSize: 12 }}>Critical Nodes</Text>
+             <Typography.Text type="secondary" style={{ fontSize: 12 }}>Critical Nodes</Typography.Text>
              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700, color: criticalNodes > 0 ? '#ef4444' : '#64748b' }}>
                {criticalNodes > 0 && <WarningOutlined style={{ marginRight: 4 }} />}
                {criticalNodes}
@@ -217,18 +215,18 @@ export default function VolumesPage() {
          {totalFree <= 10 && (
            <div style={{ marginBottom: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 6, padding: 10 }}>
              <WarningOutlined style={{ color: '#f59e0b', marginRight: 6 }} />
-             <Text style={{ color: '#f59e0b' }}>Only {totalFree} volume slots remaining across all nodes</Text>
+             <Typography.Text style={{ color: '#f59e0b' }}>Only {totalFree} volume slots remaining across all nodes</Typography.Text>
            </div>
          )}
          <div style={{ marginBottom: 12, fontSize: 13, color: '#94a3b8' }}>
             Max {nodeMinMax} volumes per node - {totalFree} slots available
          </div>
          <div style={{ marginBottom: 8 }}>
-           <Text style={{ display: 'block', marginBottom: 4 }}>Count:</Text>
+           <Typography.Text style={{ display: 'block', marginBottom: 4 }}>Count:</Typography.Text>
            <InputNumber min={1} max={totalFree || 999} value={growCount} onChange={(v) => setGrowCount(v || 1)} style={{ width: '100%' }} />
          </div>
          <div>
-           <Text style={{ display: 'block', marginBottom: 4 }}>Collection (optional):</Text>
+           <Typography.Text style={{ display: 'block', marginBottom: 4 }}>Collection (optional):</Typography.Text>
            <Input value={growCollection} onChange={(e) => setGrowCollection(e.target.value)} placeholder="e.g., default, backups" />
          </div>
        </Modal>
@@ -239,7 +237,7 @@ export default function VolumesPage() {
            Removes files from volumes where garbage ratio exceeds threshold.
          </div>
          <div>
-           <Text style={{ display: 'block', marginBottom: 4 }}>Garbage Threshold: {vacuumThreshold}</Text>
+           <Typography.Text style={{ display: 'block', marginBottom: 4 }}>Garbage Threshold: {vacuumThreshold}</Typography.Text>
            <InputNumber min={0} max={1} step={0.1} value={vacuumThreshold} onChange={(v) => setVacuumThreshold(v || 0.3)} style={{ width: '100%' }} />
          </div>
        </Modal>
