@@ -24,6 +24,25 @@ function formatDate(ts: number): string {
   return new Date(ts * 1000).toLocaleString()
 }
 
+function estimateLifetime(wearPct: number | undefined, hours: number | undefined): { label: string, severity: 'success' | 'warning' | 'exception' | 'default' } | null {
+  if (wearPct === undefined || wearPct === 0 || hours === undefined || hours === 0) return null
+  const totalHours = hours / (wearPct / 100)
+  const remainingHours = totalHours - hours
+  const years = remainingHours / 8760
+  if (years > 5) return { label: `${years.toFixed(1)}y remaining`, severity: 'success' }
+  if (years > 2) return { label: `${(remainingHours / 8760).toFixed(1)}y (${Math.round(remainingHours / 720)}mo)`, severity: 'warning' }
+  if (years > 0.5) return { label: `${Math.round(remainingHours / 720)} months`, severity: 'exception' }
+  return { label: `< ${Math.round(remainingHours / 24)} days !`, severity: 'exception' }
+}
+
+function formatDuration(hours: number): string {
+  const y = Math.floor(hours / 8760)
+  const m = Math.floor((hours % 8760) / 720)
+  if (y > 0) return `${y}y ${m}mo`
+  if (m > 0) return `${m}mo`
+  return `${hours}h`
+}
+
 interface DiskDevice {
   node: string
   device: string
@@ -38,6 +57,7 @@ interface DiskDevice {
   wear_pct?: number
   tbw_bytes?: number
   usage?: { total_gb: number; used_gb: number; avail_gb: number; pct: number }
+  lifetime?: { label: string; severity: 'success' | 'warning' | 'exception' | 'default' } | null
 }
 
 export default function DiskHealthPage() {
@@ -65,6 +85,8 @@ export default function DiskHealthPage() {
             const findAttr = (id: number) => attrs.find((a: any) => a.id === id)
             const wearId = [177, 233, 202].find((id) => findAttr(id))
             const wearAttr = wearId ? findAttr(wearId) : null
+            const wearPct = wearAttr ? (100 - (typeof wearAttr.value === 'number' ? wearAttr.value : 0)) : undefined
+            const poh = findAttr(9)?.raw?.value || 0
             enriched.push({
               node: d.node,
               device: d.device,
@@ -74,11 +96,12 @@ export default function DiskHealthPage() {
               capacity: smart?.user_capacity?.bytes || (smart?.nvme_total_capacity || 0),
               temp: smart?.temperature?.current || 0,
               health: smart?.smart_status?.passed === false ? 'critical' : 'ok',
-              power_on_hours: findAttr(9)?.raw?.value || 0,
+              power_on_hours: poh,
               reallocated: findAttr(5)?.raw?.value || 0,
-              wear_pct: wearAttr ? (100 - (typeof wearAttr.value === 'number' ? wearAttr.value : 0)) : (smart?.nvme_total_capacity ? 0 : undefined),
+              wear_pct: wearPct,
               tbw_bytes: findAttr(241)?.raw?.value ? (findAttr(241).raw.value * 512) : 0,
               usage: smart?.usage || null,
+              lifetime: estimateLifetime(wearPct, poh),
             })
           } catch {
             enriched.push({ node: d.node, device: d.device, last_scan: d.last_scan, health: 'ok' })
@@ -125,6 +148,12 @@ export default function DiskHealthPage() {
     { title: 'Temp', dataIndex: 'temp', key: 'temp', render: (v: number) => v ? `${v}°C` : '—' },
     { title: 'Usage', key: 'usage', render: (_: any, r: DiskDevice) => r.usage ? <Progress percent={Number(r.usage.pct)} size="small" status={Number(r.usage.pct) > 90 ? 'exception' : Number(r.usage.pct) > 80 ? 'normal' : 'success'} format={() => `${r.usage!.used_gb} / ${r.usage!.total_gb} GB`} /> : <span>{formatBytes(r.capacity || 0)}</span> },
     { title: 'Wear', dataIndex: 'wear_pct', key: 'wear_pct', render: (v: number | undefined) => v === undefined ? '—' : <Progress percent={Math.round(v)} size="small" status={v > 85 ? 'exception' : v > 70 ? 'normal' : 'success'} format={() => `${v}%`} /> },
+    { title: 'Lifetime', key: 'lifetime', render: (_: any, r: DiskDevice) => {
+      if (!r.lifetime) return <Text type="secondary">—</Text>
+      if (r.lifetime.severity === 'exception') return <Tag color="error">{r.lifetime.label}</Tag>
+      if (r.lifetime.severity === 'warning') return <Tag color="warning">{r.lifetime.label}</Tag>
+      return <Tag color="success">{r.lifetime.label}</Tag>
+    }},
     { title: 'Hours', dataIndex: 'power_on_hours', key: 'power_on_hours', render: (v: number | undefined) => v === undefined ? '—' : v >= 87600 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString()}h</span> : v >= 43800 ? <span style={{ color: '#faad14' }}>{v.toLocaleString()}h</span> : v.toLocaleString() + 'h' },
     { title: 'Last Scan', dataIndex: 'last_scan', key: 'last_scan', render: (v: number) => formatDate(v) },
   ]
@@ -219,21 +248,24 @@ export default function DiskHealthPage() {
             <Col span={12}>
               <Descriptions size="small" column={1} bordered>
                 <Descriptions.Item label="Power-On Hours">
-                  {selected.power_on_hours ? selected.power_on_hours.toLocaleString() + ' h' : '—'}
-                  {selected.power_on_hours && (selected.power_on_hours > 43800 ? ` (${Math.round(selected.power_on_hours / 8760)} yrs)` : '')}
+                  {selected.power_on_hours ? `${formatDuration(selected.power_on_hours)} (${selected.power_on_hours.toLocaleString()} h)` : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Wear Level">
                   {selected.wear_pct !== undefined ? (
                     <Progress percent={Math.round(selected.wear_pct)} size="small" status={selected.wear_pct > 85 ? 'exception' : selected.wear_pct > 70 ? 'normal' : 'success'} />
                   ) : '—'}
                 </Descriptions.Item>
+                <Descriptions.Item label="Estimated Lifetime">
+                  {selected.lifetime ? (
+                    selected.lifetime.severity === 'success' ? <Tag color="success">{selected.lifetime.label}</Tag> :
+                    selected.lifetime.severity === 'warning' ? <Tag color="warning">{selected.lifetime.label}</Tag> :
+                    <Tag color="error">{selected.lifetime.label}</Tag>
+                  ) : <Text type="secondary">No SMART wear data</Text>}
+                </Descriptions.Item>
                 <Descriptions.Item label="Reallocated Sectors">
                   {selected.reallocated !== undefined ? (
                     selected.reallocated > 0 ? <Tag color="error">{selected.reallocated}</Tag> : <Tag color="success">0</Tag>
                   ) : '—'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Data Written">
-                  {selected.tbw_bytes ? formatBytes(selected.tbw_bytes) : '—'}
                 </Descriptions.Item>
               </Descriptions>
             </Col>
