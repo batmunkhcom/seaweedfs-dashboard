@@ -103,6 +103,16 @@ export async function getClusterHealth() {
   return data
 }
 
+export async function getNodeLimits() {
+  const { data } = await api.get('/cluster/node-limits')
+  return data
+}
+
+export async function updateNodeLimits(limits: Record<string, number>) {
+  const { data } = await api.put('/cluster/node-limits', { limits })
+  return data
+}
+
 export async function getTopology(): Promise<Topology> {
   const { data } = await api.get('/cluster/topology')
   return data

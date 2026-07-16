@@ -39,3 +39,14 @@ async def get_setting_float(key: str, default: float = 0.0) -> float:
 async def get_setting_list(key: str, default: list[str] | None = None) -> list[str]:
     val = await get_setting(key, ",".join(default or []))
     return [v.strip() for v in val.split(",") if v.strip()]
+
+
+async def update_setting(key: str, value: str) -> bool:
+    db = await get_db()
+    await db.execute(
+        "INSERT OR REPLACE INTO runtime_settings (key, value) VALUES (?, ?)",
+        (key, value),
+     )
+    await db.commit()
+    _cache[key] = value
+    return True
