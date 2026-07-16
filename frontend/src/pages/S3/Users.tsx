@@ -94,12 +94,12 @@ export default function S3UsersPage() {
 
   const activeKeys = users.filter(u => u.enabled).length
 
+  const openDetail = (r: any) => { setSelected(r); setRevealedSecret(''); setDetailOpen(true) }
+
   const columns = [
     {
       title: 'Username', dataIndex: 'username', key: 'username',
-      render: (v: string, r: any) => (
-        <a onClick={() => { setSelected(r); setRevealedSecret(''); setDetailOpen(true) }} style={{ fontFamily: 'monospace', fontSize: 13 }}>{v}</a>
-      ),
+      render: (v: string) => <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{v}</span>,
     },
     { title: 'Email', dataIndex: 'email', key: 'email', render: (v: string) => v || '\u2014' },
     {
@@ -110,15 +110,23 @@ export default function S3UsersPage() {
     },
     {
       title: 'Access Key', dataIndex: 's3_access_key', key: 's3_access_key',
-      render: (v: string) => v ? <code style={{ fontSize: 11 }}>{v.substring(0, 14)}...</code> : <Text type="secondary">-</Text>,
+      render: (v: string) => v ? <code style={{ fontSize: 11 }}>{v.substring(0, 14)}&hellip;</code> : <Text type="secondary">&mdash;</Text>,
     },
     {
       title: 'Secret Key', dataIndex: 's3_secret_key', key: 's3_secret_key',
-      render: (v: string) => v ? <code style={{ color: '#475569', fontSize: 11 }}>********</code> : <Text type="secondary">-</Text>,
+      render: (v: string) => v ? <code style={{ color: '#475569', fontSize: 11 }}>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code> : <Text type="secondary">&mdash;</Text>,
     },
     {
       title: 'Status', dataIndex: 'enabled', key: 'enabled',
       render: (v: any) => v ? <Tag color="green">Active</Tag> : <Tag color="red">Disabled</Tag>,
+    },
+    {
+      title: '', key: 'actions', width: 80,
+      render: (_: any, r: any) => (
+        <Button type="link" size="small" icon={<EyeOutlined />} onClick={(e) => { e.stopPropagation(); openDetail(r) }}>
+          View Keys
+        </Button>
+      ),
     },
   ]
 
@@ -166,53 +174,63 @@ export default function S3UsersPage() {
           </Space>
         }
       >
-        <Table dataSource={users} columns={columns} rowKey="id" loading={loading} size="small" pagination={false} />
+        <Table
+          dataSource={users}
+          columns={columns}
+          rowKey="id"
+          loading={loading}
+          size="small"
+          pagination={false}
+          onRow={(r) => ({
+            onClick: () => openDetail(r),
+            style: { cursor: 'pointer' },
+          })}
+        />
       </Card>
 
-      <Modal open={detailOpen} title={<>S3 Credentials: <code>{selected?.username}</code></>} footer={null} onCancel={() => { setDetailOpen(false); setRevealedSecret('') }} width={520}>
+      <Modal open={detailOpen} title={<>S3 Credentials: <code>{selected?.username}</code></>} footer={null} onCancel={() => { setDetailOpen(false); setRevealedSecret('') }} width={560}>
         {selected && (
           <div>
-            <p><strong>Email:</strong> {selected.email || '-'}</p>
-            <p>
-              <strong>Access:</strong>{' '}
+            <p style={{ marginBottom: 4 }}><strong>Email:</strong> {selected.email || '-'}</p>
+            <p><strong>Access:</strong>{' '}
               {selected.s3_permission === 'readonly'
-                ? <Tag color="blue">Read Only - can list and download</Tag>
-                : <Tag color="green">Read + Write - full access</Tag>
+                ? <Tag color="blue">Read Only</Tag>
+                : <Tag color="green">Read + Write</Tag>
               }
             </p>
-            <div style={{ background: '#0f172a', padding: 12, borderRadius: 8, marginTop: 12 }}>
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>Access Key</div>
-                <code style={{ color: '#a5f3fc', wordBreak: 'break-all' }}>{selected.s3_access_key}</code>
-                <Tooltip title="Copy Access Key">
-                  <CopyOutlined onClick={() => copyText(selected.s3_access_key, 'Access key')} style={{ marginLeft: 8, cursor: 'pointer', color: '#a855f7' }} />
-                </Tooltip>
+            <div style={{ background: '#0f172a', padding: 16, borderRadius: 8, marginTop: 8 }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>ACCESS KEY</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <code style={{ color: '#a5f3fc', wordBreak: 'break-all', fontSize: 13 }}>{selected.s3_access_key}</code>
+                  <Tooltip title="Copy"><CopyOutlined onClick={() => copyText(selected.s3_access_key, 'Access key')} style={{ cursor: 'pointer', color: '#a855f7', flexShrink: 0 }} /></Tooltip>
+                </div>
               </div>
               <div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, marginBottom: 2 }}>Secret Key</div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>SECRET KEY</div>
                 {revealedSecret ? (
-                  <>
-                    <code style={{ color: '#fbbf24', wordBreak: 'break-all' }}>{revealedSecret}</code>
-                    <Tooltip title="Copy Secret Key">
-                      <CopyOutlined onClick={() => copyText(revealedSecret, 'Secret key')} style={{ marginLeft: 8, cursor: 'pointer', color: '#a855f7' }} />
-                    </Tooltip>
-                    <div style={{ marginTop: 4 }}>
-                      <Tag color="orange"><EyeOutlined /> Visible - close modal to hide</Tag>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <code style={{ color: '#fbbf24', wordBreak: 'break-all', fontSize: 13 }}>{revealedSecret}</code>
+                      <Tooltip title="Copy"><CopyOutlined onClick={() => copyText(revealedSecret, 'Secret key')} style={{ cursor: 'pointer', color: '#a855f7', flexShrink: 0 }} /></Tooltip>
                     </div>
-                  </>
+                    <Tag color="orange" style={{ marginBottom: 0 }}><EyeOutlined /> Secret visible until modal is closed</Tag>
+                  </div>
                 ) : (
-                  <>
-                    <code style={{ color: '#475569' }}>********************************</code>
-                    <Button type="link" size="small" icon={<EyeOutlined />} style={{ marginLeft: 8 }} onClick={() => setRevealOpen(true)}>
-                      Reveal (admin password required)
+                  <div>
+                    <code style={{ color: '#475569', fontSize: 13, display: 'block', marginBottom: 8 }}>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code>
+                    <Button type="primary" size="small" icon={<EyeOutlined />} onClick={() => setRevealOpen(true)}>
+                      Reveal Secret Key (admin password required)
                     </Button>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
-            <Button icon={<KeyOutlined />} danger size="small" style={{ marginTop: 12 }} onClick={() => regenerateKeys(selected.id)}>
-              Regenerate Keys
-            </Button>
+            <div style={{ marginTop: 12 }}>
+              <Button icon={<KeyOutlined />} danger size="small" onClick={() => regenerateKeys(selected.id)}>
+                Regenerate Keys
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
