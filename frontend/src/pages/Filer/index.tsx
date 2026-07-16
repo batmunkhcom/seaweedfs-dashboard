@@ -109,9 +109,9 @@ export default function FilerPage() {
     setDeleting(true)
     let ok = 0
     let fail = 0
-    for (const key of selectedRowKeys) {
-      const entry = entries.find((e) => e.name === String(key))
-      const entryPath = entry?.path || `${path === '/' ? '' : path}/${String(key)}`
+    const keys = [...selectedRowKeys]
+    for (const key of keys) {
+      const entryPath = path === '/' ? `/${String(key)}` : `${path}/${String(key)}`
       try { await deleteFilerEntry(entryPath); ok++ } catch { fail++ }
     }
     if (fail > 0) message.warning(`${ok} deleted, ${fail} failed`)
