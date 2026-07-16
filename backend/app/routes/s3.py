@@ -15,6 +15,12 @@ class RevealSecretRequest(BaseModel):
     admin_password: str
 
 
+class GenerateKeyRequest(BaseModel):
+    username: str
+    email: str = ""
+    permission: str = "readwrite"
+
+
 @router.get("/buckets")
 async def list_buckets():
     client = get_seaweed_client()
@@ -177,3 +183,34 @@ async def sync_iam_to_gateways(_: bool = Depends(require_permission("s3:write"))
     except Exception as e:
         logger.error("s3_iam_sync_error", exc_info=True)
         return {"ok": False, "error": str(e)}
+
+
+@router.post("/generate-key")
+async def generate_s3_key(body: GenerateKeyRequest, _: bool = Depends(require_permission("s3:write"))):
+    import secrets
+    username = body.username.strip().lower()
+    if not username:
+        raise HTTPException(400, "Username is required")
+    db = await get_db()
+    cursor = await db.execute("SELECT id FROM users WHERE username = ?", (username,))
+    exists = await cursor.fetchone()
+    if exists:
+        access_key = f"AK{secrets.token_hex(10)}"
+        secret_key = secrets.token_hex(20)
+        await db.execute(
+            "UPDATE users SET s3_access_key = ?, s3_secret_key = ?, s3_permission = ?, email = COALESCE(NULLIF(?, ''), email) WHERE username = ?",
+            (access_key, secret_key, body.permission, body.email, username),
+        )
+        await db.commit()
+        logger.info("s3_key_regenerated", username=username)
+        return {"ok": True, "username": username, "access_key": access_key, "secret_key": secret_key, "regenerated": True}
+    password_hash = bcrypt.hashpw(secrets.token_hex(16).encode(), bcrypt.gensalt()).decode()
+    access_key = f"AK{secrets.token_hex(10)}"
+    secret_key = secrets.token_hex(20)
+    await db.execute(
+        "INSERT INTO users (username, password_hash, firstname, lastname, email, role, enabled, s3_access_key, s3_secret_key, s3_permission) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (username, password_hash, username, "", body.email or f"{username}@mbm.mn", "viewer", 1, access_key, secret_key, body.permission),
+    )
+    await db.commit()
+    logger.info("s3_key_created", username=username, permission=body.permission)
+    return {"ok": True, "username": username, "access_key": access_key, "secret_key": secret_key, "created": True}

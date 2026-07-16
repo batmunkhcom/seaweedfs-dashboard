@@ -199,7 +199,13 @@ export async function createS3User(name: string) {
 }
 
 export async function deleteS3User(id: string) {
-  await api.delete(`/s3/users/${id}`)
+  const { data } = await api.delete(`/s3/users/${id}`)
+  return data
+}
+
+export async function generateS3Key(body: { username: string; email?: string; permission?: string }) {
+  const { data } = await api.post('/s3/generate-key', body)
+  return data
 }
 
 export async function getS3Policies(): Promise<S3Policy[]> {
