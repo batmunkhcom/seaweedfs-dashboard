@@ -25,30 +25,45 @@ else:
             """
         )
         rows = await cursor.fetchall()
-        return {"enabled": True, "devices": [dict(r) for r in rows]}
+        devices = []
+        for r in rows:
+            devices.append({"node": r[0], "device": r[1], "last_scan": r[2]})
+        return {"enabled": True, "devices": devices}
 
 
     @router.get("/{node}/{device}")
     async def disk_health_detail(node: str, device: str):
+        import json
         db = await get_db()
         cursor = await db.execute(
-            "SELECT * FROM disk_health WHERE node = ? AND device = ? ORDER BY timestamp DESC LIMIT 1",
+            "SELECT node, device, timestamp, smart_json FROM disk_health WHERE node = ? AND device = ? ORDER BY timestamp DESC LIMIT 1",
             (node, f"/dev/{device}"),
         )
         row = await cursor.fetchone()
         if not row:
             return {"error": "not found"}
-        return dict(row)
+        return {"node": row[0], "device": row[1], "timestamp": row[2], "smart": row[3]}
 
 
     @router.get("/history/{node}/{device}")
     async def disk_health_history(node: str, device: str, days: int = 30):
+        import time, json
         db = await get_db()
-        import time
         cutoff = time.time() - days * 86400
         cursor = await db.execute(
             "SELECT timestamp, smart_json FROM disk_health WHERE node = ? AND device = ? AND timestamp >= ? ORDER BY timestamp ASC",
             (node, f"/dev/{device}", cutoff),
         )
         rows = await cursor.fetchall()
-        return [{"timestamp": r[0], "smart": r[1]} for r in rows]
+        result = []
+        for r in rows:
+            try:
+                s = json.loads(r[1]) if isinstance(r[1], str) else {}
+                result.append({
+                    "timestamp": r[0],
+                    "temp": s.get("temperature", {}).get("current", 0),
+                    "wear": s.get("ata_smart_attributes", {}).get("table", [{}])[0].get("value", 0) if "ata_smart_attributes" in s else 0,
+                })
+            except Exception:
+                result.append({"timestamp": r[0], "temp": 0, "wear": 0})
+        return result

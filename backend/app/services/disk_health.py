@@ -42,6 +42,7 @@ class DiskHealthService:
         self._running = True
         _scan_task = asyncio.create_task(self._scan_loop())
         self._update_heartbeat()
+        asyncio.create_task(self._scan_all_nodes())
         logger.info("disk_health_started")
 
     async def stop(self):
@@ -75,8 +76,7 @@ class DiskHealthService:
         for host in hosts:
             try:
                 ssh = paramiko.SSHClient()
-                ssh.load_system_host_keys()
-                ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 ssh.connect(
                     host,
                     username=settings.disk_health_ssh_user,

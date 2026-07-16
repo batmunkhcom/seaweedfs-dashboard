@@ -178,10 +178,22 @@ export interface DiskHealthDevice {
 }
 
 export interface DiskHealthDetail {
-  node: string
-  device: string
-  timestamp: string
-  smartAttributes: SmartAttribute[]
+  node?: string
+  device?: string
+  timestamp?: number
+  smart?: string
+}
+
+export interface SmartAttribute {
+  id: number
+  name: string
+  value: number
+}
+export interface DiskHealthHistory {
+  timestamps: string[]
+  temperatures: number[]
+  wearPercents: (number | null)[]
+  reallocated: number[]
 }
 
 export interface SmartAttribute {

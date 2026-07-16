@@ -24,8 +24,12 @@ async def lifespan(app: FastAPI):
     await setup_database()
     await load_runtime_settings()
     await startup_seaweed_client()
+    from app.services.disk_health import start_disk_health
+    await start_disk_health()
     yield
     logger.info("shutdown")
+    from app.services.disk_health import stop_disk_health
+    await stop_disk_health()
     await shutdown_seaweed_client()
     await shutdown_database()
 

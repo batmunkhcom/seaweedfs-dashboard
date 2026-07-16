@@ -16,9 +16,6 @@ import type {
   DashboardStats,
   AlertEvent,
   AlertConfig,
-  DiskHealthSummary,
-  DiskHealthDetail,
-  DiskHealthHistory,
   LoginRequest,
   LoginResponse,
   User,
@@ -281,17 +278,17 @@ export async function getDashboardHistory(hours = 24) {
   return data
 }
 
-export async function getDiskHealthStatus(): Promise<DiskHealthSummary[]> {
+export async function getDiskHealthStatus(): Promise<any> {
   const { data } = await api.get('/disk-health/status')
   return data
 }
 
-export async function getDiskHealthDetail(node: string, device: string): Promise<DiskHealthDetail> {
+export async function getDiskHealthDetail(node: string, device: string): Promise<any> {
   const { data } = await api.get(`/disk-health/${encodeURIComponent(node)}/${encodeURIComponent(device)}`)
   return data
 }
 
-export async function getDiskHealthHistory(node: string, device: string, days = 30): Promise<DiskHealthHistory> {
+export async function getDiskHealthHistory(node: string, device: string, days = 30): Promise<any> {
   const { data } = await api.get(`/disk-health/history/${encodeURIComponent(node)}/${encodeURIComponent(device)}`, {
     params: { days },
   })
