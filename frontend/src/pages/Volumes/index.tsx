@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, InputNumber, Input, Space, message, Card, Row, Col, Typography, Progress, Tag, Tooltip, InputRef } from 'antd'
+import { Table, Button, Modal, InputNumber, Input, Space, message, Card, Row, Col, Typography, Progress, Tag, Tooltip } from 'antd'
 import { PlusOutlined, DeleteOutlined, WarningOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { getVolumesStats, growVolumes, vacuumVolumes } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 interface NodeStat {
   url: string
@@ -49,7 +49,6 @@ export default function VolumesPage() {
 
   const totalFree = nodes.reduce((s, n) => s + Math.max(0, n.effective_max - n.used), 0)
   const criticalNodes = nodes.filter(n => n.status === 'critical').length
-  const warningNodes = nodes.filter(n => n.status === 'warning').length
 
   const doGrow = async () => {
     if (growCount > totalFree) {
@@ -159,6 +158,7 @@ export default function VolumesPage() {
     ]
 
   const filteredVolumes = volumes.filter(v => !searchText || v.Id?.includes(searchText) || v.Collection?.includes(searchText))
+  const nodeMinMax = nodes.length > 0 ? Math.min(...nodes.map(n => n.effective_max)) : 9999
 
   return (
      <div>
@@ -221,7 +221,7 @@ export default function VolumesPage() {
            </div>
          )}
          <div style={{ marginBottom: 12, fontSize: 13, color: '#94a3b8' }}>
-           Max {nodes.length > 0 ? Math.min(...nodes.map(n => n.effective_max))} volumes per node · {totalFree} slots available
+            Max {nodeMinMax} volumes per node - {totalFree} slots available
          </div>
          <div style={{ marginBottom: 8 }}>
            <Text style={{ display: 'block', marginBottom: 4 }}>Count:</Text>

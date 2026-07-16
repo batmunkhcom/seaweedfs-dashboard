@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Tag, Spin, Row, Col, Typography, Progress, Tooltip, InputNumber, Button, Space, message } from 'antd'
+import { Card, Tag, Spin, Row, Col, Typography, Progress, Tooltip, InputNumber, Button, message } from 'antd'
 import {
   CloudServerOutlined,
   CheckCircleOutlined,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, Typography, Input, Button, Space, message, Spin, Table, Tag, Tooltip, InputNumber } from 'antd'
-import { SaveOutlined, HddOutlined, GlobalOutlined } from '@ant-design/icons'
+import { SaveOutlined, HddOutlined } from '@ant-design/icons'
 import { getSettings, updateSettings, getClusterHealth, getNodeLimits, updateNodeLimits } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -221,7 +221,7 @@ export default function SettingsPage() {
                 size="small"
               />
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>Apply to all nodes:</Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>Apply to all nodes:</Typography.Text>
                 <InputNumber
                   min={1}
                   max={allNodesNativeMax}

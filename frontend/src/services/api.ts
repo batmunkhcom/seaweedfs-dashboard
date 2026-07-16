@@ -124,7 +124,7 @@ export async function getVolumes(params?: Record<string, string>): Promise<{ vol
 }
 
 export async function getVolumesStats() {
-  const { data } = await api.get('/volumes/stats')
+  const { data } = await api.get('/volumes/stats', { headers: { 'Cache-Control': 'no-store' }, params: { _t: Date.now() } })
   return data
 }
 
