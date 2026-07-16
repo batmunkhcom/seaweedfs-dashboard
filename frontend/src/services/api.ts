@@ -81,10 +81,18 @@ export async function getMe(): Promise<User> {
   return data
 }
 
-export async function getCsrfToken(): Promise<string> {
+export async function getCsrfToken() {
   const { data } = await api.get('/auth/csrf-token')
   setCsrfToken(data.token)
   return data.token
+}
+
+export async function refreshCsrfToken(): Promise<string> {
+  try {
+    return await getCsrfToken()
+  } catch {
+    return ''
+  }
 }
 
 export async function getClusterStatus(): Promise<ClusterStatus> {

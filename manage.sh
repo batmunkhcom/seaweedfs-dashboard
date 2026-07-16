@@ -42,6 +42,23 @@ _restart_backend() {
   fi
 }
 
+_stop_backend() {
+  pkill -9 -f "uvicorn app.main" 2>/dev/null
+  sleep 1
+}
+
+_start_backend() {
+  cd "$BACKEND_DIR"
+  setsid "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT_BACKEND" --workers 1 \
+    < /dev/null > /tmp/seaweed-dashboard.log 2>&1 &
+  sleep 2
+  if curl -s http://127.0.0.1:$PORT_BACKEND/api/health > /dev/null 2>&1; then
+    echo "  Backend → :$PORT_BACKEND"
+  else
+    echo "  Backend FAILED — see /tmp/seaweed-dashboard.log"
+  fi
+}
+
 _restart_nginx() {
   echo "Restarting nginx..."
   systemctl restart nginx 2>/dev/null || (nginx -s stop 2>/dev/null; nginx)
