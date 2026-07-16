@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Card, Typography, Input, Button, Space, message, Spin, Table, Tag, Tooltip } from 'antd'
-import { SaveOutlined, HddOutlined } from '@ant-design/icons'
+import { Card, Typography, Input, Button, Space, message, Spin, Table, Tag, Tooltip, InputNumber } from 'antd'
+import { SaveOutlined, HddOutlined, GlobalOutlined } from '@ant-design/icons'
 import { getSettings, updateSettings, getClusterHealth, getNodeLimits, updateNodeLimits } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -93,7 +93,21 @@ export default function SettingsPage() {
   const handleLimitChange = (nodeUrl: string, value: number | null) => {
     const num = value !== null && value > 0 ? value : 9999
     setNodeLimits((prev) => ({ ...prev, [nodeUrl]: num }))
-   }
+    }
+
+  const allNodesNativeMax = Math.min(...nodeDetails.map((n) => n.max_native || n.Max || 9999))
+
+  const handleApplyAll = (value: number | null) => {
+    if (value && value > 0) {
+      const updated: Record<string, number> = {}
+      nodeDetails.forEach((n) => {
+        const url = n.url || n.Url
+        updated[url] = Math.min(value, n.max_native || n.Max || 9999)
+        })
+      setNodeLimits(updated)
+      message.success(`Applied to all ${nodeDetails.length} nodes`)
+      }
+    }
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />
 
@@ -195,17 +209,28 @@ export default function SettingsPage() {
               }
             style={{ marginBottom: 16 }}
            >
-             <Table
-               columns={nodeColumns}
-               dataSource={nodeDetails.map((n) => ({
-                 key: n.url || n.Url,
-                 node: (n.url || n.Url).replace(':8080', ''),
-                 used: n.volumes || n.Volumes || 0,
-                 native_max: n.max_native || n.Max || 9999,
+              <Table
+                columns={nodeColumns}
+                dataSource={nodeDetails.map((n) => ({
+                  key: n.url || n.Url,
+                  node: (n.url || n.Url).replace(':8080', ''),
+                  used: n.volumes || n.Volumes || 0,
+                  native_max: n.max_native || n.Max || 9999,
                 }))}
-               pagination={false}
-               size="small"
+                pagination={false}
+                size="small"
               />
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>Apply to all nodes:</Text>
+                <InputNumber
+                  min={1}
+                  max={allNodesNativeMax}
+                  size="small"
+                  style={{ width: 100 }}
+                  placeholder={`Max ${allNodesNativeMax}`}
+                  onChange={(val) => handleApplyAll(val)}
+                />
+              </div>
              <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8' }}>
                 Set per-node volume limits. Each node has different disk capacity — the limit controls how many volumes each server can hold.
                <br />
