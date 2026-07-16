@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.services.seaweed_client import get_seaweed_client
+from app.settings_service import get_setting_int
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/cluster", tags=["cluster"])
@@ -24,20 +25,23 @@ async def cluster_health():
     try:
         resp = await client.master_get("/dir/status?pretty=y")
         data = resp.json()
+        max_vols = await get_setting_int("max_volume_per_node", 9999)
         nodes = []
         topology = data.get("Topology", {})
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):
                 for node in rack.get("DataNodes", []):
+                    native_max = node.get("Max", 0)
                     nodes.append({
-                        "url": node.get("Url", ""),
-                        "volumes": node.get("Volumes", 0),
-                        "max": node.get("Max", 0),
-                        "free": node.get("Free", node.get("Max", 0) - node.get("Volumes", 0)),
-                        "status": "healthy",
-                        "dc": dc.get("Id", ""),
-                        "rack": rack.get("Id", ""),
-                    })
+                         "url": node.get("Url", ""),
+                         "volumes": node.get("Volumes", 0),
+                         "max_native": native_max,
+                         "max_configured": max_vols,
+                         "free": node.get("Free", native_max - node.get("Volumes", 0)),
+                         "status": "healthy",
+                         "dc": dc.get("Id", ""),
+                         "rack": rack.get("Id", ""),
+                     })
         return {"nodes": nodes, "total": len(nodes)}
     except Exception:
         logger.error("cluster_health_failed", exc_info=True)

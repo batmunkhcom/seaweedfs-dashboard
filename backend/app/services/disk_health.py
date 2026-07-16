@@ -75,8 +75,7 @@ class DiskHealthService:
             await asyncio.sleep(interval * 3600)
 
     async def _scan_all_nodes(self):
-        hosts = [h.split(":")[0] for h in settings.master_list + settings.filer_list]
-        hosts = list(dict.fromkeys(hosts))
+        hosts = settings.all_node_hosts
         import os as _os, paramiko
 
         key_path = _os.path.expanduser(settings.disk_health_ssh_key_path)

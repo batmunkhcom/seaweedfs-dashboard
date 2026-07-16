@@ -84,64 +84,72 @@ export default function ClusterPage() {
                 style={{ marginBottom: 12, background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(99,102,241,0.08)' }}
               >
                 <Row gutter={[12, 12]}>
-                  {rack.DataNodes?.map((node: any, ni: number) => {
-                    const usedVols = node.Volumes || 0
-                    const maxVols = node.Max || 1
-                    const usedPct = Math.round((usedVols / maxVols) * 100)
-                    const barColor = usedPct > 80 ? '#ef4444' : usedPct > 50 ? '#f59e0b' : '#22c55e'
-                    const freeVols = maxVols - usedVols
-                    const nodeUrl = node.Url || node.url || ''
+                    {rack.DataNodes?.map((node: any, ni: number) => {
+                     const usedVols = node.Volumes || node.volumes || 0
+                     const nativeMax = node.Max || node.max_native || 1
+                     const configuredMax = node.max_configured || nativeMax
+                     const effectiveMax = Math.min(nativeMax, configuredMax)
+                     const usedPct = Math.round((usedVols / effectiveMax) * 100)
+                     const barColor = usedPct > 80 ? '#ef4444' : usedPct > 50 ? '#f59e0b' : '#22c55e'
+                     const freeVols = effectiveMax - usedVols
+                     const nodeUrl = node.Url || node.url || ''
 
-                    return (
-                      <Col key={ni} xs={24} sm={12} md={8} lg={6} xl={Math.floor(24 / Math.min((rack.DataNodes?.length || 1), 4))}>
-                        <div
-                          style={{
-                            background: 'rgba(15,23,42,0.8)',
-                            border: `1px solid ${SEVER_COLORS[ni % SEVER_COLORS.length]}22`,
-                            borderRadius: 8,
-                            padding: '12px 14px',
-                            transition: 'border-color 0.2s',
-                          }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = SEVER_COLORS[ni % SEVER_COLORS.length] + '44' }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = SEVER_COLORS[ni % SEVER_COLORS.length] + '22' }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                            <Tooltip title={nodeUrl}>
-                              <span style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
-                                {nodeUrl.replace(':8080', '')}
-                              </span>
-                            </Tooltip>
-                            <Tag color="green" style={{ lineHeight: '16px', fontSize: 10, margin: 0 }}>
-                              <CheckCircleOutlined style={{ fontSize: 10 }} /> healthy
-                            </Tag>
+                     return (
+                       <Col key={ni} xs={24} sm={12} md={8} lg={6} xl={Math.floor(24 / Math.min((rack.DataNodes?.length || 1), 4))}>
+                          <div
+                           style={{
+                             background: 'rgba(15,23,42,0.8)',
+                             border: `1px solid ${SEVER_COLORS[ni % SEVER_COLORS.length]}22`,
+                             borderRadius: 8,
+                             padding: '12px 14px',
+                             transition: 'border-color 0.2s',
+                            }}
+                           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = SEVER_COLORS[ni % SEVER_COLORS.length] + '44' }}
+                           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = SEVER_COLORS[ni % SEVER_COLORS.length] + '22' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                              <Tooltip title={nodeUrl}>
+                                <span style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                                  {nodeUrl.replace(':8080', '')}
+                                </span>
+                              </Tooltip>
+                              <Tag color="green" style={{ lineHeight: '16px', fontSize: 10, margin: 0 }}>
+                                <CheckCircleOutlined style={{ fontSize: 10 }} /> healthy
+                              </Tag>
+                            </div>
+
+                            <Progress
+                             percent={usedPct}
+                             size="small"
+                             strokeColor={barColor}
+                             trailColor="rgba(255,255,255,0.05)"
+                             format={() => `${usedPct}%`}
+                             style={{ marginBottom: 6 }}
+                            />
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                              <Tooltip title={`Native Max: ${nativeMax} | Configured Limit: ${configuredMax}`}>
+                                <span style={{ color: '#cbd5e1' }}>
+                                  <HddOutlined style={{ marginRight: 3, color: '#64748b' }} />
+                                  {usedVols}/{effectiveMax} vol
+                                </span>
+                              </Tooltip>
+                              <Tooltip title={`${freeVols} free (~${freeVols * 30} GB available)`}>
+                                <span style={{ color: usedVols < effectiveMax ? '#22c55e' : '#64748b' }}>
+                                  {freeVols >= 0 ? `${freeVols} free` : 'FULL'}
+                                </span>
+                              </Tooltip>
+                            </div>
+
+                            {configuredMax < nativeMax && (
+                             <Text type="secondary" style={{ fontSize: 10, display: 'block', marginTop: 4 }}>
+                               Limit: {configuredMax} (system: {nativeMax})
+                             </Text>
+                            )}
                           </div>
-
-                          <Progress
-                            percent={usedPct}
-                            size="small"
-                            strokeColor={barColor}
-                            trailColor="rgba(255,255,255,0.05)"
-                            format={() => `${usedPct}%`}
-                            style={{ marginBottom: 6 }}
-                          />
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                            <Tooltip title={`${usedVols} active of ${maxVols} max (~${maxVols * 30} GB capacity)`}>
-                              <span style={{ color: '#cbd5e1' }}>
-                                <HddOutlined style={{ marginRight: 3, color: '#64748b' }} />
-                                {usedVols}/{maxVols}
-                              </span>
-                            </Tooltip>
-                            <Tooltip title={`${freeVols} free (~${freeVols * 30} GB available)`}>
-                              <span style={{ color: usedVols < maxVols ? '#22c55e' : '#64748b' }}>
-                                {freeVols} free
-                              </span>
-                            </Tooltip>
-                          </div>
-                        </div>
-                      </Col>
-                    )
-                  })}
+                        </Col>
+                      )
+                    })}
                 </Row>
               </Card>
             )

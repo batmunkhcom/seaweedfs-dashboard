@@ -5,6 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     seaweedfs_master_hosts: str = "172.16.0.1:9333,172.16.0.3:9333,172.16.0.5:9333"
     seaweedfs_filer_host: str = "172.16.0.2:8888,172.16.0.4:8888"
+    seaweedfs_volume_hosts: str = "172.16.0.6:8080,172.16.0.7:8080"
     seaweedfs_request_timeout: int = 30
 
     database_url: str = "sqlite:///data/data.db"
@@ -27,6 +28,19 @@ class Settings(BaseSettings):
     @property
     def filer_list(self) -> list[str]:
         return [h.strip() for h in self.seaweedfs_filer_host.split(",") if h.strip()]
+
+    @property
+    def volume_list(self) -> list[str]:
+        return [h.strip() for h in self.seaweedfs_volume_hosts.split(",") if h.strip()]
+
+    @property
+    def all_node_hosts(self) -> list[str]:
+        hosts = []
+        for h in self.master_list + self.filer_list + self.volume_list:
+            ip = h.split(":")[0]
+            if ip not in hosts:
+                hosts.append(ip)
+        return hosts
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
