@@ -136,7 +136,7 @@ export default function VolumesPage() {
 
   const volColumns = [
      { title: 'ID', dataIndex: 'Id', key: 'Id', width: 100, render: (id: string) => <Tag color="blue">{id}</Tag> },
-     { title: 'Collection', dataIndex: 'Collection', key: 'Collection', width: 120 },
+     { title: 'Collection', dataIndex: 'Collection', key: 'Collection', width: 120, render: (v: any) => String(v || '') },
      {
       title: 'Node',
       dataIndex: 'ServerUrl',
@@ -151,8 +151,8 @@ export default function VolumesPage() {
       width: 100,
       render: (v: number) => `${(v / 1024 / 1024).toFixed(0)} MB`,
      },
-     { title: 'Files', dataIndex: 'FileCount', key: 'FileCount', width: 80 },
-     { title: 'Replication', dataIndex: 'ReplicaPlacement', key: 'ReplicaPlacement', width: 100, render: (v: string) => <Tag>{v || '000'}</Tag> },
+     { title: 'Files', dataIndex: 'FileCount', key: 'FileCount', width: 80, render: (v: any) => String(v || 0) },
+      { title: 'Replication', dataIndex: 'ReplicaPlacement', key: 'ReplicaPlacement', width: 100, render: (v: any) => <Tag>{typeof v === 'object' ? JSON.stringify(v) : (v || '000')}</Tag> },
     ]
 
   const filteredVolumes = volumes.filter(v => !searchText || v.Id?.includes(searchText) || v.Collection?.includes(searchText))
@@ -199,7 +199,7 @@ export default function VolumesPage() {
        {/* Volume List */}
        <Card title={<><DeleteOutlined style={{ marginRight: 8, color: '#a855f7' }} />Volume List ({filteredVolumes.length})</>} size="small" style={{ marginBottom: 20 }}>
          <Input.Search placeholder="Search by Volume ID or Collection..." allowClear value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ maxWidth: 400, marginBottom: 12 }} />
-         <Table columns={volColumns} dataSource={filteredVolumes} rowKey="Id" loading={loading} size="small" scroll={{ x: 800 }} />
+          <Table columns={volColumns} dataSource={filteredVolumes} rowKey={(r: any) => `${r.Id}-${r.ServerUrl}`} loading={loading} size="small" scroll={{ x: 800 }} />
        </Card>
 
        {/* Actions */}
