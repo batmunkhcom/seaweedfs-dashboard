@@ -56,6 +56,10 @@ class DiskHealthService:
                 pass
         logger.info("disk_health_stopped")
 
+    async def scan(self):
+        asyncio.create_task(self._scan_all_nodes())
+        return {"ok": True}
+
     async def _scan_loop(self):
         await self._scan_all_nodes()
         self._update_heartbeat()
@@ -114,17 +118,70 @@ class DiskHealthService:
                         ssh.connect(h, username=settings.disk_health_ssh_user, key_filename=key_path, timeout=10)
                         try:
                             _, stdout, _ = ssh.exec_command("lsblk --json -b -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null")
-                            return json.loads(stdout.read().decode())
+                            lsblk_data = json.loads(stdout.read().decode())
+                            usage = {}
+                            for dev in lsblk_data.get("blockdevices", []):
+                                mp = dev.get("mountpoint") or ""
+                                if mp.startswith("/data"):
+                                    try:
+                                        _, df_out, _ = ssh.exec_command(f"df -B1 --output=size,used,avail,pcent {mp} 2>/dev/null")
+                                        df_lines = df_out.read().decode().strip().split('\n')
+                                        if len(df_lines) > 1:
+                                            parts = df_lines[1].split()
+                                            if len(parts) >= 4:
+                                                usage = {"total_gb": round(int(parts[0]) / 1e9, 1), "used_gb": round(int(parts[1]) / 1e9, 1),
+                                                         "avail_gb": round(int(parts[2]) / 1e9, 1), "pct": parts[3].rstrip('%')}
+                                    except Exception:
+                                        pass
+                                for child in dev.get("children", []):
+                                    mp_c = child.get("mountpoint") or ""
+                                    if mp_c.startswith("/data") and not usage:
+                                        try:
+                                            _, df_out, _ = ssh.exec_command(f"df -B1 --output=size,used,avail,pcent {mp_c} 2>/dev/null")
+                                            df_lines = df_out.read().decode().strip().split('\n')
+                                            if len(df_lines) > 1:
+                                                parts = df_lines[1].split()
+                                                if len(parts) >= 4:
+                                                    usage = {"total_gb": round(int(parts[0]) / 1e9, 1), "used_gb": round(int(parts[1]) / 1e9, 1),
+                                                             "avail_gb": round(int(parts[2]) / 1e9, 1), "pct": parts[3].rstrip('%')}
+                                        except Exception:
+                                            pass
+                            return lsblk_data, usage
                         finally:
                             ssh.close()
-                    basic = await loop.run_in_executor(None, _basic_scan)
+                    basic, usage = await loop.run_in_executor(None, _basic_scan)
                     for b in basic.get("blockdevices", []):
                         if b.get("type") == "disk":
+                            children = b.get("children", [])
+                            has_data_mount = (
+                                ((b.get("mountpoint") or "").startswith("/data")) or
+                                any((c.get("mountpoint") or "").startswith("/data") for c in children)
+                            )
+                            size_bytes = b.get("size", 0)
+                            if not has_data_mount and size_bytes < 100 * 1024 * 1024 * 1024:
+                                continue
+                            is_data_disk = (b.get("mountpoint") or "").startswith("/data") or any(
+                                (c.get("mountpoint") or "").startswith("/data") for c in children
+                            )
+                            smart_json = {"model_name": "Virtual Disk", "user_capacity": {"bytes": size_bytes},
+                                         "smart_status": {"passed": True}, "temperature": {"current": None}}
+                            if is_data_disk and usage:
+                                smart_json["usage"] = usage
                             await db.execute(
                                 "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
-                                (host, f"/dev/{b['name']}", time.time(),
-                                 json.dumps({"model_name": "Virtual Disk", "user_capacity": {"bytes": b.get("size", 0)},
-                                             "smart_status": {"passed": True}, "temperature": {"current": 0}})),
+                                (host, f"/dev/{b['name']}", time.time(), json.dumps(smart_json)),
+                            )
+                            size_bytes = b.get("size", 0)
+                            if not has_data_mount and size_bytes < 100 * 1024 * 1024 * 1024:
+                                continue
+                            is_data_disk = any(c.get("mountpoint", "") == "/data/dc03" for c in children)
+                            smart_json = {"model_name": "Virtual Disk", "user_capacity": {"bytes": size_bytes},
+                                         "smart_status": {"passed": True}, "temperature": {"current": None}}
+                            if is_data_disk and usage:
+                                smart_json["usage"] = usage
+                            await db.execute(
+                                "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
+                                (host, f"/dev/{b['name']}", time.time(), json.dumps(smart_json)),
                             )
                     await db.commit()
                     logger.info("disk_health_basic_scan", host=host, devices=sum(1 for b in basic.get("blockdevices", []) if b.get("type") == "disk"))

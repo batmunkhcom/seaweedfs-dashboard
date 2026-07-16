@@ -37,6 +37,7 @@ interface DiskDevice {
   reallocated?: number
   wear_pct?: number
   tbw_bytes?: number
+  usage?: { total_gb: number; used_gb: number; avail_gb: number; pct: number }
 }
 
 export default function DiskHealthPage() {
@@ -77,6 +78,7 @@ export default function DiskHealthPage() {
               reallocated: findAttr(5)?.raw?.value || 0,
               wear_pct: wearAttr ? (100 - (typeof wearAttr.value === 'number' ? wearAttr.value : 0)) : (smart?.nvme_total_capacity ? 0 : undefined),
               tbw_bytes: findAttr(241)?.raw?.value ? (findAttr(241).raw.value * 512) : 0,
+              usage: smart?.usage || null,
             })
           } catch {
             enriched.push({ node: d.node, device: d.device, last_scan: d.last_scan, health: 'ok' })
@@ -121,7 +123,7 @@ export default function DiskHealthPage() {
         <Tag color="error" icon={<CloseCircleFilled />}>Critical</Tag>,
     },
     { title: 'Temp', dataIndex: 'temp', key: 'temp', render: (v: number) => v ? `${v}°C` : '—' },
-    { title: 'Size', dataIndex: 'capacity', key: 'capacity', render: (v: number) => formatBytes(v) },
+    { title: 'Usage', key: 'usage', render: (_: any, r: DiskDevice) => r.usage ? <Progress percent={Number(r.usage.pct)} size="small" status={Number(r.usage.pct) > 90 ? 'exception' : Number(r.usage.pct) > 80 ? 'normal' : 'success'} format={() => `${r.usage!.used_gb} / ${r.usage!.total_gb} GB`} /> : <span>{formatBytes(r.capacity || 0)}</span> },
     { title: 'Wear', dataIndex: 'wear_pct', key: 'wear_pct', render: (v: number | undefined) => v === undefined ? '—' : <Progress percent={Math.round(v)} size="small" status={v > 85 ? 'exception' : v > 70 ? 'normal' : 'success'} format={() => `${v}%`} /> },
     { title: 'Hours', dataIndex: 'power_on_hours', key: 'power_on_hours', render: (v: number | undefined) => v === undefined ? '—' : v >= 87600 ? <span style={{ color: '#ff4d4f' }}>{v.toLocaleString()}h</span> : v >= 43800 ? <span style={{ color: '#faad14' }}>{v.toLocaleString()}h</span> : v.toLocaleString() + 'h' },
     { title: 'Last Scan', dataIndex: 'last_scan', key: 'last_scan', render: (v: number) => formatDate(v) },
@@ -193,7 +195,20 @@ export default function DiskHealthPage() {
                 <Descriptions.Item label="Model">{selected.model || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Serial">{selected.serial || '—'}</Descriptions.Item>
                 <Descriptions.Item label="Capacity">{formatBytes(selected.capacity || 0)}</Descriptions.Item>
+                {selected.usage && (
+                  <Descriptions.Item label="Disk Usage">
+                    <Progress percent={Number(selected.usage.pct)} size="small" status={Number(selected.usage.pct) > 90 ? 'exception' : Number(selected.usage.pct) > 80 ? 'normal' : 'success'} />
+                    <Text type="secondary" style={{ fontSize: 12 }}>{selected.usage.used_gb} GB used / {selected.usage.total_gb} GB total / {selected.usage.avail_gb} GB free</Text>
+                  </Descriptions.Item>
+                )}
+                {!selected.usage && (
+                  <Descriptions.Item label="Capacity">{formatBytes(selected.capacity || 0)}</Descriptions.Item>
+                )}
                 <Descriptions.Item label="Temperature">{selected.temp ? `${selected.temp}°C` : '—'}</Descriptions.Item>
+                <Descriptions.Item label="Data Written">
+                  {selected.tbw_bytes ? formatBytes(selected.tbw_bytes) : '—'}
+                  {selected.tbw_bytes && selected.capacity ? ` (${Math.round(selected.tbw_bytes / selected.capacity)}× drive writes)` : ''}
+                </Descriptions.Item>
                 <Descriptions.Item label="Health">
                   {selected.health === 'ok' ? <Tag color="success">OK</Tag> :
                    selected.health === 'warning' ? <Tag color="warning">Warning</Tag> :
