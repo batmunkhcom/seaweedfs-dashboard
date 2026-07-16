@@ -1,12 +1,27 @@
 import { useState, useEffect } from 'react'
-import { Table, Button, Modal, InputNumber, Input, Space, message, Alert, Typography } from 'antd'
-import { PlusOutlined, DeleteOutlined, WarningOutlined } from '@ant-design/icons'
-import { getVolumes, growVolumes, vacuumVolumes, getClusterHealth } from '../../services/api'
+import { Table, Button, Modal, InputNumber, Input, Space, message, Card, Row, Col, Typography, Progress, Tag, Tooltip, InputRef } from 'antd'
+import { PlusOutlined, DeleteOutlined, WarningOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { getVolumesStats, growVolumes, vacuumVolumes } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
-const { Text } = Typography
+const { Text, Title } = Typography
+
+interface NodeStat {
+  url: string
+  dc: string
+  rack: string
+  used: number
+  effective_max: number
+  native_max: number
+  configured_limit: number
+  pct: number
+  status: string
+}
 
 export default function VolumesPage() {
+  const [totalVolumes, setTotalVolumes] = useState(0)
+  const [nodeCount, setNodeCount] = useState(0)
+  const [nodes, setNodes] = useState<NodeStat[]>([])
   const [volumes, setVolumes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [growOpen, setGrowOpen] = useState(false)
@@ -14,100 +29,219 @@ export default function VolumesPage() {
   const [growCount, setGrowCount] = useState(2)
   const [growCollection, setGrowCollection] = useState('')
   const [vacuumThreshold, setVacuumThreshold] = useState(0.3)
-  const [maxPerNode, setMaxPerNode] = useState(9999)
-  const [nodeVolumes, setNodeVolumes] = useState<Record<string, number>>({})
+  const [searchText, setSearchText] = useState('')
   const role = useAuthStore((s) => s.user?.role)
 
-  const fetch = () => {
+  const fetchStats = () => {
     setLoading(true)
-    Promise.all([getVolumes(), getClusterHealth()])
-     .then(([volData, healthData]) => {
-       setVolumes(volData.volumes || [])
-       if (healthData?.nodes) {
-         const nodeMap: Record<string, number> = {}
-         healthData.nodes.forEach((n: any) => {
-           nodeMap[n.url || n.Url] = n.volumes || n.Volumes || 0
-          })
-         setNodeVolumes(nodeMap)
-         let maxV = 9999
-         if (healthData.nodes.length > 0) {
-           maxV = Math.min(...healthData.nodes.map((n: any) => n.max_configured || n.max_native || 9999))
-          }
-         setMaxPerNode(maxV)
-        }
-       })
-     .catch(() => {})
-     .finally(() => setLoading(false))
+    getVolumesStats()
+      .then((data: any) => {
+        setTotalVolumes(data.total_volumes || 0)
+        setNodeCount(data.node_count || 0)
+        setNodes(data.nodes || [])
+        setVolumes(data.volumes || [])
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
     }
 
-  useEffect(() => { fetch() }, [])
+  useEffect(() => { fetchStats() }, [])
 
-  const getAvailableSlots = (nodeUrl: string) => {
-    const used = nodeVolumes[nodeUrl] || 0
-    return Math.max(0, maxPerNode - used)
-    }
-
-  const totalUsed = Object.values(nodeVolumes).reduce((s, v) => s + v, 0)
-  const effectiveMax = maxPerNode * Object.keys(nodeVolumes).length
-  const totalFree = Math.max(0, effectiveMax - totalUsed)
-  const usagePct = effectiveMax > 0 ? Math.round((totalUsed / effectiveMax) * 100) : 0
+  const totalFree = nodes.reduce((s, n) => s + Math.max(0, n.effective_max - n.used), 0)
+  const criticalNodes = nodes.filter(n => n.status === 'critical').length
+  const warningNodes = nodes.filter(n => n.status === 'warning').length
 
   const doGrow = async () => {
     if (growCount > totalFree) {
       message.error(`Cannot grow ${growCount} volumes. Only ${totalFree} slots available across all nodes.`)
       return
-     }
-    await growVolumes({ count: growCount, collection: growCollection })
-    message.success('Volumes growing')
-    setGrowOpen(false)
-    fetch()
+      }
+    try {
+      await growVolumes({ count: growCount, collection: growCollection })
+      message.success(`${growCount} volume(s) growing...`)
+      setGrowOpen(false)
+      fetchStats()
+       } catch (e: any) {
+        const errMsg = e?.response?.data?.error || e?.message || 'Grow failed'
+        message.error(errMsg, 5)
+         }
     }
 
   const doVacuum = async () => {
-    await vacuumVolumes({ garbageThreshold: vacuumThreshold })
-    message.success('Vacuum triggered')
-    setVacuumOpen(false)
+    try {
+      await vacuumVolumes({ garbageThreshold: vacuumThreshold })
+      message.success('Vacuum triggered')
+      setVacuumOpen(false)
+      fetchStats()
+       } catch (e: any) {
+        message.error(e?.response?.data?.error || 'Vacuum failed', 5)
+         }
     }
 
-  const columns = [
-    { title: 'ID', dataIndex: 'Id', key: 'Id' },
-    { title: 'Collection', dataIndex: 'Collection', key: 'Collection' },
-     { title: 'Size', dataIndex: 'Size', key: 'Size', render: (v: number) => `${(v / 1024 / 1024).toFixed(1)} MB` },
-     { title: 'Files', dataIndex: 'FileCount', key: 'FileCount' },
-     { title: 'Replication', dataIndex: 'ReplicaPlacement', key: 'ReplicaPlacement' },
+  const statusTag = (status: string, pct: number) => {
+    if (status === 'critical') return <Tag color="red" icon={<WarningOutlined />}>{pct}% — Critical</Tag>
+    if (status === 'warning') return <Tag color="orange" icon={<WarningOutlined />}>{pct}% — Warning</Tag>
+    return <Tag color="green"><CheckCircleOutlined /> {pct}% — Healthy</Tag>
+    }
+
+  const nodeColumns = [
+     {
+      title: 'Node',
+      dataIndex: 'url',
+      key: 'url',
+      width: 220,
+      render: (url: string) => <Tooltip title={url}><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{url.replace(':8080', '')}</span></Tooltip>,
+     },
+     {
+      title: 'Location',
+      key: 'location',
+      width: 140,
+      render: (_: any, record: NodeStat) => (
+        <Space size={4}>
+          <Tag color="purple">{record.dc || '-'}</Tag>
+          <Tag>{record.rack || '-'}</Tag>
+         </Space>
+       ),
+      },
+     {
+      title: 'Usage',
+      key: 'usage',
+      width: 200,
+      render: (_: any, record: NodeStat) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Progress
+            percent={Math.min(record.pct, 100)}
+            size="small"
+            strokeColor={record.status === 'critical' ? '#ef4444' : record.status === 'warning' ? '#f59e0b' : '#22c55e'}
+            trailColor='rgba(255,255,255,0.05)'
+            format={() => `${record.used}/${record.effective_max}`}
+           />
+         </div>
+       ),
+      },
+     {
+      title: 'Status',
+      key: 'status',
+      width: 160,
+      render: (_: any, record: NodeStat) => statusTag(record.status, record.pct),
+     },
+     {
+      title: 'Free Slots',
+      key: 'free',
+      width: 120,
+      render: (_: any, record: NodeStat) => {
+        const free = Math.max(0, record.effective_max - record.used)
+        const color = record.status === 'critical' ? '#ef4444' : record.status === 'warning' ? '#f59e0b' : '#22c55e'
+        return <Text strong style={{ color }}>{free}</Text>
+       },
+      },
     ]
 
-  return (
-    <div>
-       <Space style={{ marginBottom: 16 }}>
-         <Text type="secondary">
-           Used: {totalUsed} / {effectiveMax} ({usagePct}%) &middot; Free: {totalFree} slots &middot; Limit: {maxPerNode}/node
-         </Text>
-       </Space>
+  const volColumns = [
+     { title: 'ID', dataIndex: 'Id', key: 'Id', width: 100, render: (id: string) => <Tag color="blue">{id}</Tag> },
+     { title: 'Collection', dataIndex: 'Collection', key: 'Collection', width: 120 },
+     {
+      title: 'Node',
+      dataIndex: 'ServerUrl',
+      key: 'ServerUrl',
+      width: 180,
+      render: (url: string) => <Tooltip title={url}><span style={{ fontFamily: 'monospace', fontSize: 11 }}>{url.replace(':8080', '')}</span></Tooltip>,
+     },
+     {
+      title: 'Size',
+      dataIndex: 'Size',
+      key: 'Size',
+      width: 100,
+      render: (v: number) => `${(v / 1024 / 1024).toFixed(0)} MB`,
+     },
+     { title: 'Files', dataIndex: 'FileCount', key: 'FileCount', width: 80 },
+     { title: 'Replication', dataIndex: 'ReplicaPlacement', key: 'ReplicaPlacement', width: 100, render: (v: string) => <Tag>{v || '000'}</Tag> },
+    ]
 
+  const filteredVolumes = volumes.filter(v => !searchText || v.Id?.includes(searchText) || v.Collection?.includes(searchText))
+
+  return (
+     <div>
+       {/* Stats Row */}
+       <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+         <Col xs={24} sm={12} md={6}>
+           <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.15)' }}>
+             <Text type="secondary" style={{ fontSize: 12 }}>Total Volumes</Text>
+             <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700 }}>{totalVolumes}</div>
+           </Card>
+         </Col>
+         <Col xs={24} sm={12} md={6}>
+           <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(99,102,241,0.15)' }}>
+             <Text type="secondary" style={{ fontSize: 12 }}>Nodes</Text>
+             <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700 }}>{nodeCount}</div>
+           </Card>
+         </Col>
+         <Col xs={24} sm={12} md={6}>
+           <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(34,197,94,0.2)' }}>
+             <Text type="secondary" style={{ fontSize: 12 }}>Available Slots</Text>
+             <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700, color: '#22c55e' }}>{totalFree}</div>
+           </Card>
+         </Col>
+         <Col xs={24} sm={12} md={6}>
+           <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: criticalNodes > 0 ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(99,102,241,0.15)' }}>
+             <Text type="secondary" style={{ fontSize: 12 }}>Critical Nodes</Text>
+             <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700, color: criticalNodes > 0 ? '#ef4444' : '#64748b' }}>
+               {criticalNodes > 0 && <WarningOutlined style={{ marginRight: 4 }} />}
+               {criticalNodes}
+             </div>
+           </Card>
+         </Col>
+       </Row>
+
+       {/* Per-Node Breakdown */}
+       <Card title={<><ThunderboltOutlined style={{ marginRight: 8, color: '#6366f1' }} />Per-Node Volume Distribution</>} size="small" style={{ marginBottom: 20 }}>
+         <Table columns={nodeColumns} dataSource={nodes} rowKey="url" loading={loading} pagination={false} size="small" />
+       </Card>
+
+       {/* Volume List */}
+       <Card title={<><DeleteOutlined style={{ marginRight: 8, color: '#a855f7' }} />Volume List ({filteredVolumes.length})</>} size="small" style={{ marginBottom: 20 }}>
+         <Input.Search placeholder="Search by Volume ID or Collection..." allowClear value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ maxWidth: 400, marginBottom: 12 }} />
+         <Table columns={volColumns} dataSource={filteredVolumes} rowKey="Id" loading={loading} size="small" scroll={{ x: 800 }} />
+       </Card>
+
+       {/* Actions */}
        {role === 'admin' && (
-         <Space style={{ marginBottom: 16 }}>
-           <Button icon={<PlusOutlined />} onClick={() => setGrowOpen(true)}>Grow</Button>
-           <Button icon={<DeleteOutlined />} onClick={() => setVacuumOpen(true)}>Vacuum</Button>
+         <Space>
+           <Button icon={<PlusOutlined />} type="primary" onClick={() => setGrowOpen(true)}>Grow Volumes</Button>
+           <Button icon={<DeleteOutlined />} onClick={() => setVacuumOpen(true)}>Vacuum (GC)</Button>
          </Space>
        )}
-       <Table dataSource={volumes} columns={columns} rowKey="Id" loading={loading} size="small" />
 
-       <Modal open={growOpen} title="Grow Volumes" onOk={doGrow} onCancel={() => setGrowOpen(false)}>
+       {/* Grow Modal */}
+       <Modal open={growOpen} title="Grow Volumes" onOk={doGrow} onCancel={() => { setGrowOpen(false) }} okText="Grow">
          {totalFree <= 10 && (
-           <Alert type="warning" showIcon style={{ marginBottom: 12 }}
-             message={`Only ${totalFree} volume slots remaining`}
-            />
-          )}
-         <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-           Max {maxPerNode} volumes per node &middot; {totalFree} slots available
-         </Text>
-         <InputNumber min={1} max={totalFree} value={growCount} onChange={(v) => setGrowCount(v || 1)} style={{ width: '100%' }} placeholder="Count" />
-         <Input value={growCollection} onChange={(e) => setGrowCollection(e.target.value)} placeholder="Collection (optional)" style={{ marginTop: 8 }} />
+           <div style={{ marginBottom: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 6, padding: 10 }}>
+             <WarningOutlined style={{ color: '#f59e0b', marginRight: 6 }} />
+             <Text style={{ color: '#f59e0b' }}>Only {totalFree} volume slots remaining across all nodes</Text>
+           </div>
+         )}
+         <div style={{ marginBottom: 12, fontSize: 13, color: '#94a3b8' }}>
+           Max {nodes.length > 0 ? Math.min(...nodes.map(n => n.effective_max))} volumes per node · {totalFree} slots available
+         </div>
+         <div style={{ marginBottom: 8 }}>
+           <Text style={{ display: 'block', marginBottom: 4 }}>Count:</Text>
+           <InputNumber min={1} max={totalFree || 999} value={growCount} onChange={(v) => setGrowCount(v || 1)} style={{ width: '100%' }} />
+         </div>
+         <div>
+           <Text style={{ display: 'block', marginBottom: 4 }}>Collection (optional):</Text>
+           <Input value={growCollection} onChange={(e) => setGrowCollection(e.target.value)} placeholder="e.g., default, backups" />
+         </div>
        </Modal>
 
-       <Modal open={vacuumOpen} title="Vacuum (Garbage Collection)" onOk={doVacuum} onCancel={() => setVacuumOpen(false)}>
-         <InputNumber min={0} max={1} step={0.1} value={vacuumThreshold} onChange={(v) => setVacuumThreshold(v || 0.3)} style={{ width: '100%' }} placeholder="Garbage Threshold" />
+       {/* Vacuum Modal */}
+       <Modal open={vacuumOpen} title="Vacuum (Garbage Collection)" onOk={doVacuum} onCancel={() => setVacuumOpen(false)} okText="Trigger GC">
+         <div style={{ marginBottom: 12, fontSize: 13, color: '#94a3b8' }}>
+           Removes files from volumes where garbage ratio exceeds threshold.
+         </div>
+         <div>
+           <Text style={{ display: 'block', marginBottom: 4 }}>Garbage Threshold: {vacuumThreshold}</Text>
+           <InputNumber min={0} max={1} step={0.1} value={vacuumThreshold} onChange={(v) => setVacuumThreshold(v || 0.3)} style={{ width: '100%' }} />
+         </div>
        </Modal>
      </div>
    )

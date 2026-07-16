@@ -123,6 +123,11 @@ export async function getVolumes(params?: Record<string, string>): Promise<{ vol
   return { volumes: Array.isArray(data?.volumes) ? data.volumes : [], total: data?.total || 0 }
 }
 
+export async function getVolumesStats() {
+  const { data } = await api.get('/volumes/stats')
+  return data
+}
+
 export async function getVolume(id: number): Promise<VolumeDetail> {
   const { data } = await api.get(`/volumes/${id}`)
   return data

@@ -10,6 +10,71 @@ router = APIRouter(prefix="/volumes", tags=["volumes"])
 logger = get_logger("volumes")
 
 
+@router.get("/stats")
+async def volume_stats():
+    client = get_seaweed_client()
+    try:
+        resp = await client.master_get("/vol/status?pretty=y")
+        data = resp.json()
+        volumes = []
+        node_map: dict[str, dict] = {}
+        for dc_name, dc in data.get("Volumes", {}).get("DataCenters", {}).items():
+            for rack_name, rack in dc.items():
+                for node_url, node_vols in rack.items():
+                    if isinstance(node_vols, list):
+                        node_map[node_url] = {"url": node_url, "dc": dc_name, "rack": rack_name, "count": len(node_vols), "volumes": []}
+                        for v in node_vols:
+                            v["ServerUrl"] = node_url
+                            v["Collection"] = v.get("Collection", "")
+                            volumes.append(v)
+                            node_map[node_url]["volumes"].append(v)
+        raw_limits = await get_setting("node_volume_limits", "{}")
+        node_limits: dict[str, int] = {}
+        if raw_limits and raw_limits.strip() != '{}':
+            try:
+                node_limits = json.loads(raw_limits)
+            except Exception:
+                pass
+        resp2 = await client.master_get("/dir/status?pretty=y")
+        topo = resp2.json().get("Topology", {})
+        node_details = []
+        total_volumes = 0
+        total_native_max = 0
+        for dc in topo.get("DataCenters", []):
+            for rack in dc.get("Racks", []):
+                for node in rack.get("DataNodes", []):
+                    url = node.get("Url", "")
+                    native_max = node.get("Max", 0)
+                    configured = node_limits.get(url, 9999)
+                    effective_max = min(native_max, configured) if native_max > 0 else configured
+                    count = node_map.get(url, {}).get("count", 0)
+                    total_volumes += count
+                    total_native_max += native_max
+                    pct = round((count / effective_max) * 100) if effective_max > 0 else 0
+                    status = "critical" if pct > 85 else "warning" if pct > 60 else "healthy"
+                    node_details.append({
+                        "url": url,
+                        "dc": dc.get("Id", ""),
+                        "rack": rack.get("Id", ""),
+                        "used": count,
+                        "effective_max": effective_max,
+                        "native_max": native_max,
+                        "configured_limit": configured,
+                        "pct": pct,
+                        "status": status,
+                    })
+        return {
+            "total_volumes": len(volumes),
+            "total_native_max": total_native_max,
+            "node_count": len(node_details),
+            "nodes": node_details,
+            "volumes": volumes,
+        }
+    except Exception:
+        logger.error("volume_stats_failed", exc_info=True)
+        return {"total_volumes": 0, "total_native_max": 0, "node_count": 0, "nodes": [], "volumes": []}
+
+
 @router.get("")
 async def list_volumes():
     client = get_seaweed_client()
