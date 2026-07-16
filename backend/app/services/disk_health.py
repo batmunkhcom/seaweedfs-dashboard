@@ -150,39 +150,30 @@ class DiskHealthService:
                         finally:
                             ssh.close()
                     basic, usage = await loop.run_in_executor(None, _basic_scan)
+                    db = await get_db()
                     for b in basic.get("blockdevices", []):
-                        if b.get("type") == "disk":
-                            children = b.get("children", [])
-                            has_data_mount = (
-                                ((b.get("mountpoint") or "").startswith("/data")) or
-                                any((c.get("mountpoint") or "").startswith("/data") for c in children)
-                            )
-                            size_bytes = b.get("size", 0)
-                            if not has_data_mount and size_bytes < 100 * 1024 * 1024 * 1024:
-                                continue
-                            is_data_disk = (b.get("mountpoint") or "").startswith("/data") or any(
-                                (c.get("mountpoint") or "").startswith("/data") for c in children
-                            )
-                            smart_json = {"model_name": "Virtual Disk", "user_capacity": {"bytes": size_bytes},
-                                         "smart_status": {"passed": True}, "temperature": {"current": None}}
-                            if is_data_disk and usage:
-                                smart_json["usage"] = usage
-                            await db.execute(
-                                "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
-                                (host, f"/dev/{b['name']}", time.time(), json.dumps(smart_json)),
-                            )
-                            size_bytes = b.get("size", 0)
-                            if not has_data_mount and size_bytes < 100 * 1024 * 1024 * 1024:
-                                continue
-                            is_data_disk = any(c.get("mountpoint", "") == "/data/dc03" for c in children)
-                            smart_json = {"model_name": "Virtual Disk", "user_capacity": {"bytes": size_bytes},
-                                         "smart_status": {"passed": True}, "temperature": {"current": None}}
-                            if is_data_disk and usage:
-                                smart_json["usage"] = usage
-                            await db.execute(
-                                "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
-                                (host, f"/dev/{b['name']}", time.time(), json.dumps(smart_json)),
-                            )
+                        if b.get("type") != "disk":
+                            continue
+                        children = b.get("children", [])
+                        has_data_mount = (
+                            ((b.get("mountpoint") or "").startswith("/data")) or
+                            any((c.get("mountpoint") or "").startswith("/data") for c in children)
+                        )
+                        size_bytes = b.get("size", 0)
+                        if not has_data_mount and size_bytes < 100 * 1024 * 1024 * 1024:
+                            continue
+                        smart_json = {
+                            "model_name": "Virtual Disk",
+                            "user_capacity": {"bytes": size_bytes},
+                            "smart_status": {"passed": True},
+                            "temperature": {"current": None},
+                        }
+                        if has_data_mount and usage:
+                            smart_json["usage"] = usage
+                        await db.execute(
+                            "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
+                            (host, f"/dev/{b['name']}", time.time(), json.dumps(smart_json)),
+                        )
                     await db.commit()
                     logger.info("disk_health_basic_scan", host=host, devices=sum(1 for b in basic.get("blockdevices", []) if b.get("type") == "disk"))
             except Exception:
