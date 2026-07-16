@@ -79,50 +79,47 @@ export default function FilerPage() {
     })),
   ]
 
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const confirmDelete = async (entryPath: string) => {
+    setDeleting(true)
+    try {
+      await deleteFilerEntry(entryPath)
+      message.success('Deleted')
+      fetch()
+    } catch {
+      message.error('Delete failed')
+    }
+    setDeleting(false)
+    setDeleteTarget(null)
+  }
+
   const doDelete = (entryPath: string) => {
-    Modal.confirm({
-      title: 'Delete this entry?',
-      icon: <ExclamationCircleOutlined />,
-      content: `Are you sure you want to delete "${entryPath}"?`,
-      okText: 'Delete',
-      okType: 'danger',
-      cancelText: 'Cancel',
-      onOk: async () => {
-        try {
-          await deleteFilerEntry(entryPath)
-          message.success('Deleted')
-          fetch()
-        } catch {
-          message.error('Delete failed')
-        }
-      },
-    })
+    setDeleteTarget(entryPath)
   }
 
   const batchDelete = () => {
     if (selectedRowKeys.length === 0) return
-    const items = selectedRowKeys.map((k) => String(k)).join(', ')
-    Modal.confirm({
-      title: `Delete ${selectedRowKeys.length} entries?`,
-      icon: <ExclamationCircleOutlined />,
-      content: `Are you sure you want to delete: ${items}?`,
-      okText: 'Delete All',
-      okType: 'danger',
-      cancelText: 'Cancel',
-      onOk: async () => {
-        let ok = 0
-        let fail = 0
-        for (const key of selectedRowKeys) {
-          const entry = entries.find((e) => e.name === String(key))
-          const entryPath = entry?.path || `${path === '/' ? '' : path}/${String(key)}`
-          try { await deleteFilerEntry(entryPath); ok++ } catch { fail++ }
-        }
-        if (fail > 0) message.warning(`${ok} deleted, ${fail} failed`)
-        else message.success(`${ok} entries deleted`)
-        setSelectedRowKeys([])
-        fetch()
-      },
-    })
+    setBatchDeleteOpen(true)
+  }
+
+  const confirmBatchDelete = async () => {
+    setDeleting(true)
+    let ok = 0
+    let fail = 0
+    for (const key of selectedRowKeys) {
+      const entry = entries.find((e) => e.name === String(key))
+      const entryPath = entry?.path || `${path === '/' ? '' : path}/${String(key)}`
+      try { await deleteFilerEntry(entryPath); ok++ } catch { fail++ }
+    }
+    if (fail > 0) message.warning(`${ok} deleted, ${fail} failed`)
+    else message.success(`${ok} entries deleted`)
+    setSelectedRowKeys([])
+    setBatchDeleteOpen(false)
+    setDeleting(false)
+    fetch()
   }
 
   const doMkdir = async () => {
@@ -313,6 +310,30 @@ export default function FilerPage() {
 
       <Modal open={mkdirOpen} title="Create Folder" onOk={doMkdir} onCancel={() => setMkdirOpen(false)}>
         <Input value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder="Folder name" />
+      </Modal>
+
+      <Modal
+        open={!!deleteTarget}
+        title={<><ExclamationCircleOutlined style={{ color: '#ff4d4f', marginRight: 8 }} /> Delete Entry</>}
+        onOk={() => confirmDelete(deleteTarget!)}
+        onCancel={() => setDeleteTarget(null)}
+        okText="Delete"
+        okType="danger"
+        confirmLoading={deleting}
+      >
+        Are you sure you want to delete &quot;{deleteTarget}&quot;?
+      </Modal>
+
+      <Modal
+        open={batchDeleteOpen}
+        title={<><ExclamationCircleOutlined style={{ color: '#ff4d4f', marginRight: 8 }} /> Delete {selectedRowKeys.length} Entries</>}
+        onOk={confirmBatchDelete}
+        onCancel={() => setBatchDeleteOpen(false)}
+        okText="Delete All"
+        okType="danger"
+        confirmLoading={deleting}
+      >
+        Are you sure you want to delete: {selectedRowKeys.join(', ')}?
       </Modal>
 
       <Modal
