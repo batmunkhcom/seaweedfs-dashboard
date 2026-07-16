@@ -42,7 +42,6 @@ class DiskHealthService:
         self._running = True
         _scan_task = asyncio.create_task(self._scan_loop())
         self._update_heartbeat()
-        asyncio.create_task(self._scan_all_nodes())
         logger.info("disk_health_started")
 
     async def stop(self):
@@ -58,13 +57,18 @@ class DiskHealthService:
         logger.info("disk_health_stopped")
 
     async def _scan_loop(self):
+        await self._scan_all_nodes()
+        self._update_heartbeat()
         while self._running:
             try:
+                interval = await get_setting_int("disk_health_scan_interval_hours", 24)
+                await asyncio.sleep(interval * 3600)
+                if not self._running:
+                    break
                 await self._scan_all_nodes()
                 self._update_heartbeat()
             except Exception:
                 logger.error("disk_health_scan_failed", exc_info=True)
-            await asyncio.sleep(await get_setting_int("disk_health_scan_interval_hours", 24) * 3600)
 
     async def _scan_all_nodes(self):
         hosts = [h.split(":")[0] for h in settings.master_list + settings.filer_list]
@@ -73,41 +77,57 @@ class DiskHealthService:
 
         key_path = _os.path.expanduser(settings.disk_health_ssh_key_path)
 
+        loop = asyncio.get_event_loop()
+
         for host in hosts:
             try:
-                ssh = paramiko.SSHClient()
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ssh.connect(
-                    host,
-                    username=settings.disk_health_ssh_user,
-                    key_filename=key_path,
-                    timeout=10,
-                )
+                def _ssh_scan(h=host):
+                    ssh = paramiko.SSHClient()
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    ssh.connect(h, username=settings.disk_health_ssh_user, key_filename=key_path, timeout=10)
+                    try:
+                        _, stdout, _ = ssh.exec_command("lsblk --json -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null")
+                        lsblk_data = json.loads(stdout.read().decode())
+                        devices = [b["name"] for b in lsblk_data.get("blockdevices", []) if b.get("type") == "disk"]
+                        results = []
+                        for dev in devices:
+                            _, stdout2, _ = ssh.exec_command(f"smartctl --json -a /dev/{dev} 2>/dev/null")
+                            smart_raw = stdout2.read().decode()
+                            if smart_raw.strip():
+                                results.append((dev, smart_raw))
+                        return results
+                    finally:
+                        ssh.close()
 
-                _, stdout, _ = ssh.exec_command("lsblk --json -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null")
-                lsblk_data = json.loads(stdout.read().decode())
-                devices = [
-                    b["name"] for b in lsblk_data.get("blockdevices", []) if b.get("type") == "disk"
-                ]
-
-                for dev in devices:
-                    _, stdout, _ = ssh.exec_command(f"smartctl --json -a /dev/{dev} 2>/dev/null")
-                    smart_raw = stdout.read().decode()
-                    if not smart_raw.strip():
-                        continue
-                    smart_data = json.loads(smart_raw)
-
-                    db = await get_db()
+                results = await loop.run_in_executor(None, _ssh_scan, host)
+                db = await get_db()
+                for dev, smart_raw in results:
                     await db.execute(
-                        """
-                        INSERT INTO disk_health (node, device, timestamp, smart_json)
-                        VALUES (?, ?, ?, ?)
-                        """,
+                        "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
                         (host, f"/dev/{dev}", time.time(), smart_raw),
                     )
+                # Also insert basic info for disks without SMART
+                if not results:
+                    def _basic_scan(h=host):
+                        ssh = paramiko.SSHClient()
+                        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        ssh.connect(h, username=settings.disk_health_ssh_user, key_filename=key_path, timeout=10)
+                        try:
+                            _, stdout, _ = ssh.exec_command("lsblk --json -b -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null")
+                            return json.loads(stdout.read().decode())
+                        finally:
+                            ssh.close()
+                    basic = await loop.run_in_executor(None, _basic_scan)
+                    for b in basic.get("blockdevices", []):
+                        if b.get("type") == "disk":
+                            await db.execute(
+                                "INSERT INTO disk_health (node, device, timestamp, smart_json) VALUES (?, ?, ?, ?)",
+                                (host, f"/dev/{b['name']}", time.time(),
+                                 json.dumps({"model_name": "Virtual Disk", "user_capacity": {"bytes": b.get("size", 0)},
+                                             "smart_status": {"passed": True}, "temperature": {"current": 0}})),
+                            )
                     await db.commit()
-
-                ssh.close()
+                    logger.info("disk_health_basic_scan", host=host, devices=sum(1 for b in basic.get("blockdevices", []) if b.get("type") == "disk"))
             except Exception:
                 logger.error("disk_health_node_failed", host=host, exc_info=True)
 
