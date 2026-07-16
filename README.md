@@ -129,17 +129,9 @@ Browser                    Backend (BFF)                SeaweedFS Cluster
 - Login error messages displayed inline
 - Protected routes with admin guards
 
-### Infrastructure Tuning
-- **Sysctl hardening** — TCP optimization, memory management, file descriptor limits
-- **IPv6 disabled** — eliminates AF_VSOCK errors on non-VM deployments
-- **Log rotation** — journald (500MB max), syslog/auth.log/dpkg/apt auto-rotate
-- **MOTD banner** — mBm ASCII art logo with live server stats on login
-- **Node volume limits** — per-server capacity control, inline editing on cluster cards
-
 ### Developer Tools
 - **API documentation page** — full endpoint reference with code examples
 - **manage.sh** — dev/up/stop/restart/build/status/lint/test/logs/info commands
-- **Template preparation** — `prepare-template.sh` for cloning systems (resets IDs, keys, logs)
 
 ## Advantages
 
@@ -155,7 +147,6 @@ Browser                    Backend (BFF)                SeaweedFS Cluster
 | **Backup/Restore** | Manual commands | UI-driven snapshots, sync triggers, job tracking |
 | **Security** | Basic auth | CSRF protection, rate limiting, session management, audit trail |
 | **Multi-master** | Manual failover | Automatic failover with audit logging |
-| **Infrastructure** | No tuning | Sysctl hardening, log rotation, template cloning support |
 
 ### Why use this dashboard?
 
@@ -163,8 +154,7 @@ Browser                    Backend (BFF)                SeaweedFS Cluster
 2. **Per-node capacity planning** — set custom volume limits per server based on actual disk capacity
 3. **Real-time visibility** — SSE stream keeps everything fresh without polling
 4. **Production-hardened** — CSRF, rate limiting, audit logging, structured JSON logs
-5. **Template-ready** — clone systems with `prepare-template.sh`, zero manual reconfiguration
-6. **Open source** — Apache 2.0, built for production at mBm TECHNOLOGY dc03 cluster
+5. **Open source** — Apache 2.0, built for production at mBm TECHNOLOGY dc03 cluster
 
 ```bash
 # 1. Backend
@@ -223,13 +213,8 @@ See `AGENTS.md` for full systemd unit and Nginx config examples.
 ### Additional Features
 - [x] Per-node volume limits with inline editing on cluster cards
 - [x] Volume growth enforcement per configured node limit
-- [x] Sysctl hardening (TCP, memory, file descriptors)
-- [x] IPv6 disabled for non-VM deployments
-- [x] Log rotation (journald 500MB, syslog/auth.log/dpkg/apt auto-rotate)
-- [x] MOTD banner with mBm ASCII art and live server stats
 - [x] API documentation page with full endpoint reference
 - [x] manage.sh — dev/up/stop/restart/build/status/lint/test/logs/info
-- [x] Template preparation script for system cloning
 
 ### Future (v2+)
 - [ ] Phase 12 — Prometheus metrics integration
