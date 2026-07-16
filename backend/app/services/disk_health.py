@@ -61,18 +61,18 @@ class DiskHealthService:
         return {"ok": True}
 
     async def _scan_loop(self):
-        await self._scan_all_nodes()
-        self._update_heartbeat()
         while self._running:
             try:
-                interval = await get_setting_int("disk_health_scan_interval_hours", 24)
-                await asyncio.sleep(interval * 3600)
-                if not self._running:
-                    break
                 await self._scan_all_nodes()
                 self._update_heartbeat()
             except Exception:
                 logger.error("disk_health_scan_failed", exc_info=True)
+            try:
+                interval = await get_setting_int("disk_health_scan_interval_hours", 24)
+            except Exception:
+                logger.error("disk_health_interval_load_failed", exc_info=True)
+                interval = 24
+            await asyncio.sleep(interval * 3600)
 
     async def _scan_all_nodes(self):
         hosts = [h.split(":")[0] for h in settings.master_list + settings.filer_list]
