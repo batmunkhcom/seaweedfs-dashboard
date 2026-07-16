@@ -68,35 +68,44 @@ Browser                    Backend (BFF)                SeaweedFS Cluster
 - Topology tree — DC → Rack → Node drill-down
 - Master server status — leader detection, peer list, response times
 - Volume server grid — disk usage, free slots, health per node
+- **Per-node volume limits** — set custom max volumes per server with inline editing on cluster cards
+- **Volume growth enforcement** — grow blocked automatically when any node reaches its configured limit
 - Multi-master auto-failover with audit logging
 
 ### Volume & Collection Operations
 - Volume list with search, filter, sort, detail drawer
 - Volume grow wizard and vacuum (garbage collection) trigger
 - Collection browser with delete support
+- **Per-node capacity planning** — calculate volumes per node (e.g. 1.8TB / 30GB ≈ 60 volumes), set custom limits per server
 
 ### Filer File Browser
 - Directory navigation with breadcrumbs and pagination
-- File upload with configurable size/type limits
-- Download, delete, create folders
-- File metadata viewer
+- File upload with drag-drop, multi-file, live progress, streaming chunks
+- Download, delete, batch delete with confirmation modals
+- Create folders, file metadata viewer
+- Upload validation (configurable size/type limits)
+- Operator write mode with folder/file icons
 
 ### S3 Object Store
 - Bucket CRUD — create, list, set quota, delete
-- User management — generate access/secret key pairs
+- User management — generate access/secret key pairs, per-user bucket policies
+- **IAM sync** — auto-sync IAM users/policies to S3 gateway nodes via SSH
 - Policy editor — JSON editor with syntax validation
-- IAM identity configuration
+- Readonly/readwrite permissions, masked secrets with admin password verification
+- Audit logging for all S3 operations
 
 ### Backup & Restore
 - Filer metadata sync trigger
 - Snapshot list, create, delete
 - Async backup status monitoring
+- Worker management — job history, detect/execute triggers
 
 ### Real-time Monitoring
 - Live KPI cards — volumes, files, total size, free space
 - Disk usage pie chart per server
 - Volume growth trend (area chart, configurable time range)
 - SSE stream with automatic reconnect
+- Dashboard stats aggregated from multiple masters/filers
 
 ### Alert Engine
 - Thresholds: disk usage, node offline, garbage ratio, readonly volumes
@@ -104,21 +113,58 @@ Browser                    Backend (BFF)                SeaweedFS Cluster
 - Deduplication — one alert per issue
 - Configurable via settings page
 
-### Disk Health (optional extension)
-- S.M.A.R.T. data via SSH (`smartctl --json`)
-- Temperature, wear level, reallocated sectors
-- Per-disk detail pages with trend charts
+### Disk Health (S.M.A.R.T. monitoring)
+- **Lifespan estimation** — power-on hours, wear %, TBW, reallocated sectors, age warnings
+- S.M.A.R.T. data via SSH (`smartctl --json`) with fallback to `lsblk`
+- Temperature, wear level, reallocated sector alerts
+- Per-disk detail pages with trend history
+- Scheduled auto-scan (configurable interval)
 - Disabled by default — enable via `DISK_HEALTH_ENABLED=true`
 
 ### Security
 - Session-based authentication (admin / read-only roles)
 - CSRF protection on all state-changing requests
-- Rate limiting (5 failed logins / 15 min per IP)
+- Rate limiting (20 failed logins / 5 min per IP)
 - Structured JSON logging with audit trail
+- Login error messages displayed inline
+- Protected routes with admin guards
 
----
+### Infrastructure Tuning
+- **Sysctl hardening** — TCP optimization, memory management, file descriptor limits
+- **IPv6 disabled** — eliminates AF_VSOCK errors on non-VM deployments
+- **Log rotation** — journald (500MB max), syslog/auth.log/dpkg/apt auto-rotate
+- **MOTD banner** — mBm ASCII art logo with live server stats on login
+- **Node volume limits** — per-server capacity control, inline editing on cluster cards
 
-## Quick Start
+### Developer Tools
+- **API documentation page** — full endpoint reference with code examples
+- **manage.sh** — dev/up/stop/restart/build/status/lint/test/logs/info commands
+- **Template preparation** — `prepare-template.sh` for cloning systems (resets IDs, keys, logs)
+
+## Advantages
+
+| Feature | Default SeaweedFS UI | This Dashboard |
+|---------|---------------------|----------------|
+| **Cluster overview** | Basic volume count | Full topology tree, per-node health, capacity planning |
+| **Real-time updates** | Manual refresh only | SSE push — instant alerts, no polling overhead |
+| **Volume management** | Limited grow/vacuum | Per-node limits, inline editing, growth enforcement |
+| **S3 administration** | CLI only | Full UI — buckets, users, policies, IAM sync via SSH |
+| **File browser** | Minimal listing | Breadcrumbs, drag-drop upload, batch delete, metadata viewer |
+| **Disk health** | Not available | S.M.A.R.T. monitoring, lifespan estimation, temperature trends |
+| **Alerts** | None | Configurable thresholds, lifecycle management, deduplication |
+| **Backup/Restore** | Manual commands | UI-driven snapshots, sync triggers, job tracking |
+| **Security** | Basic auth | CSRF protection, rate limiting, session management, audit trail |
+| **Multi-master** | Manual failover | Automatic failover with audit logging |
+| **Infrastructure** | No tuning | Sysctl hardening, log rotation, template cloning support |
+
+### Why use this dashboard?
+
+1. **Single pane of glass** — cluster health, volumes, files, S3, backups, disk health all in one place
+2. **Per-node capacity planning** — set custom volume limits per server based on actual disk capacity
+3. **Real-time visibility** — SSE stream keeps everything fresh without polling
+4. **Production-hardened** — CSRF, rate limiting, audit logging, structured JSON logs
+5. **Template-ready** — clone systems with `prepare-template.sh`, zero manual reconfiguration
+6. **Open source** — Apache 2.0, built for production at mBm TECHNOLOGY dc03 cluster
 
 ```bash
 # 1. Backend
@@ -162,24 +208,28 @@ See `AGENTS.md` for full systemd unit and Nginx config examples.
 
 ## Development Roadmap
 
-### Foundation
-- [ ] Phase 1 — Backend skeleton, config, logging, SeaweedFS client with failover, DB, middleware, frontend scaffold
-- [ ] Phase 2 — Auth system (login, logout, CSRF, rate limit, admin guard)
-- [ ] Phase 3 — Layout, navigation, sidebar, routing, dark/light theme
+### ✅ Completed (v0.83)
+- [x] Phase 1 — Backend skeleton, config, logging, SeaweedFS client with failover, DB, middleware, frontend scaffold
+- [x] Phase 2 — Auth system (login, logout, CSRF, rate limit, admin guard)
+- [x] Phase 3 — Layout, navigation, sidebar, routing, dark/light theme, mobile responsive
+- [x] Phase 4 — Dashboard overview with KPI cards, SSE real-time stream, charts, alert panel
+- [x] Phase 5 — Historical data via snapshot service (SQLite time-series)
+- [x] Phase 6 — Alert engine with configurable thresholds and lifecycle management
+- [x] Phase 7 — Topology tree, master/volume/filer server tables with search/filter/sort
+- [x] Phase 8 — Volume management (list, grow, vacuum), collections, filer browser with upload validation
+- [x] Phase 9 — S3 buckets/users/policies CRUD, backup & restore, worker management, IAM sync
+- [x] Phase 10 — Disk health (S.M.A.R.T. via SSH, temperature/wear/realloc alerts, lifespan estimation)
 
-### Core Dashboard
-- [ ] Phase 4 — Dashboard overview with 6 KPI cards, SSE real-time stream, charts, alert panel
-- [ ] Phase 5 — Historical data via snapshot service (SQLite time-series)
-- [ ] Phase 6 — Alert engine with configurable thresholds and lifecycle management
-
-### Cluster Intelligence
-- [ ] Phase 7 — Topology tree, master/volume/filer server tables with search
-- [ ] Phase 8 — Volume management (list, grow, vacuum), collections, filer browser with upload validation
-- [ ] Phase 9 — S3 buckets/users/policies, backup & restore, worker management
-
-### Extensions
-- [ ] Phase 10 — Disk health (S.M.A.R.T. via SSH, temperature/wear/realloc alerts)
-- [ ] Phase 11 — Polish, tests (pytest + Vitest + Playwright), Docker deployment, documentation
+### Additional Features
+- [x] Per-node volume limits with inline editing on cluster cards
+- [x] Volume growth enforcement per configured node limit
+- [x] Sysctl hardening (TCP, memory, file descriptors)
+- [x] IPv6 disabled for non-VM deployments
+- [x] Log rotation (journald 500MB, syslog/auth.log/dpkg/apt auto-rotate)
+- [x] MOTD banner with mBm ASCII art and live server stats
+- [x] API documentation page with full endpoint reference
+- [x] manage.sh — dev/up/stop/restart/build/status/lint/test/logs/info
+- [x] Template preparation script for system cloning
 
 ### Future (v2+)
 - [ ] Phase 12 — Prometheus metrics integration

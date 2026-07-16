@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 import json
 
 from app.services.seaweed_client import get_seaweed_client
-from app.settings_service import get_setting_int, update_setting
+from app.settings_service import get_setting, get_setting_int, update_setting
 from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
