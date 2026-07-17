@@ -7,15 +7,10 @@ from app.config import settings
 from app.database import get_db
 from app.logging_config import get_logger
 from app.settings_service import get_setting, get_setting_int
-from app.services.backup_s3 import (
-    _aws_s3_upload,
-    _aws_s3_download,
-    _aws_s3_delete,
-    _aws_s3_list,
-    cleanup_old_backups,
-)
 
 logger = get_logger("backup")
+
+BACKUP_DIR = Path("/srv/seaweed-backups")
 
 
 async def _get_filer_hosts() -> list[str]:
@@ -51,6 +46,10 @@ async def _ssh_exec(host: str, cmd: str, timeout: int = 120) -> tuple[str, str, 
     return result["stdout"], result["stderr"], result["exit_code"]
 
 
+async def _ensure_backup_dir():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+
 async def _cleanup_local_temp(path: str):
     try:
         Path(path).unlink(missing_ok=True)
@@ -63,22 +62,21 @@ async def create_backup(name: str | None = None) -> dict:
     if enabled.lower() != "true":
         return {"ok": False, "error": "Backup is disabled. Enable in runtime_settings."}
 
+    await _ensure_backup_dir()
+
     filer_hosts = await _get_filer_hosts()
     db_path = await get_setting("backup_filer_db_path", "/data/dc03/filer/filerldb2")
 
     now = datetime.now(timezone.utc)
     ts = now.strftime("%Y%m%d_%H%M%S")
     backup_name = name or f"backup-{ts}"
-    s3_key = f"{backup_name}.tar.gz"
-    local_path = f"/tmp/{backup_name}.tar.gz"
-
-    await _cleanup_local_temp(local_path)
+    backup_file = BACKUP_DIR / f"{backup_name}.tar.gz"
 
     db = await get_db()
     started_at = now.isoformat()
     cursor = await db.execute(
         "INSERT INTO backup_snapshots (name, s3_key, filer_hosts, status, created_at) VALUES (?, ?, ?, 'running', ?)",
-        (backup_name, s3_key, json.dumps(filer_hosts), started_at),
+        (backup_name, str(backup_file), json.dumps(filer_hosts), started_at),
     )
     await db.commit()
     sync_id = cursor.lastrowid
@@ -101,10 +99,10 @@ async def create_backup(name: str | None = None) -> dict:
 
     for host in filer_hosts:
         try:
-            tmp_remote = f"/tmp/{backup_name}.tar.gz"
+            tmp_remote = f"/tmp/filer-backup-{ts}.tar.gz"
             await _ssh_exec(host, f"tar czf {tmp_remote} -C {db_path} .")
             _, stderr2, exit_code2 = await _ssh_exec(
-                host, f"scp {tmp_remote} root@172.16.0.10:{local_path}"
+                host, f"scp {tmp_remote} root@172.16.0.10:{backup_file}"
             )
             if exit_code2 != 0:
                 raise RuntimeError(f"SCP failed: {stderr2[:200]}")
@@ -115,24 +113,9 @@ async def create_backup(name: str | None = None) -> dict:
             error_msg = f"{error_msg or ''} {host}: {e}"
             logger.error("backup_filer_failed", host=host, exc_info=True)
 
-    upload_ok = False
-    if total_bytes > 0:
-        try:
-            uploaded = await _aws_s3_upload(local_path, s3_key)
-            if uploaded:
-                upload_ok = True
-                results["s3"] = "uploaded"
-            else:
-                results["s3"] = "upload_failed"
-        except Exception as e:
-            results["s3"] = str(e)[:200]
-            error_msg = f"{error_msg or ''} S3 upload: {e}"
-            logger.error("backup_s3_upload_failed", exc_info=True)
-
-    await _cleanup_local_temp(local_path)
-
     finished_at = datetime.now(timezone.utc).isoformat()
-    status = "uploaded" if upload_ok else ("failed" if error_msg else "partial")
+    ok = all(v == "scp_ok" for v in results.values()) and bool(total_bytes)
+    status = "uploaded" if ok else ("failed" if error_msg else "partial")
 
     await db.execute(
         "UPDATE backup_snapshots SET size_bytes=?, status=?, created_at=? WHERE id=?",
@@ -143,10 +126,10 @@ async def create_backup(name: str | None = None) -> dict:
     asyncio.create_task(cleanup_old_backups())
 
     return {
-        "ok": upload_ok,
+        "ok": ok,
         "syncId": str(sync_id),
         "name": backup_name,
-        "s3Key": s3_key,
+        "s3Key": str(backup_file),
         "bytesSynced": total_bytes,
         "results": results,
         "finishedAt": finished_at,
@@ -154,6 +137,8 @@ async def create_backup(name: str | None = None) -> dict:
 
 
 async def list_backups() -> list[dict]:
+    await _ensure_backup_dir()
+
     db = await get_db()
     cursor = await db.execute(
         "SELECT id, name, s3_key, size_bytes, filer_hosts, status, created_at "
@@ -165,34 +150,24 @@ async def list_backups() -> list[dict]:
         d = dict(row)
         d["filer_hosts"] = json.loads(d["filer_hosts"]) if isinstance(d["filer_hosts"], str) else d["filer_hosts"]
         d["size"] = d["size_bytes"]
+
+        file_path = Path(d["s3_key"])
+        if file_path.exists():
+            actual_size = file_path.stat().st_size
+            if d["size"] == 0:
+                await db.execute("UPDATE backup_snapshots SET size_bytes=? WHERE id=?", (actual_size, d["id"]))
+                d["size"] = actual_size
+        else:
+            d["status"] = "missing"
+
         backups.append(d)
-
-    s3_items = await _aws_s3_list("")
-    s3_names = {item["key"].replace(".tar.gz", "") for item in s3_items}
-
-    for backup in backups:
-        if backup["name"] not in s3_names and backup["status"] == "uploaded":
-            backup["status"] = "missing_s3"
-
-    orphaned = s3_names - {b["name"] for b in backups}
-    for name in orphaned:
-        for item in s3_items:
-            if item["key"] == f"{name}.tar.gz":
-                backups.append({
-                    "id": 0,
-                    "name": name,
-                    "s3_key": f"{name}.tar.gz",
-                    "size_bytes": item["size"],
-                    "filer_hosts": [],
-                    "status": "orphaned",
-                    "created_at": item["date"],
-                    "size": item["size"],
-                })
 
     return backups
 
 
 async def delete_backup(name: str) -> bool:
+    await _ensure_backup_dir()
+
     db = await get_db()
     cursor = await db.execute(
         "SELECT s3_key, id FROM backup_snapshots WHERE name=?", (name,)
@@ -201,10 +176,13 @@ async def delete_backup(name: str) -> bool:
     if not row:
         return False
 
-    await _aws_s3_delete(row["s3_key"])
+    file_path = Path(row["s3_key"])
+    if file_path.exists():
+        file_path.unlink()
+        logger.info("backup_deleted", name=name, path=str(file_path))
+
     await db.execute("DELETE FROM backup_snapshots WHERE name=?", (name,))
     await db.commit()
-    logger.info("backup_deleted", name=name)
     return True
 
 
@@ -213,32 +191,23 @@ async def restore_backup(name: str) -> dict:
     if enabled.lower() != "true":
         return {"ok": False, "error": "Backup is disabled"}
 
+    await _ensure_backup_dir()
+
     filer_hosts = await _get_filer_hosts()
     db_path = await get_setting("backup_filer_db_path", "/data/dc03/filer/filerldb2")
 
-    s3_key = f"{name}.tar.gz"
-    local_path = f"/tmp/{s3_key}"
-
-    await _cleanup_local_temp(local_path)
-
-    try:
-        downloaded = await _aws_s3_download(s3_key, local_path)
-        if not downloaded:
-            raise FileNotFoundError(f"Backup file not found in S3: {s3_key}")
-    except FileNotFoundError:
-        raise
-    except Exception as e:
-        logger.error("backup_download_failed", exc_info=True)
-        raise RuntimeError(f"Download failed: {e}")
+    backup_file = BACKUP_DIR / f"{name}.tar.gz"
+    if not backup_file.exists():
+        raise FileNotFoundError(f"Backup file not found: {name}")
 
     results: dict[str, str] = {}
     error_msg: str | None = None
 
-    for host in filer_hosts:
+    for host in filer_hosts[:1]:
         try:
-            tmp_remote = f"/tmp/{s3_key}"
+            tmp_remote = f"/tmp/filer-restore-{name}.tar.gz"
             _, stderr1, exit_code1 = await _ssh_exec(
-                host, f"scp root@172.16.0.10:{local_path} {tmp_remote}"
+                host, f"scp root@172.16.0.10:{backup_file} {tmp_remote}"
             )
             if exit_code1 != 0:
                 raise RuntimeError(f"SCP failed: {stderr1[:200]}")
@@ -255,8 +224,6 @@ async def restore_backup(name: str) -> dict:
             results[host] = str(e)[:200]
             error_msg = f"{error_msg or ''} {host}: {e}"
             logger.error("backup_restore_failed", host=host, exc_info=True)
-
-    await _cleanup_local_temp(local_path)
 
     return {
         "ok": all(v == "ok" for v in results.values()),
@@ -282,3 +249,33 @@ async def get_backup_status() -> dict:
         "lastError": None if status_val in ("uploaded", "partial") else row.get("status"),
         "bytesSynced": row["size_bytes"] or 0,
     }
+
+
+async def cleanup_old_backups() -> dict:
+    await _ensure_backup_dir()
+
+    retention_days = await get_setting_int("backup_retention_days", 30)
+    if retention_days <= 0:
+        return {"ok": True, "deleted": 0, "reason": "retention disabled"}
+
+    cutoff = datetime.now(timezone.utc) - __import__("datetime").timedelta(days=retention_days)
+    cutoff_iso = cutoff.isoformat()
+
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT name, s3_key FROM backup_snapshots WHERE created_at < ? AND status = 'uploaded'",
+        (cutoff_iso,),
+    )
+    rows = await cursor.fetchall()
+
+    deleted = 0
+    for row in rows:
+        file_path = Path(row["s3_key"])
+        if file_path.exists():
+            file_path.unlink()
+        await db.execute("DELETE FROM backup_snapshots WHERE name=?", (row["name"],))
+        deleted += 1
+        logger.info("backup_cleanup_deleted", name=row["name"], s3_key=row["s3_key"])
+
+    await db.commit()
+    return {"ok": True, "deleted": deleted}

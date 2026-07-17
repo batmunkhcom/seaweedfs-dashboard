@@ -8,7 +8,6 @@ from app.services.backup_service import (
     delete_backup as svc_delete,
     restore_backup as svc_restore,
 )
-from app.services.backup_s3 import ensure_backup_bucket
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/backup", tags=["backup"])
@@ -28,16 +27,6 @@ async def trigger_sync(_: bool = Depends(require_permission("backup:write"))):
         return result
     except Exception as e:
         logger.error("backup_sync_error", exc_info=True)
-        raise HTTPException(500, str(e))
-
-
-@router.post("/ensure-bucket")
-async def ensure_bucket(_: bool = Depends(require_permission("backup:write"))):
-    try:
-        result = await ensure_backup_bucket()
-        return result
-    except Exception as e:
-        logger.error("backup_ensure_bucket_error", exc_info=True)
         raise HTTPException(500, str(e))
 
 
