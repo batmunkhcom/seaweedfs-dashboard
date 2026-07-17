@@ -131,9 +131,9 @@ async def list_backups() -> list[dict]:
 
     db = await get_db()
     cursor = await db.execute(
-        "SELECT id, name, s3_key, size_bytes, filer_hosts, status, created_at "
-        "FROM backup_snapshots ORDER BY id DESC"
-    )
+         "SELECT id, name, s3_key, size_bytes, filer_hosts, status, created_at "
+         "FROM backup_snapshots ORDER BY id DESC"
+     )
     rows = await cursor.fetchall()
     backups = []
     for row in rows:
@@ -142,13 +142,16 @@ async def list_backups() -> list[dict]:
         d["size"] = d["size_bytes"]
 
         file_path = Path(d["s3_key"])
-        if file_path.exists():
-            actual_size = file_path.stat().st_size
-            if d["size"] == 0:
-                await db.execute("UPDATE backup_snapshots SET size_bytes=? WHERE id=?", (actual_size, d["id"]))
-                d["size"] = actual_size
-        else:
-            d["status"] = "missing"
+        try:
+            if file_path.exists():
+                actual_size = file_path.stat().st_size
+                if d["size"] == 0:
+                    await db.execute("UPDATE backup_snapshots SET size_bytes=? WHERE id=?", (actual_size, d["id"]))
+                    d["size"] = actual_size
+            else:
+                d["status"] = "missing"
+        except Exception:
+            pass
 
         backups.append(d)
 
