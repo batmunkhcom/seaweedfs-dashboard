@@ -24,6 +24,11 @@ async def lifespan(app: FastAPI):
     await setup_database()
     await load_runtime_settings()
     await startup_seaweed_client()
+    try:
+        from app.services.ai_embedding import start_index_scheduler
+        await start_index_scheduler()
+    except Exception:
+        logger.warning("index_scheduler_start_failed", exc_info=True)
     from app.services.disk_health import start_disk_health
     await start_disk_health()
     yield
@@ -31,6 +36,11 @@ async def lifespan(app: FastAPI):
     from app.services.disk_health import stop_disk_health
     await stop_disk_health()
     await shutdown_seaweed_client()
+    try:
+        from app.services.ai_embedding import stop_index_scheduler
+        await stop_index_scheduler()
+    except Exception:
+        pass
     await shutdown_database()
 
 

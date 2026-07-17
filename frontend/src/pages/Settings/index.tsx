@@ -12,8 +12,9 @@ import {
   SettingOutlined,
   RobotOutlined,
   ApiOutlined,
+  SyncOutlined,
 } from '@ant-design/icons'
-import { getSettings, updateSettings, getClusterHealth, getNodeLimits, updateNodeLimits, testAiConnection } from '../../services/api'
+import { getSettings, updateSettings, getClusterHealth, getNodeLimits, updateNodeLimits, testAiConnection, triggerEmbeddingIndex } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import {
   SettingRow,
@@ -47,6 +48,7 @@ export default function SettingsPage() {
   const [testingEmbedding, setTestingEmbedding] = useState(false)
   const [embeddingModels, setEmbeddingModels] = useState<{ id: string; name: string }[]>([])
   const [embeddingError, setEmbeddingError] = useState('')
+  const [indexing, setIndexing] = useState(false)
 
   useEffect(() => {
     getSettings()
@@ -155,6 +157,21 @@ export default function SettingsPage() {
       message.error(err)
     }
     setTestingEmbedding(false)
+  }
+
+  const handleIndexNow = async () => {
+    setIndexing(true)
+    try {
+      const res = await triggerEmbeddingIndex()
+      if (res.ok) {
+        message.success(`Indexed ${res.indexed}/${res.total_chunks} chunks from ${res.files} files`)
+      } else {
+        message.error(res.error || 'Indexing failed')
+      }
+    } catch {
+      message.error('Indexing request failed')
+    }
+    setIndexing(false)
   }
 
   const handleSave = async (keysToSave?: string[]) => {
@@ -392,6 +409,9 @@ export default function SettingsPage() {
           extra={
             isAdmin && (
               <Space>
+                <Button size="small" icon={<SyncOutlined />} onClick={handleIndexNow} loading={indexing}>
+                  Index Now
+                </Button>
                 <Button size="small" icon={<UndoOutlined />} onClick={() => handleReset(AI_EMBEDDING_SETTINGS.map((s) => s.key), defaultByCategory.ai)}>
                   Reset
                 </Button>
@@ -466,6 +486,12 @@ export default function SettingsPage() {
             }
             return <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
           })}
+          <div style={{ marginTop: 16, padding: '10px 14px', background: 'rgba(168,85,247,0.04)', borderRadius: 6, fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+            <strong>Auto-indexing:</strong> Wiki/docs content is automatically indexed every 6 hours when AI is enabled.
+            The indexer reads all <code>wiki/</code> files, chunks them, generates embeddings, and stores them in SQLite.
+            Orphan data (from deleted files) is cleaned up automatically each run.
+            Click <strong>Index Now</strong> to trigger immediate re-indexing.
+          </div>
         </Card>
         </>
       ),

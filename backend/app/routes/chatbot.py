@@ -84,3 +84,12 @@ async def ai_stats():
 @router.get("/status")
 async def chatbot_status():
     return {"enabled": await is_ai_enabled()}
+
+
+@router.post("/embedding/index")
+async def trigger_indexing():
+    if not await is_ai_enabled():
+        return {"ok": False, "error": "AI features are disabled"}
+    from app.services.ai_embedding import index_wiki_files
+    result = await index_wiki_files()
+    return result

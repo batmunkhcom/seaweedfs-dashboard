@@ -444,3 +444,8 @@ export async function getAiStats() {
   const { data } = await api.get('/chatbot/stats')
   return data
 }
+
+export async function triggerEmbeddingIndex() {
+  const { data } = await api.post('/chatbot/embedding/index')
+  return data
+}
