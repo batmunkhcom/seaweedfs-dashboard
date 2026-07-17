@@ -15,11 +15,22 @@ EMBEDDING_DIM = 1536
 
 async def _get_provider_config():
     from app.services.chatbot_service import _get_setting
-    provider = await _get_setting("ai_provider", "openai")
-    api_base = (await _get_setting("ai_api_base_url", "https://api.openai.com/v1")).rstrip("/")
-    api_key = await _get_setting("ai_api_key", "")
-    model = await _get_setting("ai_embedding_model", "text-embedding-3-small")
-    return provider, api_base, api_key, model
+    chat_provider = await _get_setting("ai_provider", "openai")
+    chat_api_base = (await _get_setting("ai_api_base_url", "https://api.openai.com/v1")).rstrip("/")
+    chat_api_key = await _get_setting("ai_api_key", "")
+
+    emb_provider = await _get_setting("ai_embedding_provider", "same")
+    if emb_provider == "same":
+        emb_provider = chat_provider
+    emb_api_base = (await _get_setting("ai_embedding_api_base_url", "")).rstrip("/")
+    if not emb_api_base:
+        emb_api_base = chat_api_base
+    emb_api_key = await _get_setting("ai_embedding_api_key", "")
+    if not emb_api_key:
+        emb_api_key = chat_api_key
+    emb_model = await _get_setting("ai_embedding_model", "text-embedding-3-small")
+
+    return emb_provider, emb_api_base, emb_api_key, emb_model
 
 
 async def _ensure_table():

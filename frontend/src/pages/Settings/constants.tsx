@@ -53,11 +53,17 @@ export const AI_SETTINGS: SettingMeta[] = [
   { key: 'ai_provider', label: 'AI Provider', description: 'Provider type: OpenAI-compatible API or local Ollama', type: 'select', defaultVal: 'openai', options: [{ value: 'openai', label: 'OpenAI Compatible' }, { value: 'ollama', label: 'Ollama (Local)' }] },
   { key: 'ai_api_base_url', label: 'API Base URL', description: 'Base URL for the AI API endpoint', type: 'string', defaultVal: 'https://api.openai.com/v1' },
   { key: 'ai_api_key', label: 'API Key', description: 'API key for the provider. Leave empty for Ollama if no auth required', type: 'password', defaultVal: '' },
-  { key: 'ai_model', label: 'Model', description: 'AI model name (e.g. gpt-4o-mini, gpt-4o, llama3). Click Test Connection to fetch available models', type: 'string', defaultVal: 'gpt-4o-mini' },
-  { key: 'ai_embedding_model', label: 'Embedding Model', description: 'Model for document embedding/RAG indexing', type: 'string', defaultVal: 'text-embedding-3-small' },
-  { key: 'ai_max_tokens', label: 'Max Response Tokens', description: 'Maximum tokens in AI response. Higher = longer answers, more cost', type: 'int', unit: 'tokens', min: 256, max: 32768, defaultVal: '4096' },
+  { key: 'ai_model', label: 'Model', description: 'AI model name. Click Test Connection to fetch available models', type: 'string', defaultVal: 'gpt-4o-mini' },
+  { key: 'ai_max_tokens', label: 'Max Response Tokens', description: 'Maximum tokens in AI response', type: 'int', unit: 'tokens', min: 256, max: 32768, defaultVal: '4096' },
   { key: 'ai_temperature', label: 'Temperature', description: 'Response creativity (0.0 = deterministic, 2.0 = very creative)', type: 'float', min: 0, max: 2.0, step: 0.1, defaultVal: '0.7' },
   { key: 'ai_system_prompt', label: 'System Prompt', description: 'Base instructions for the AI. Injected with live cluster context at query time', type: 'textarea', rows: 6, defaultVal: 'You are an AI assistant for a SeaweedFS distributed storage cluster.' },
+]
+
+export const AI_EMBEDDING_SETTINGS: SettingMeta[] = [
+  { key: 'ai_embedding_provider', label: 'Embedding Provider', description: 'Provider for embeddings. "Same" uses the chat provider above. Separate for cost optimization (e.g. Ollama for free embeddings)', type: 'select', defaultVal: 'same', options: [{ value: 'same', label: 'Same as Chat' }, { value: 'openai', label: 'OpenAI Compatible' }, { value: 'ollama', label: 'Ollama (Local)' }] },
+  { key: 'ai_embedding_api_base_url', label: 'Embedding API URL', description: 'Base URL for embedding API. Leave empty to use chat API URL', type: 'string', defaultVal: '' },
+  { key: 'ai_embedding_api_key', label: 'Embedding API Key', description: 'API key for embedding provider. Leave empty to use chat API key', type: 'password', defaultVal: '' },
+  { key: 'ai_embedding_model', label: 'Embedding Model', description: 'Model for document embedding: text-embedding-3-small (OpenAI) or nomic-embed-text (Ollama)', type: 'string', defaultVal: 'text-embedding-3-small' },
 ]
 
 interface SettingRowProps {

@@ -24,6 +24,7 @@ import {
   CLUSTER_SETTINGS,
   GENERAL_SETTINGS,
   AI_SETTINGS,
+  AI_EMBEDDING_SETTINGS,
 } from './constants'
 import type { SettingMeta } from './constants'
 
@@ -264,6 +265,7 @@ export default function SettingsPage() {
     {
       key: 'ai', label: <span><RobotOutlined /> AI</span>,
       children: (
+        <>
         <Card
           extra={
             isAdmin && (
@@ -298,6 +300,30 @@ export default function SettingsPage() {
             <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
           ))}
         </Card>
+        <Card
+          title={<Typography.Text strong style={{ fontSize: 14 }}>Embedding (RAG)</Typography.Text>}
+          style={{ marginTop: 16 }}
+          extra={
+            isAdmin && (
+              <Space>
+                <Button size="small" icon={<UndoOutlined />} onClick={() => handleReset(AI_EMBEDDING_SETTINGS.map((s) => s.key), defaultByCategory.ai)}>
+                  Reset
+                </Button>
+                <Button type="primary" size="small" icon={<SaveOutlined />} onClick={() => handleSave(AI_EMBEDDING_SETTINGS.map((s) => s.key))} loading={saving}>
+                  Save
+                </Button>
+              </Space>
+            )
+          }
+        >
+          <div style={{ marginBottom: 12, fontSize: 12, color: '#94a3b8', padding: '8px 12px', background: 'rgba(59,130,246,0.06)', borderRadius: 6 }}>
+            Embedding provider can be different from chat provider. Use Ollama (nomic-embed-text) for free local embeddings while keeping OpenAI for chat.
+          </div>
+          {AI_EMBEDDING_SETTINGS.map((meta) => (
+            <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+          ))}
+        </Card>
+        </>
       ),
     },
     {
