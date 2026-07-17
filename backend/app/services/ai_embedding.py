@@ -7,8 +7,8 @@ from typing import Optional
 
 import httpx
 
-from app.database import get_db
 from app.logging_config import get_logger
+from app.services.ai_embedding_store import get_vector_store, reset_vector_store
 
 logger = get_logger("ai_embedding")
 
@@ -37,27 +37,6 @@ async def _get_provider_config():
     emb_model = await _get_setting("ai_embedding_model", "text-embedding-3-small")
 
     return emb_provider, emb_api_base, emb_api_key, emb_model
-
-
-async def _ensure_table():
-    db = await get_db()
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS ai_embeddings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content_hash TEXT UNIQUE NOT NULL,
-            chunk_text TEXT NOT NULL,
-            embedding BLOB NOT NULL,
-            source TEXT,
-            chunk_index INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL,
-            cluster_snapshot TEXT
-        )
-        """
-    )
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_ai_embeddings_hash ON ai_embeddings(content_hash)")
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_ai_embeddings_source ON ai_embeddings(source)")
-    await db.commit()
 
 
 def _chunk_text(text: str, max_chars: int = 800) -> list[str]:
@@ -133,33 +112,24 @@ async def embed_text(text: str) -> Optional[list[float]]:
 
 
 async def index_documents(texts: list[str], source: str = "unknown") -> int:
-    await _ensure_table()
-    db = await get_db()
+    store = await get_vector_store()
     indexed = 0
     now = datetime.now(timezone.utc).isoformat()
     snapshot = await _get_cluster_snapshot()
 
     for i, chunk in enumerate(texts):
         content_hash = hashlib.sha256(chunk.encode()).hexdigest()
-        cursor = await db.execute("SELECT 1 FROM ai_embeddings WHERE content_hash=?", (content_hash,))
-        if await cursor.fetchone():
+        if await store.exists(content_hash):
             continue
 
         embedding = await embed_text(chunk)
         if not embedding:
             continue
 
-        emb_bytes = json.dumps(embedding).encode()
-        try:
-            await db.execute(
-                "INSERT INTO ai_embeddings (content_hash, chunk_text, embedding, source, chunk_index, created_at, cluster_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (content_hash, chunk, emb_bytes, source, i, now, snapshot),
-            )
+        ok = await store.upsert(content_hash, chunk, embedding, source, i, now, snapshot)
+        if ok:
             indexed += 1
-        except Exception:
-            pass
 
-    await db.commit()
     logger.info("indexed_documents", source=source, indexed=indexed, total_chunks=len(texts))
     return indexed
 
@@ -177,6 +147,7 @@ async def index_wiki_files() -> dict:
                 files.append(os.path.join(root, fn))
 
     for fpath in sorted(files):
+        fn = os.path.basename(fpath)
         try:
             with open(fpath) as f:
                 content = f.read()
@@ -209,53 +180,43 @@ async def index_wiki_files() -> dict:
 
 
 async def _cleanup_orphans(current_files: list[str]) -> int:
-    db = await get_db()
-    cursor = await db.execute("SELECT DISTINCT source FROM ai_embeddings")
-    rows = await cursor.fetchall()
-    current_rel = set()
-    for f in current_files:
-        current_rel.add(os.path.relpath(f, WIKI_DIR))
+    store = await get_vector_store()
+    current_rel = set(os.path.relpath(f, WIKI_DIR) for f in current_files)
 
+    sources = await store.get_distinct_sources()
     removed = 0
-    for row in rows:
-        source = row[0]
+    for source in sources:
         if source and source not in current_rel:
-            await db.execute("DELETE FROM ai_embeddings WHERE source=?", (source,))
+            await store.delete_by_source(source)
             removed += 1
 
-    await db.execute("DELETE FROM ai_embeddings WHERE created_at < ?", (
-        (datetime.now(timezone.utc) - timedelta(days=90)).isoformat(),
-    ))
+    await store.delete_older_than(90)
 
-    await db.commit()
     if removed:
         logger.info("cleaned_orphan_embeddings", removed=removed)
     return removed
 
 
 async def search_similar(query: str, top_k: int = 5) -> str:
-    await _ensure_table()
-    db = await get_db()
-    cursor = await db.execute("SELECT content_hash, chunk_text, embedding, source, cluster_snapshot FROM ai_embeddings ORDER BY created_at DESC LIMIT 200")
-    rows = await cursor.fetchall()
+    store = await get_vector_store()
+    rows = await store.fetch_all()
 
     if not rows:
         return ""
 
     query_embedding = await embed_text(query)
     if not query_embedding:
-        chunks = [r[1] for r in rows[:top_k]]
-        sources = list(set(r[3] for r in rows[:top_k] if r[3]))
+        chunks = [r["chunk_text"] for r in rows[:top_k]]
+        sources = list(set(r["source"] for r in rows[:top_k] if r["source"]))
         return "Relevant documentation:\n" + "\n---\n".join(chunks) + ("\n\nSources: " + ", ".join(sources) if sources else "")
 
     scored = []
     for row in rows:
-        try:
-            emb = json.loads(row[2].decode())
-            sim = _cosine_similarity(query_embedding, emb)
-            scored.append((sim, row[1], row[3], row[4]))
-        except Exception:
+        emb = row["embedding"]
+        if not emb:
             continue
+        sim = _cosine_similarity(query_embedding, emb)
+        scored.append((sim, row["chunk_text"], row["source"], row.get("cluster_snapshot", "")))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     results = []
@@ -272,19 +233,10 @@ async def search_similar(query: str, top_k: int = 5) -> str:
 
 
 async def embedding_stats() -> dict:
-    await _ensure_table()
-    db = await get_db()
-    cursor = await db.execute("SELECT COUNT(*), SUM(LENGTH(embedding)), COUNT(DISTINCT source) FROM ai_embeddings")
-    row = await cursor.fetchone()
-    cursor = await db.execute("SELECT MAX(created_at) FROM ai_embeddings")
-    last_row = await cursor.fetchone()
-    return {
-        "total_chunks": row[0] or 0,
-        "total_bytes": row[1] or 0,
-        "sources": row[2] or 0,
-        "dimension": EMBEDDING_DIM,
-        "last_indexed_at": last_row[0] or "",
-    }
+    store = await get_vector_store()
+    stats = await store.stats()
+    stats["dimension"] = EMBEDDING_DIM
+    return stats
 
 
 async def start_index_scheduler():
@@ -320,3 +272,4 @@ async def stop_index_scheduler():
         except asyncio.CancelledError:
             pass
         _index_task = None
+    await reset_vector_store()

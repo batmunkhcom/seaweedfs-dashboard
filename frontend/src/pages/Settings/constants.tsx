@@ -60,10 +60,13 @@ export const AI_SETTINGS: SettingMeta[] = [
 ]
 
 export const AI_EMBEDDING_SETTINGS: SettingMeta[] = [
+  { key: 'ai_embedding_store', label: 'Vector Store', description: 'Storage backend for embeddings. SQLite works without any extra setup. pgvector requires PostgreSQL with the vector extension installed', type: 'select', defaultVal: 'sqlite', options: [{ value: 'sqlite', label: 'SQLite (Default)' }, { value: 'pgvector', label: 'pgvector (PostgreSQL)' }] },
   { key: 'ai_embedding_provider', label: 'Embedding Provider', description: 'Provider for embeddings. "Same" uses the chat provider above. Separate for cost optimization (e.g. Ollama for free embeddings)', type: 'select', defaultVal: 'same', options: [{ value: 'same', label: 'Same as Chat' }, { value: 'openai', label: 'OpenAI Compatible' }, { value: 'ollama', label: 'Ollama (Local)' }] },
   { key: 'ai_embedding_api_base_url', label: 'Embedding API URL', description: 'Base URL for embedding API. Leave empty to use chat API URL', type: 'string', defaultVal: '' },
   { key: 'ai_embedding_api_key', label: 'Embedding API Key', description: 'API key for embedding provider. Leave empty to use chat API key', type: 'password', defaultVal: '' },
   { key: 'ai_embedding_model', label: 'Embedding Model', description: 'Model for document embedding: text-embedding-3-small (OpenAI) or nomic-embed-text (Ollama)', type: 'string', defaultVal: 'text-embedding-3-small' },
+  { key: 'ai_pgvector_connstr', label: 'pgvector Connection', description: 'PostgreSQL connection string. Only needed if Vector Store is set to pgvector', type: 'password', defaultVal: '' },
+  { key: 'ai_embedding_dimensions', label: 'Dimensions', description: 'Vector dimensions: 1536 for OpenAI, 768 for Ollama nomic-embed-text', type: 'int', min: 128, max: 4096, defaultVal: '1536' },
 ]
 
 interface SettingRowProps {
