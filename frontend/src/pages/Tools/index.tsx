@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons'
 import { pingNodes, serviceCheck, triggerEmbeddingIndex } from '../../services/api'
 import api from '../../services/api'
+import AdvancedTools from './AdvancedTools'
 
 const { Text } = Typography
 
@@ -472,6 +473,8 @@ export default function ToolsPage() {
           </div>
         )}
       </Card>
+
+      <AdvancedTools />
     </div>
   )
 }

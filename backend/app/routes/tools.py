@@ -1,4 +1,5 @@
 import asyncio
+import os
 import subprocess
 import time
 import re
@@ -309,3 +310,160 @@ async def traceroute_host(body: HostRequest):
     if not host:
         return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
     return await _traceroute_async(host)
+
+
+@router.post("/dns-resolve", dependencies=[Depends(require_permission("tools:write"))])
+async def dns_resolve(body: HostRequest):
+    host = _validate_host(body.host)
+    if not host:
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    try:
+        proc = await asyncio.create_subprocess_exec("dig", "+short", host, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+        out = stdout.decode(errors="replace").strip()
+        return {"ok": True, "host": host, "output": out if out else f"No records found for {host}"}
+    except asyncio.TimeoutError:
+        return {"ok": False, "host": host, "output": "DNS query timed out"}
+    except Exception as e:
+        return {"ok": False, "host": host, "output": str(e)[:300]}
+
+
+class PortCheckRequest(BaseModel):
+    host: str
+    port: int
+
+
+@router.post("/port-check", dependencies=[Depends(require_permission("tools:write"))])
+async def port_check(body: PortCheckRequest):
+    host = _validate_host(body.host)
+    if not host:
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    if body.port < 1 or body.port > 65535:
+        return JSONResponse({"ok": False, "error": "Port must be 1–65535"}, status_code=400)
+    try:
+        t0 = time.monotonic()
+        _, writer = await asyncio.wait_for(asyncio.open_connection(host, body.port), timeout=3)
+        lat = round((time.monotonic() - t0) * 1000, 1)
+        writer.close()
+        await writer.wait_closed()
+        return {"ok": True, "host": host, "port": body.port, "open": True, "latency_ms": lat}
+    except Exception:
+        return {"ok": True, "host": host, "port": body.port, "open": False, "latency_ms": 0}
+
+
+class HttpCheckRequest(BaseModel):
+    url: str
+
+
+@router.post("/http-head", dependencies=[Depends(require_permission("tools:write"))])
+async def http_head(body: HttpCheckRequest):
+    url = body.url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            t0 = time.monotonic()
+            resp = await client.head(url)
+            lat = round((time.monotonic() - t0) * 1000, 1)
+            headers = {k: v for k, v in resp.headers.items() if k.lower() in ("server", "content-type", "content-length", "location", "x-")}
+            return {"ok": True, "url": url, "status": resp.status_code, "latency_ms": lat, "headers": headers}
+    except httpx.TimeoutException:
+        return {"ok": False, "url": url, "error": "Request timed out"}
+    except httpx.ConnectError:
+        return {"ok": False, "url": url, "error": "Connection refused"}
+    except Exception as e:
+        return {"ok": False, "url": url, "error": str(e)[:200]}
+
+
+class SslCheckRequest(BaseModel):
+    host: str
+    port: int = 443
+
+
+@router.post("/ssl-check", dependencies=[Depends(require_permission("tools:write"))])
+async def ssl_check(body: SslCheckRequest):
+    host = _validate_host(body.host)
+    if not host:
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "openssl", "s_client", "-connect", f"{host}:{body.port}", "-servername", host,
+            stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        out = stdout.decode(errors="replace")
+        cn_match = re.search(r'CN\s*=\s*([^\n]+)', out)
+        expire_match = re.search(r'notAfter=([^\n]+)', out)
+        verify = "Verify return code: 0" in out
+        return {
+            "ok": verify,
+            "host": host, "port": body.port,
+            "cn": cn_match.group(1).strip() if cn_match else "",
+            "expires": expire_match.group(1).strip() if expire_match else "",
+            "verified": verify,
+            "output": out[:1500],
+        }
+    except asyncio.TimeoutError:
+        return {"ok": False, "host": host, "error": "SSL check timed out"}
+    except Exception as e:
+        return {"ok": False, "host": host, "error": str(e)[:200]}
+
+
+class SshRequest(BaseModel):
+    host: str
+
+
+def _ssh_exec(host: str, cmd: str, timeout: int = 10) -> str:
+    import paramiko
+    from app.config import settings as app_settings
+    key_path = app_settings.disk_health_ssh_key_path or "~/.ssh/id_rsa"
+    key_path = os.path.expanduser(key_path) if hasattr(os, "expanduser") else key_path
+    user = app_settings.disk_health_ssh_user or "root"
+    try:
+        key = paramiko.RSAKey.from_private_key_file(key_path)
+    except Exception:
+        try:
+            key = paramiko.Ed25519Key.from_private_key_file(key_path)
+        except Exception:
+            key = None
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(host, username=user, pkey=key, timeout=timeout, banner_timeout=5, auth_timeout=5)
+        _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+        out = stdout.read().decode(errors="replace")[:4000]
+        err = stderr.read().decode(errors="replace")[:500]
+        return out if out else (err if err else "(no output)")
+    except Exception as e:
+        return f"SSH failed: {str(e)[:200]}"
+    finally:
+        client.close()
+
+
+@router.post("/system-info", dependencies=[Depends(require_permission("tools:write"))])
+async def system_info(body: SshRequest):
+    if not _validate_host(body.host):
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    cmd = "echo '=== CPU ===' && top -bn1 | head -5 && echo && echo '=== MEMORY ===' && free -h && echo && echo '=== DISK ===' && df -h /data* 2>/dev/null || df -h /"
+    loop = asyncio.get_event_loop()
+    output = await loop.run_in_executor(None, _ssh_exec, body.host, cmd, 15)
+    return {"ok": not output.startswith("SSH failed"), "host": body.host, "output": output}
+
+
+@router.post("/service-uptime", dependencies=[Depends(require_permission("tools:write"))])
+async def service_uptime(body: SshRequest):
+    if not _validate_host(body.host):
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    cmd = "echo '=== SERVICE UPTIME ===' && ps -eo pid,etime,args | grep -E 'weed (master|volume|filer|s3)' | grep -v grep"
+    loop = asyncio.get_event_loop()
+    output = await loop.run_in_executor(None, _ssh_exec, body.host, cmd, 10)
+    return {"ok": not output.startswith("SSH failed"), "host": body.host, "output": output}
+
+
+@router.post("/logs-tail", dependencies=[Depends(require_permission("tools:write"))])
+async def logs_tail(body: SshRequest):
+    if not _validate_host(body.host):
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    cmd = "journalctl -u seaweed-master -u seaweed-volume -u seaweed-filer -u seaweed-s3 --no-pager -n 30 2>/dev/null || dmesg | tail -20"
+    loop = asyncio.get_event_loop()
+    output = await loop.run_in_executor(None, _ssh_exec, body.host, cmd, 10)
+    return {"ok": not output.startswith("SSH failed"), "host": body.host, "output": output}
