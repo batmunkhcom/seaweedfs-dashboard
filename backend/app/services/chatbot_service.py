@@ -37,22 +37,44 @@ async def is_ai_enabled() -> bool:
 
 
 async def _build_context() -> str:
-    lines = ["Current SeaweedFS cluster state:"]
+    lines = ["Current SeaweedFS cluster state (dc03, rack2, replication=001, 2 copies per volume):"]
     client = get_seaweed_client()
     try:
         resp = await client.master_get("/dir/status")
         topo = resp.json().get("Topology", {})
-        lines.append(f"- Cluster: max={topo.get('Max', '?')} free={topo.get('Free', '?')} slots")
+        lines.append(f"- Cluster: {topo.get('Free', '?')} free of {topo.get('Max', '?')} volume slots across all nodes")
 
+        volume_map = {}
         for dc in topo.get("DataCenters", []):
             for rack in dc.get("Racks", []):
                 nodes = rack.get("DataNodes", [])
-                lines.append(f"- Datacenter {dc.get('Id')}, Rack {rack.get('Id')}: {len(nodes)} nodes")
                 for dn in nodes:
                     url = dn.get("Url", "?").replace(":8080", "")
                     vols = dn.get("Volumes", 0)
+                    max_vols = dn.get("Max", "?")
                     vids = dn.get("VolumeIds", "").strip()
-                    lines.append(f"  Node {url}: {vols} vols (max {dn.get('Max', '?')}), ids={vids}")
+                    volume_map[url] = {"vols": vols, "max": max_vols, "ids": vids}
+                    lines.append(f"  Node {url}: {vols}/{max_vols} vols (ids: {vids})")
+
+        total_vols = sum(v["vols"] for v in volume_map.values())
+        lines.append(f"- Total volumes across cluster: {total_vols}")
+
+        all_ids = []
+        for v in volume_map.values():
+            if v["ids"]:
+                parts = v["ids"].replace(",", " ").split()
+                for p in parts:
+                    try:
+                        all_ids.append(int(p))
+                    except ValueError:
+                        pass
+        if all_ids:
+            id_counts = {}
+            for vid in all_ids:
+                id_counts[vid] = id_counts.get(vid, 0) + 1
+            duplicated = {k: v for k, v in id_counts.items() if v > 1}
+            if duplicated:
+                lines.append(f"- Volume IDs with replicas (normal — replication=001): {sorted(duplicated.items())[:10]}")
     except Exception:
         logger.warning("context_build_failed", exc_info=True)
         lines.append("- (cluster data unavailable)")
@@ -66,13 +88,18 @@ async def _build_context() -> str:
                 for node_v, vol_list in rack_v.items():
                     for vol in vol_list:
                         volumes.append(vol)
-        lines.append(f"- Total volumes: {len(volumes)}")
+        lines.append(f"- Individual volumes tracked: {len(volumes)}")
         readonly = [v["Id"] for v in volumes if v.get("ReadOnly")]
         if readonly:
-            lines.append(f"- Read-only volumes: {readonly}")
+            lines.append(f"- READ-ONLY volumes: {readonly}")
+        else:
+            lines.append("- No read-only volumes detected")
         garbage_vols = [(v["Id"], v.get("DeletedByteCount", 0)) for v in volumes if v.get("DeletedByteCount", 0) > 0]
         if garbage_vols:
-            lines.append(f"- Volumes with garbage: {[(v[0], v[1]) for v in garbage_vols[:5]]}")
+            gb_sum = sum(g[1] for g in garbage_vols)
+            lines.append(f"- Garbage: {len(garbage_vols)} vol(s), {gb_sum} bytes total deleted")
+        else:
+            lines.append("- No garbage accumulation detected")
     except Exception:
         pass
 
@@ -80,7 +107,7 @@ async def _build_context() -> str:
         resp = await client.master_get("/cluster/status")
         cs = resp.json()
         lines.append(f"- Raft leader: {cs.get('Leader', '?')}")
-        lines.append(f"- Max Volume ID: {cs.get('MaxVolumeId', '?')}")
+        lines.append(f"- Version: {cs.get('Version', '?')}")
     except Exception:
         pass
 

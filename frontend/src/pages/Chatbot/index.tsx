@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Card, Input, Button, Space, Typography, Tag, message, Spin } from 'antd'
 import { SendOutlined, RobotOutlined, UserOutlined, ClearOutlined, LoadingOutlined } from '@ant-design/icons'
+import ReactMarkdown from 'react-markdown'
 import { getChatbotStatus } from '../../services/api'
 
 interface Message {
@@ -177,7 +178,9 @@ export default function ChatbotPage() {
           wordBreak: 'break-word',
         }}>
           {isStreaming && <LoadingOutlined style={{ marginRight: 8, color: '#3b82f6' }} />}
-          {msg.content}
+          <div className="chatbot-markdown">
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+          </div>
         </div>
       </div>
     )
