@@ -10,8 +10,6 @@ from app.settings_service import get_setting, get_setting_int
 
 logger = get_logger("backup")
 
-BACKUP_DIR = Path("/srv/seaweed-backups")
-
 
 async def _get_filer_hosts() -> list[str]:
     raw = await get_setting("seaweedfs_filer_host", settings.seaweedfs_filer_host)
@@ -46,31 +44,23 @@ async def _ssh_exec(host: str, cmd: str, timeout: int = 120) -> tuple[str, str, 
     return result["stdout"], result["stderr"], result["exit_code"]
 
 
-async def _ensure_backup_dir():
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-
-
-async def _cleanup_local_temp(path: str):
-    try:
-        Path(path).unlink(missing_ok=True)
-    except Exception:
-        pass
-
-
 async def create_backup(name: str | None = None) -> dict:
     enabled = await get_setting("backup_enabled", "true")
     if enabled.lower() != "true":
         return {"ok": False, "error": "Backup is disabled. Enable in runtime_settings."}
 
-    await _ensure_backup_dir()
-
     filer_hosts = await _get_filer_hosts()
     db_path = await get_setting("backup_filer_db_path", "/data/dc03/filer/filerldb2")
+
+    if not filer_hosts:
+        return {"ok": False, "error": "No filer hosts configured"}
 
     now = datetime.now(timezone.utc)
     ts = now.strftime("%Y%m%d_%H%M%S")
     backup_name = name or f"backup-{ts}"
-    backup_file = BACKUP_DIR / f"{backup_name}.tar.gz"
+    backup_file = Path("/srv/seaweed-backups") / f"{backup_name}.tar.gz"
+
+    await backup_file.parent.mkdir(parents=True, exist_ok=True)
 
     db = await get_db()
     started_at = now.isoformat()
@@ -137,7 +127,7 @@ async def create_backup(name: str | None = None) -> dict:
 
 
 async def list_backups() -> list[dict]:
-    await _ensure_backup_dir()
+    await Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
     db = await get_db()
     cursor = await db.execute(
@@ -166,7 +156,7 @@ async def list_backups() -> list[dict]:
 
 
 async def delete_backup(name: str) -> bool:
-    await _ensure_backup_dir()
+    await Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
     db = await get_db()
     cursor = await db.execute(
@@ -191,12 +181,10 @@ async def restore_backup(name: str) -> dict:
     if enabled.lower() != "true":
         return {"ok": False, "error": "Backup is disabled"}
 
-    await _ensure_backup_dir()
-
     filer_hosts = await _get_filer_hosts()
     db_path = await get_setting("backup_filer_db_path", "/data/dc03/filer/filerldb2")
 
-    backup_file = BACKUP_DIR / f"{name}.tar.gz"
+    backup_file = Path("/srv/seaweed-backups") / f"{name}.tar.gz"
     if not backup_file.exists():
         raise FileNotFoundError(f"Backup file not found: {name}")
 
@@ -252,7 +240,7 @@ async def get_backup_status() -> dict:
 
 
 async def cleanup_old_backups() -> dict:
-    await _ensure_backup_dir()
+    await Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
     retention_days = await get_setting_int("backup_retention_days", 30)
     if retention_days <= 0:
