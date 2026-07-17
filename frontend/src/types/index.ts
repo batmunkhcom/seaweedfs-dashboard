@@ -99,10 +99,20 @@ export interface BackupStatus {
 }
 
 export interface Snapshot {
-  id: string
+  id: number
   name: string
+  s3Key: string
   size: number
+  filerHosts: string[]
+  status: string
   createdAt: string
+}
+
+export interface BucketStatus {
+  ok: boolean
+  bucket?: string
+  exists?: boolean
+  error?: string
 }
 
 export interface WorkerStatus {

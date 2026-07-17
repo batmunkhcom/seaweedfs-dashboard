@@ -11,6 +11,7 @@ import type {
   S3Policy,
   BackupStatus,
   Snapshot,
+  BucketStatus,
   WorkerStatus,
   WorkerJob,
   DashboardStats,
@@ -238,6 +239,11 @@ export async function triggerBackupSync() {
   return data
 }
 
+export async function ensureBackupBucket(): Promise<BucketStatus> {
+  const { data } = await api.post('/backup/ensure-bucket')
+  return data
+}
+
 export async function listSnapshots(): Promise<Snapshot[]> {
   const { data } = await api.get('/backup/snapshots')
   return Array.isArray(data) ? data : []
@@ -252,6 +258,11 @@ export async function createSnapshot(name: string, path: string = '/') {
 
 export async function deleteSnapshot(id: string) {
   await api.delete(`/backup/snapshots/${id}`)
+}
+
+export async function restoreBackup(name: string) {
+  const { data } = await api.post(`/backup/restore/${encodeURIComponent(name)}`)
+  return data
 }
 
 export async function getWorkerStatus(): Promise<WorkerStatus[]> {
