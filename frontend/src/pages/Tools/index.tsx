@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Card, Table, Button, Tag, Space, message, Row, Col, Statistic, Typography } from 'antd'
+import { useState, useEffect } from 'react'
+import { Card, Table, Button, Tag, Space, message, Row, Col, Statistic, Typography, Tooltip, Progress } from 'antd'
 import {
   ThunderboltOutlined,
   ReloadOutlined,
@@ -9,13 +9,16 @@ import {
   NodeIndexOutlined,
   ApiOutlined,
   CloudServerOutlined,
+  PlayCircleOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons'
 import { pingNodes, serviceCheck, triggerEmbeddingIndex } from '../../services/api'
+import api from '../../services/api'
 
 const { Text } = Typography
 
 interface PingService {
-  port: number; service: string; reachable: boolean
+  port: number; service: string; reachable: boolean; latency_ms?: number
 }
 
 interface PingNode {
@@ -30,13 +33,27 @@ interface ServiceCheckNode {
   host: string; checks: ServiceCheckEntry[]
 }
 
+interface ToolStatus {
+  node_count: number; master_count: number; volume_count: number; filer_count: number; s3_count: number
+  version: string; leader: string; ai_enabled: boolean
+  embedding_stats: { total_chunks: number; sources: number; dimension: number }
+}
+
 function formatMs(ms: number | undefined): string {
   if (ms === undefined || ms === null) return '—'
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }
 
+function formatLatency(ms: number | undefined): string {
+  if (ms === undefined || ms === null || ms <= 0) return '—'
+  if (ms < 1) return '<1ms'
+  if (ms < 1000) return `${ms.toFixed(0)}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 export default function ToolsPage() {
+  const [status, setStatus] = useState<ToolStatus | null>(null)
   const [pingLoading, setPingLoading] = useState(false)
   const [pingResult, setPingResult] = useState<PingNode[] | null>(null)
   const [pingSummary, setPingSummary] = useState({ total: 0, reachable: 0, elapsed: 0 })
@@ -47,6 +64,11 @@ export default function ToolsPage() {
 
   const [indexing, setIndexing] = useState(false)
   const [indexResult, setIndexResult] = useState<{ ok: boolean; total_chunks: number; indexed: number; files: number; error?: string } | null>(null)
+  const [runAllLoading, setRunAllLoading] = useState(false)
+
+  useEffect(() => {
+    api.get('/tools/status').then((r) => setStatus(r.data)).catch(() => {})
+  }, [])
 
   const handlePing = async () => {
     setPingLoading(true)
@@ -99,167 +121,241 @@ export default function ToolsPage() {
     setIndexing(false)
   }
 
+  const handleRunAll = async () => {
+    setRunAllLoading(true)
+    await handlePing()
+    await handleServiceCheck()
+    setRunAllLoading(false)
+  }
+
+  const pingReachable = pingResult ? pingSummary.reachable : 0
+  const pingTotal = pingResult ? pingSummary.total : 28
+  const pingPct = pingTotal > 0 ? Math.round((pingReachable / pingTotal) * 100) : 0
+
+  const svcPassed = svcResult ? svcSummary.passed : 0
+  const svcTotal = svcResult ? svcSummary.total : 0
+  const svcPct = svcTotal > 0 ? Math.round((svcPassed / svcTotal) * 100) : 0
+
   const pingColumns = [
-    { title: 'Node', dataIndex: 'host', key: 'host', width: 160, render: (h: string) => <Text code>{h}</Text> },
+    { title: 'Node', dataIndex: 'host', key: 'host', width: 150, render: (h: string) => <Text code>{h}</Text> },
     {
-      title: 'Master :9333', key: 'master', width: 100, align: 'center' as const,
+      title: 'Master :9333', key: 'master', width: 120, align: 'center' as const,
       render: (_: unknown, r: PingNode) => {
         const s = r.services.find((x) => x.service === 'master')
-        return s?.reachable ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 18 }} /> : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 18 }} />
+        if (!s) return <Text type="secondary" style={{ fontSize: 11 }}>N/A</Text>
+        return (
+          <Tooltip title={s.reachable ? `Latency: ${formatLatency(s.latency_ms)}` : 'Unreachable'}>
+            {s.reachable
+              ? <Tag color="success" style={{ margin: 0 }}>{formatLatency(s.latency_ms)}</Tag>
+              : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />}
+          </Tooltip>
+        )
       },
     },
     {
-      title: 'Volume :8080', key: 'volume', width: 100, align: 'center' as const,
+      title: 'Volume :8080', key: 'volume', width: 120, align: 'center' as const,
       render: (_: unknown, r: PingNode) => {
         const s = r.services.find((x) => x.service === 'volume')
-        return s?.reachable ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 18 }} /> : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 18 }} />
+        return s?.reachable
+          ? <Tag color="success" style={{ margin: 0 }}>{formatLatency(s.latency_ms)}</Tag>
+          : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />
       },
     },
     {
-      title: 'Filer :8888', key: 'filer', width: 100, align: 'center' as const,
+      title: 'Filer :8888', key: 'filer', width: 120, align: 'center' as const,
       render: (_: unknown, r: PingNode) => {
         const s = r.services.find((x) => x.service === 'filer')
-        return s?.reachable ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 18 }} /> : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 18 }} />
+        return s?.reachable
+          ? <Tag color="success" style={{ margin: 0 }}>{formatLatency(s.latency_ms)}</Tag>
+          : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />
       },
     },
     {
-      title: 'S3 :8333', key: 's3', width: 100, align: 'center' as const,
+      title: 'S3 :8333', key: 's3', width: 120, align: 'center' as const,
       render: (_: unknown, r: PingNode) => {
         const s = r.services.find((x) => x.service === 's3')
-        return s?.reachable ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 18 }} /> : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 18 }} />
+        return s?.reachable
+          ? <Tag color="success" style={{ margin: 0 }}>{formatLatency(s.latency_ms)}</Tag>
+          : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />
       },
     },
   ]
 
   const svcColumns = [
-    { title: 'Node', dataIndex: 'host', key: 'host', width: 140, render: (h: string) => <Text code>{h}</Text> },
-    { title: 'Service', dataIndex: 'service', key: 'service', width: 80, render: (s: string) => <Tag color="blue">{s}</Tag> },
-    { title: 'Port', dataIndex: 'port', key: 'port', width: 70 },
+    { title: 'Node', dataIndex: 'host', key: 'host', width: 150, render: (h: string) => <Text code>{h}</Text> },
+    { title: 'Service', dataIndex: 'service', key: 'service', width: 80, render: (s: string) => {
+      const colors: Record<string, string> = { master: 'blue', volume: 'green', filer: 'purple', s3: 'orange' }
+      return <Tag color={colors[s] || 'default'}>{s}</Tag>
+    }},
+    { title: 'Port', dataIndex: 'port', key: 'port', width: 60 },
     {
-      title: 'Status', key: 'status', width: 130,
+      title: 'Status', key: 'status', width: 140,
       render: (_: unknown, r: ServiceCheckEntry) => r.reachable
-        ? <Tag color="success" icon={<CheckCircleOutlined />}>{r.status} OK</Tag>
+        ? <Tag color="success" icon={<CheckCircleOutlined />}>{r.status} OK · {formatLatency(r.latency_ms || 0)}</Tag>
         : <Tag color="error" icon={<CloseCircleOutlined />}>{r.error || 'unreachable'}</Tag>,
     },
-    { title: 'Latency', dataIndex: 'latency_ms', key: 'latency', width: 90, render: (v: number | undefined) => formatMs(v) },
-    { title: 'API Path', dataIndex: 'path', key: 'path', width: 140, render: (p: string) => <Text code style={{ fontSize: 11 }}>{p}</Text> },
+    { title: 'Endpoint', dataIndex: 'path', key: 'path', width: 150, render: (p: string) => <Text code style={{ fontSize: 11 }}>{p}</Text> },
   ]
 
   return (
     <div style={{ padding: '0 0 24px 0' }}>
       <Row gutter={[16, 16]}>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic title="Nodes" value={pingResult?.length ?? 7} valueStyle={{ fontSize: 24 }} />
-          </Card>
-        </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card size="small">
             <Statistic
-              title="Ping Reachable"
-              value={pingSummary.reachable}
-              suffix={`/ ${pingSummary.total}`}
-              valueStyle={{ fontSize: 24, color: pingSummary.reachable === pingSummary.total && pingSummary.total > 0 ? '#52c41a' : '#ff4d4f' }}
+              title="Nodes"
+              value={status?.node_count || 7}
+              valueStyle={{ fontSize: 24 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card size="small">
+            <Statistic
+              title="Ping"
+              value={pingPct}
+              suffix="%"
+              precision={0}
+              valueStyle={{ fontSize: 24, color: pingResult ? (pingPct === 100 ? '#52c41a' : '#ff4d4f') : '#64748b' }}
               loading={pingLoading}
             />
+            {pingResult && <Progress percent={pingPct} size="small" status={pingPct === 100 ? 'success' : 'exception'} showInfo={false} />}
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card size="small">
             <Statistic
-              title="Services Healthy"
-              value={svcSummary.passed}
-              suffix={`/ ${svcSummary.total}`}
-              valueStyle={{ fontSize: 24, color: svcSummary.failed === 0 && svcSummary.total > 0 ? '#52c41a' : '#ff4d4f' }}
+              title="Services"
+              value={svcPct}
+              suffix="%"
+              precision={0}
+              valueStyle={{ fontSize: 24, color: svcResult ? (svcPct === 100 ? '#52c41a' : '#ff4d4f') : '#64748b' }}
               loading={svcLoading}
             />
+            {svcResult && <Progress percent={svcPct} size="small" status={svcPct === 100 ? 'success' : 'exception'} showInfo={false} />}
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card size="small">
             <Statistic
               title="Embeddings"
-              value={indexResult?.total_chunks ?? 0}
-              suffix={`chunks`}
+              value={status?.embedding_stats?.total_chunks || indexResult?.total_chunks || 0}
+              suffix="chunks"
               valueStyle={{ fontSize: 24 }}
             />
           </Card>
         </Col>
       </Row>
 
+      <div style={{ marginTop: 16, marginBottom: 8, display: 'flex', gap: 8 }}>
+        <Button type="primary" icon={<PlayCircleOutlined />} loading={runAllLoading} onClick={handleRunAll} size="middle">
+          Run All Checks
+        </Button>
+        <Button icon={<ReloadOutlined />} loading={pingLoading} onClick={handlePing}>Ping</Button>
+        <Button icon={<ApiOutlined />} loading={svcLoading} onClick={handleServiceCheck}>Service Check</Button>
+      </div>
+
       <Card
         title={<><ThunderboltOutlined /> Ping Nodes</>}
-        extra={<Button icon={<ReloadOutlined />} loading={pingLoading} onClick={handlePing} size="small">Run Ping</Button>}
-        style={{ marginTop: 16 }}
+        extra={pingResult ? <Text type="secondary" style={{ fontSize: 12 }}>{pingReachable}/{pingTotal} reachable · {formatMs(pingSummary.elapsed)}</Text> : null}
+        style={{ marginTop: 8 }}
       >
-        <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>TCP connectivity check to all cluster nodes on master (9333), volume (8080), filer (8888), and S3 (8333) ports.</Text>
-        {pingResult && (
+        {pingResult ? (
           <Table
             dataSource={pingResult.map((n) => ({ ...n, key: n.host }))}
             columns={pingColumns}
             pagination={false}
             size="small"
             bordered
-            locale={{ emptyText: 'No ping results yet' }}
           />
+        ) : (
+          <div style={{ textAlign: 'center', padding: 32, color: '#64748b' }}>
+            <ThunderboltOutlined style={{ fontSize: 28, marginBottom: 12, display: 'block' }} />
+            <Text type="secondary">TCP connectivity test to all cluster nodes on master (9333), volume (8080), filer (8888), and S3 (8333) ports. Click Run All Checks or Ping to begin.</Text>
+          </div>
         )}
-        {!pingResult && <Text type="secondary">Click "Run Ping" to test connectivity to all 7 nodes.</Text>}
       </Card>
 
       <Card
         title={<><ApiOutlined /> Service Check</>}
-        extra={<Button icon={<ReloadOutlined />} loading={svcLoading} onClick={handleServiceCheck} size="small">Check Services</Button>}
-        style={{ marginTop: 16 }}
+        extra={svcResult ? <Text type="secondary" style={{ fontSize: 12 }}>{svcPassed}/{svcTotal} healthy · {formatMs(svcSummary.elapsed)}</Text> : null}
+        style={{ marginTop: 12 }}
       >
-        <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>HTTP health check — probes each expected service endpoint and reports status code + latency.</Text>
-        {svcResult && (
+        {svcResult ? (
           <Table
             dataSource={svcResult.flatMap((n) => n.checks.map((c) => ({ ...c, host: n.host, key: `${n.host}-${c.port}` })))}
             columns={svcColumns}
             pagination={false}
             size="small"
             bordered
-            locale={{ emptyText: 'No service check results yet' }}
           />
+        ) : (
+          <div style={{ textAlign: 'center', padding: 32, color: '#64748b' }}>
+            <CloudServerOutlined style={{ fontSize: 28, marginBottom: 12, display: 'block' }} />
+            <Text type="secondary">HTTP health check — probes each expected service endpoint (only relevant ports per node). Click Service Check to begin.</Text>
+          </div>
         )}
-        {!svcResult && <Text type="secondary">Click "Check Services" to probe all service endpoints.</Text>}
       </Card>
 
-      <Row gutter={16} style={{ marginTop: 16 }}>
-        <Col span={12}>
+      <Row gutter={16} style={{ marginTop: 12 }}>
+        <Col xs={24} lg={12}>
           <Card
             title={<><NodeIndexOutlined /> Re-index Wiki</>}
-            extra={<Button type="primary" icon={<SyncOutlined spin={indexing} />} loading={indexing} onClick={handleReindex} size="small">{indexing ? 'Indexing...' : 'Re-index Now'}</Button>}
+            extra={<Button type="primary" size="small" icon={<SyncOutlined spin={indexing} />} loading={indexing} onClick={handleReindex}>{indexing ? 'Indexing...' : 'Re-index'}</Button>}
           >
-            <Text type="secondary">Re-indexes all wiki documentation for the AI chatbot. The indexer reads all <code>wiki/</code> files, chunks them, generates embeddings, and stores them.<br />Auto-indexing runs every 6 hours when AI is enabled.</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Re-index all <code>wiki/</code> documentation for the AI chatbot. Auto-indexes every 6 hours when AI is enabled.
+            </Text>
             {indexResult && indexResult.ok && (
               <div style={{ marginTop: 12 }}>
-                <Tag color="success">Indexed {indexResult.indexed}/{indexResult.total_chunks} chunks</Tag>
-                <Tag>Files: {indexResult.files}</Tag>
+                <Space size={[4, 4]} wrap>
+                  <Tag color="success">Indexed {indexResult.indexed} new</Tag>
+                  <Tag>{indexResult.total_chunks} total chunks</Tag>
+                  <Tag>{indexResult.files} files</Tag>
+                </Space>
               </div>
             )}
             {indexResult && !indexResult.ok && (
               <div style={{ marginTop: 12 }}><Tag color="error">{indexResult.error || 'Indexing failed'}</Tag></div>
             )}
+            {status && (
+              <div style={{ marginTop: 12 }}>
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {status.embedding_stats.total_chunks} chunks · {status.embedding_stats.sources} sources · {status.embedding_stats.dimension}d
+                </Text>
+              </div>
+            )}
           </Card>
         </Col>
-        <Col span={12}>
-          <Card title={<><CloudServerOutlined /> Quick Summary</>}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Text strong>Cluster Nodes</Text>
-              <Text type="secondary">7 nodes (.101–.107), rack2, dc03</Text>
-              <Text strong style={{ display: 'block', marginTop: 8 }}>Services</Text>
-              <Space size={[4, 4]} wrap>
-                <Tag color="blue">Master ×3</Tag>
-                <Tag color="green">Volume ×7</Tag>
-                <Tag color="purple">Filer ×2</Tag>
-                <Tag color="orange">S3 ×4</Tag>
+        <Col xs={24} lg={12}>
+          <Card title={<><DashboardOutlined /> Cluster Info</>}>
+            {status ? (
+              <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                <Row>
+                  <Col span={8}><Text type="secondary" style={{ fontSize: 12 }}>Version</Text></Col>
+                  <Col span={16}><Text code style={{ fontSize: 12 }}>{status.version}</Text></Col>
+                </Row>
+                <Row>
+                  <Col span={8}><Text type="secondary" style={{ fontSize: 12 }}>Leader</Text></Col>
+                  <Col span={16}><Text code style={{ fontSize: 12 }}>{status.leader}</Text></Col>
+                </Row>
+                <Row>
+                  <Col span={8}><Text type="secondary" style={{ fontSize: 12 }}>AI Status</Text></Col>
+                  <Col span={16}><Tag color={status.ai_enabled ? 'green' : 'default'} style={{ fontSize: 11 }}>{status.ai_enabled ? 'Enabled' : 'Disabled'}</Tag></Col>
+                </Row>
+                <div style={{ marginTop: 8 }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>Services</Text>
+                  <Space size={[4, 4]} wrap>
+                    <Tag color="blue">Master ×{status.master_count}</Tag>
+                    <Tag color="green">Volume ×{status.volume_count}</Tag>
+                    <Tag color="purple">Filer ×{status.filer_count}</Tag>
+                    <Tag color="orange">S3 ×{status.s3_count}</Tag>
+                  </Space>
+                </div>
               </Space>
-              <Text strong style={{ display: 'block', marginTop: 8 }}>Endpoints</Text>
-              <Text code style={{ fontSize: 11 }}>/api/tools/ping</Text>
-              <Text code style={{ fontSize: 11, marginLeft: 12 }}>/api/tools/service-check</Text>
-              <Text code style={{ fontSize: 11, marginLeft: 12 }}>/api/chatbot/embedding/index</Text>
-            </Space>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 12 }}>Loading cluster info...</Text>
+            )}
           </Card>
         </Col>
       </Row>

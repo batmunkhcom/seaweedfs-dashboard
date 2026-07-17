@@ -26,11 +26,15 @@ SERVICE_CHECK_PATHS = {
     "s3": "/",
 }
 
-
-class PingNode(BaseModel):
-    host: str
-    services: list[dict]
-
+NODE_SERVICES = {
+    "172.16.0.1": [(9333, "master"), (8080, "volume")],
+    "172.16.0.2": [(8080, "volume"), (8888, "filer"), (8333, "s3")],
+    "172.16.0.3": [(9333, "master"), (8080, "volume")],
+    "172.16.0.4": [(8080, "volume"), (8888, "filer"), (8333, "s3")],
+    "172.16.0.5": [(9333, "master"), (8080, "volume")],
+    "172.16.0.6": [(8080, "volume"), (8333, "s3")],
+    "172.16.0.7": [(8080, "volume"), (8333, "s3")],
+}
 
 class PingResponse(BaseModel):
     ok: bool
@@ -38,7 +42,6 @@ class PingResponse(BaseModel):
     total: int
     reachable: int
     elapsed_ms: float
-
 
 class ServiceCheckResponse(BaseModel):
     ok: bool
@@ -48,19 +51,29 @@ class ServiceCheckResponse(BaseModel):
     failed: int
     elapsed_ms: float
 
-
-def _extract_host(hostport: str) -> str:
-    return hostport.split(":")[0]
+class ToolStatusResponse(BaseModel):
+    ok: bool
+    node_count: int
+    master_count: int
+    volume_count: int
+    filer_count: int
+    s3_count: int
+    version: str
+    leader: str
+    ai_enabled: bool
+    embedding_stats: dict
 
 
 async def _tcp_ping(host: str, port: int, timeout: float = 3.0) -> tuple[bool, float]:
     try:
+        t0 = time.monotonic()
         _, writer = await asyncio.wait_for(
             asyncio.open_connection(host, port), timeout=timeout
         )
+        elapsed = (time.monotonic() - t0) * 1000
         writer.close()
         await writer.wait_closed()
-        return True, 0
+        return True, round(elapsed, 1)
     except Exception:
         return False, 0
 
@@ -98,11 +111,11 @@ async def ping_nodes(request: Request):
     for host in hosts:
         nodes[host] = {"host": host, "services": []}
 
-    for (host, port, svc), (reachable, _) in zip(
+    for (host, port, svc), (reachable, lat) in zip(
         [(h, p, s) for h in hosts for p, s in SERVICE_PORTS], results
     ):
         nodes[host]["services"].append({
-            "port": port, "service": svc, "reachable": reachable,
+            "port": port, "service": svc, "reachable": reachable, "latency_ms": lat,
         })
 
     node_list = list(nodes.values())
@@ -121,12 +134,13 @@ async def ping_nodes(request: Request):
 @router.get("/service-check", response_model=ServiceCheckResponse)
 async def service_check(request: Request):
     require_permission(request, "tools:read")
-    hosts = settings.all_node_hosts
     t0 = time.monotonic()
 
     checks = []
-    for host in hosts:
-        for port, svc in SERVICE_PORTS:
+    for host, svc_list in NODE_SERVICES.items():
+        if host not in settings.all_node_hosts:
+            continue
+        for port, svc in svc_list:
             path = SERVICE_CHECK_PATHS.get(svc, "/")
             checks.append((host, port, svc, path))
 
@@ -134,7 +148,9 @@ async def service_check(request: Request):
     results = await asyncio.gather(*tasks)
 
     nodes = {}
-    for host in hosts:
+    for host, svc_list in NODE_SERVICES.items():
+        if host not in settings.all_node_hosts:
+            continue
         nodes[host] = {"host": host, "checks": []}
 
     for (host, port, svc, path), result in zip(checks, results):
@@ -152,4 +168,48 @@ async def service_check(request: Request):
         "passed": passed,
         "failed": total - passed,
         "elapsed_ms": round((time.monotonic() - t0) * 1000, 1),
+    }
+
+
+@router.get("/status")
+async def tool_status():
+    from app.services.chatbot_service import is_ai_enabled
+    from app.services.seaweed_client import get_seaweed_client
+
+    ai_on = await is_ai_enabled()
+
+    emb_stats = {"total_chunks": 0, "sources": 0, "dimension": 0}
+    try:
+        from app.services.ai_embedding import embedding_stats
+        emb_stats = await embedding_stats()
+    except Exception:
+        pass
+
+    leader = "?"
+    version = "?"
+    try:
+        client = get_seaweed_client()
+        resp = await client.master_get("/cluster/status")
+        cs = resp.json()
+        leader = cs.get("Leader", "?")
+        version = cs.get("Version", "?")
+    except Exception:
+        pass
+
+    master_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "master")
+    volume_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "volume")
+    filer_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "filer")
+    s3_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "s3")
+
+    return {
+        "ok": True,
+        "node_count": len(settings.all_node_hosts),
+        "master_count": master_count,
+        "volume_count": volume_count,
+        "filer_count": filer_count,
+        "s3_count": s3_count,
+        "version": version,
+        "leader": leader,
+        "ai_enabled": ai_on,
+        "embedding_stats": emb_stats,
     }
