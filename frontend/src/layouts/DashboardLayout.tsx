@@ -70,6 +70,7 @@ export default function DashboardLayout() {
   const [confirmPw, setConfirmPw] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
   const [version, setVersion] = useState('')
+  const [aiEnabled, setAiEnabled] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
@@ -84,8 +85,12 @@ export default function DashboardLayout() {
 
 const userAllowedKeys = new Set(['/dashboard', '/cluster', '/volumes', '/filer', '/s3'])
 
-function getMenuItems(role?: string) {
+function getMenuItems(role?: string, aiOn = false) {
   let items = [...baseMenuItems]
+
+  if (!aiOn) {
+    items = items.filter((item) => item.key !== '/chatbot')
+  }
 
   if (role === 'admin') {
     items = [...items.slice(0, -1), { key: '/api-keys', icon: <KeyOutlined />, label: 'API Keys' }, items[items.length - 1]]
@@ -96,10 +101,11 @@ function getMenuItems(role?: string) {
   return items
 }
 
-  const menuItems = getMenuItems(user?.role)
+  const menuItems = getMenuItems(user?.role, aiEnabled)
 
   useEffect(() => {
     api.get('/info').then((r) => setVersion(r.data?.version || '')).catch(() => {})
+    api.get('/chatbot/status').then((r) => setAiEnabled(r.data?.enabled || false)).catch(() => {})
   }, [])
 
   const handleMenuClick = ({ key }: { key: string }) => navigate(key)

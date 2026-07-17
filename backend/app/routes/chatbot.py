@@ -79,3 +79,8 @@ async def ai_stats():
         "failed": row[2] or 0,
         "embeddings": emb_stats,
     }
+
+
+@router.get("/status")
+async def chatbot_status():
+    return {"enabled": await is_ai_enabled()}

@@ -10,22 +10,12 @@ from app.services.seaweed_client import get_seaweed_client
 
 logger = get_logger("chatbot")
 
-_runtime_cache: dict[str, str] = {}
-
-
-async def _load_settings():
-    global _runtime_cache
-    if _runtime_cache:
-        return
-    db = await get_db()
-    cursor = await db.execute("SELECT key, value FROM runtime_settings")
-    rows = await cursor.fetchall()
-    _runtime_cache = {r[0]: r[1] for r in rows}
-
 
 async def _get_setting(key: str, default: str = "") -> str:
-    await _load_settings()
-    return _runtime_cache.get(key, default)
+    db = await get_db()
+    cursor = await db.execute("SELECT value FROM runtime_settings WHERE key=?", (key,))
+    row = await cursor.fetchone()
+    return row[0] if row else default
 
 
 async def _get_setting_int(key: str, default: int = 0) -> int:

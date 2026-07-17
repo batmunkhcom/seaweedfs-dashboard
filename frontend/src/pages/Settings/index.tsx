@@ -331,19 +331,21 @@ export default function SettingsPage() {
                   <SettingRow meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
                   {isAdmin && (
                     <div style={{ padding: '0 0 14px 0' }}>
-                      <Space>
-                        <Button
-                          icon={<ApiOutlined />}
-                          onClick={handleTestConnection}
-                          loading={testingAi}
-                          type="primary"
-                          ghost
-                        >
-                          Test Connection & Fetch Models
-                        </Button>
-                        {aiModels.length > 0 && <Tag color="success">Connected — {aiModels.length} models</Tag>}
-                        {aiError && <Tag color="error">{aiError}</Tag>}
-                      </Space>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+                        <Space>
+                          <Button
+                            icon={<ApiOutlined />}
+                            onClick={handleTestConnection}
+                            loading={testingAi}
+                            type="primary"
+                            ghost
+                          >
+                            Test Connection & Fetch Models
+                          </Button>
+                          {aiModels.length > 0 && <Tag color="success">Connected — {aiModels.length} models</Tag>}
+                          {aiError && <Tag color="error">{aiError}</Tag>}
+                        </Space>
+                      </div>
                       {aiError && (
                         <Alert
                           type="error"
@@ -410,19 +412,21 @@ export default function SettingsPage() {
                   <SettingRow meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
                   {isAdmin && (
                     <div style={{ padding: '0 0 14px 0' }}>
-                      <Space>
-                        <Button
-                          icon={<ApiOutlined />}
-                          onClick={handleTestEmbedding}
-                          loading={testingEmbedding}
-                          type="primary"
-                          ghost
-                        >
-                          Test Connection & Fetch Models
-                        </Button>
-                        {embeddingModels.length > 0 && <Tag color="success">Connected — {embeddingModels.length} models</Tag>}
-                        {embeddingError && <Tag color="error">{embeddingError}</Tag>}
-                      </Space>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+                        <Space>
+                          <Button
+                            icon={<ApiOutlined />}
+                            onClick={handleTestEmbedding}
+                            loading={testingEmbedding}
+                            type="primary"
+                            ghost
+                          >
+                            Test Connection & Fetch Models
+                          </Button>
+                          {embeddingModels.length > 0 && <Tag color="success">Connected — {embeddingModels.length} models</Tag>}
+                          {embeddingError && <Tag color="error">{embeddingError}</Tag>}
+                        </Space>
+                      </div>
                       {embeddingError && (
                         <Alert
                           type="error"
