@@ -42,7 +42,7 @@ const menuItems = [
     label: 'S3',
     children: [
       { key: '/s3/buckets', label: 'Buckets' },
-      { key: '/s3/users', label: 'Secrets / API Keys' },
+      { key: '/s3/secrets', label: 'Secrets / API Keys' },
       { key: '/s3/policies', label: 'Policies' },
     ],
   },

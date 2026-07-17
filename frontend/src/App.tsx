@@ -72,7 +72,7 @@ function App() {
             <Route path="/collections" element={<CollectionsPage />} />
             <Route path="/filer/*" element={<FilerPage />} />
             <Route path="/s3/buckets" element={<S3BucketsPage />} />
-            <Route path="/s3/users" element={<S3UsersPage />} />
+            <Route path="/s3/secrets" element={<S3UsersPage />} />
             <Route path="/s3/policies" element={<S3PoliciesPage />} />
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/workers" element={<WorkersPage />} />
