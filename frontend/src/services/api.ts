@@ -11,7 +11,7 @@ import type {
   S3Policy,
   BackupStatus,
   Snapshot,
-  WorkerStatus,
+  WorkerStatusResponse,
   WorkerJob,
   DashboardStats,
   AlertEvent,
@@ -35,9 +35,15 @@ export function setCsrfToken(token: string) {
 }
 
 api.interceptors.request.use((config) => {
+   // API key for backup endpoints (takes priority over session auth)
+  const apiKey = localStorage.getItem('backup_api_key')
+  if (apiKey && config.url?.includes('/backup/')) {
+    config.headers['X-API-Key'] = apiKey
+   }
+  
   if (csrfToken && config.method && !['get', 'head', 'options'].includes(config.method.toLowerCase())) {
     config.headers['X-CSRF-Token'] = csrfToken
-  }
+   }
   return config
 })
 
@@ -259,7 +265,7 @@ export async function restoreBackup(name: string) {
   return data
 }
 
-export async function getWorkerStatus(): Promise<WorkerStatus[]> {
+export async function getWorkerStatus(): Promise<WorkerStatusResponse> {
   const { data } = await api.get('/workers/status')
   return data
 }
@@ -276,13 +282,23 @@ export async function getWorkerJob(id: string): Promise<WorkerJob> {
   return data
 }
 
+export async function getJobTypes(): Promise<{ type: string; description: string }[]> {
+  const { data } = await api.get('/workers/job-types')
+  return data
+}
+
+export async function getNodeVolumes(node: string): Promise<{ node: string; volume_ids: number[]; count: number }> {
+  const { data } = await api.get(`/workers/nodes/${encodeURIComponent(node)}/volumes`)
+  return data
+}
+
 export async function triggerWorkerDetect() {
   const { data } = await api.post('/workers/jobs/detect')
   return data
 }
 
-export async function triggerWorkerExecute(jobType: string, node?: string) {
-  const { data } = await api.post('/workers/jobs/execute', { type: jobType, node: node || '' })
+export async function triggerWorkerExecute(jobType: string, node?: string, param?: string) {
+  const { data } = await api.post('/workers/jobs/execute', { type: jobType, node: node || '', volume_param: param || '' })
   return data
 }
 
@@ -385,5 +401,46 @@ export async function updateUser(id: number, body: {
 
 export async function deleteUser(id: number) {
   const { data } = await api.delete(`/users/${id}`)
+  return data
+}
+
+// API Keys management
+export async function createApiKey(name: string, permissions: string = 'backup:read,backup:write') {
+  const { data } = await api.post('/api-keys/create', { name, permissions })
+  return data
+}
+
+export async function listApiKeys() {
+  const { data } = await api.get('/api-keys/list')
+  return Array.isArray(data) ? data : []
+}
+
+export async function getApiKeyDetail(keyId: number) {
+  const { data } = await api.get(`/api-keys/${keyId}/detail`)
+  return data
+}
+
+export async function revealApiKey(keyId: number, adminPassword: string) {
+  const { data } = await api.post('/api-keys/reveal', { key_id: keyId, admin_password: adminPassword })
+  return data
+}
+
+export async function revokeApiKey(keyId: number) {
+  const { data } = await api.post(`/api-keys/revoke/${keyId}`)
+  return data
+}
+
+export async function getChatbotStatus(): Promise<{ enabled: boolean }> {
+  const { data } = await api.get('/chatbot/status')
+  return data
+}
+
+export async function testAiConnection(provider: string, apiBaseUrl: string, apiKey: string) {
+  const { data } = await api.post('/chatbot/test-connection', { provider, api_base_url: apiBaseUrl, api_key: apiKey })
+  return data
+}
+
+export async function getAiStats() {
+  const { data } = await api.get('/chatbot/stats')
   return data
 }

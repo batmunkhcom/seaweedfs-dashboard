@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disk Health — SeaweedFS Dashboard Wiki</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Dashboard</h2>
+    <a href="overview.html">Overview</a>
+    <a href="real-time.html">Real-time SSE</a>
+    <a href="history.html">Historical Data</a>
+    <a href="alerts.html">Alert Engine</a>
+
+    <h2>Cluster</h2>
+    <a href="topology.html">Topology &amp; Servers</a>
+    <a href="volumes.html">Volumes</a>
+    <a href="collections.html">Collections</a>
+    <a href="filer.html">Filer Browser</a>
+
+    <h2>Management</h2>
+    <a href="s3.html">S3 &amp; Object Store</a>
+    <a href="backup.html">Backup</a>
+    <a href="workers.html">Workers</a>
+    <a href="disk-health.html" class="active">Disk Health</a>
+
+    <h2>Security</h2>
+    <a href="users.html">Users &amp; Roles</a>
+    <a href="api-keys.html">API Keys</a>
+  </nav>
+
+  <main class="content">
+    <h1>Disk Health Monitoring</h1>
+    <p>
+      The Disk Health feature provides S.M.A.R.T. monitoring of physical disks across all SeaweedFS cluster nodes.
+      It uses SSH to connect to each node, collects device and temperature data via <code>smartctl</code> and
+      <code>lsblk</code>, and stores results in the local SQLite database for historical trending.
+    </p>
+
+    <div class="note">
+      Disk Health is <strong>disabled by default</strong>. Set <code>DISK_HEALTH_ENABLED=true</code> in <code>.env</code>
+      and restart the backend to activate it.
+    </div>
+
+    <!-- ───── Enabling ───── -->
+    <h2>Enabling Disk Health</h2>
+    <p>Add the following entries to your <code>.env</code> file:</p>
+    <pre><code>DISK_HEALTH_ENABLED=true
+DISK_HEALTH_SSH_USER=root
+DISK_HEALTH_SSH_KEY_PATH=~/.ssh/id_rsa</code></pre>
+
+    <p>
+      After restart, the service begins scheduled scans across all nodes defined in
+      <code>SEAWEEDFS_MASTER_HOSTS</code>, <code>SEAWEEDFS_FILER_HOST</code>, and
+      <code>SEAWEEDFS_VOLUME_HOSTS</code>. Duplicate IPs are automatically deduplicated.
+    </p>
+
+    <div class="warn">
+      SSH connectivity to every cluster node is required. The private key must be accessible
+      from the backend process and target user (default <code>root</code>) must accept key-based authentication.
+    </div>
+
+    <!-- ───── SSH Requirements ───── -->
+    <h2>SSH Requirements</h2>
+    <ul>
+      <li><strong>Key-based authentication only</strong> — password auth is not supported</li>
+      <li>Default key path: <code>~/.ssh/id_rsa</code> (configurable via <code>DISK_HEALTH_SSH_KEY_PATH</code>)</li>
+      <li>Default SSH user: <code>root</code> (configurable via <code>DISK_HEALTH_SSH_USER</code>)</li>
+      <li>SSH timeout: <strong>10 seconds</strong> per connection attempt</li>
+      <li>Each node is scanned sequentially using <code>paramiko</code> in a thread pool executor</li>
+    </ul>
+
+    <p>Verify SSH access to each node before enabling:</p>
+    <pre><code>ssh -i ~/.ssh/id_rsa root@10.10.95.101 echo "OK"</code></pre>
+
+    <!-- ───── Scan Process ───── -->
+    <h2>Scan Process</h2>
+    <p>The scan executes two passes on each node:</p>
+
+    <div class="card">
+      <h3>Pass 1 — S.M.A.R.T. Scan</h3>
+      <ol>
+        <li>Runs <code>lsblk --json -o NAME,SIZE,TYPE,MOUNTPOINT</code> to discover block devices</li>
+        <li>Filters for devices with <code>type == "disk"</code></li>
+        <li>For each disk device, runs <code>smartctl --json -a /dev/{name}</code></li>
+        <li>Stores the raw JSON output in the <code>disk_health</code> table</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>Pass 2 — Fallback (when no S.M.A.R.T. devices found)</h3>
+      <ol>
+        <li>Re-runs <code>lsblk --json -b</code> for detailed block device info</li>
+        <li>Issues <code>df -B1</code> on mountpoints under <code>/data</code> for usage data</li>
+        <li>Inserts a synthetic S.M.A.R.T. record with <code>"model_name": "Virtual Disk"</code></li>
+        <li>Skips devices &lt; 100 GB that don't have a <code>/data</code> mount</li>
+      </ol>
+    </div>
+
+    <!-- ───── Scheduled Scans ───── -->
+    <h2>Scheduled Scans</h2>
+    <p>
+      The background scan loop runs continuously. After each complete scan of all nodes,
+      it sleeps for the configured interval before repeating.
+    </p>
+
+    <table>
+      <tr>
+        <th>Setting Key</th>
+        <th>Default</th>
+        <th>Source</th>
+      </tr>
+      <tr>
+        <td><code>disk_health_scan_interval_hours</code></td>
+        <td><span class="tag tag-purple">24</span></td>
+        <td>runtime_settings (change via Settings UI)</td>
+      </tr>
+    </table>
+
+    <p>The service implements these safety guarantees:</p>
+    <ul>
+      <li><strong>Singleton enforcement</strong> — only one scan loop runs at a time; starting a new instance cancels the previous</li>
+      <li><strong>Restart cooldown</strong> — 300 seconds between restarts to prevent thrashing</li>
+      <li><strong>Heartbeat</strong> — updates <code>services_health</code> table every scan with 300s TTL</li>
+    </ul>
+
+    <!-- ───── Alert Thresholds ───── -->
+    <h2>Alert Thresholds</h2>
+    <p>All thresholds are stored in <code>runtime_settings</code> and configurable via the Settings UI:</p>
+
+    <table>
+      <tr>
+        <th>Setting Key</th>
+        <th>Description</th>
+        <th>Default</th>
+      </tr>
+      <tr>
+        <td><code>disk_health_temp_warn_c</code></td>
+        <td>Temperature warning threshold</td>
+        <td><span class="tag tag-yellow">55 °C</span></td>
+      </tr>
+      <tr>
+        <td><code>disk_health_temp_crit_c</code></td>
+        <td>Temperature critical threshold</td>
+        <td><span class="tag tag-red">65 °C</span></td>
+      </tr>
+      <tr>
+        <td><code>disk_health_wear_warn_pct</code></td>
+        <td>SSD wear level warning</td>
+        <td><span class="tag tag-yellow">85 %</span></td>
+      </tr>
+      <tr>
+        <td><code>disk_health_realloc_warn_count</code></td>
+        <td>Reallocated sector warning count</td>
+        <td><span class="tag tag-yellow">10</span></td>
+      </tr>
+    </table>
+
+    <p>
+      Temperature applies to both SSDs and HDDs. Wear level applies to SSDs only
+      (via <code>ata_smart_attributes</code>). Reallocated sector count applies
+      to HDDs. Alerts fire when any threshold is exceeded or if a node is unreachable.
+    </p>
+
+    <!-- ───── Disk Health Page ───── -->
+    <h2>Disk Health Page Overview</h2>
+    <p>The Dashboard UI provides a dedicated Disk Health page with these sections:</p>
+
+    <div class="card">
+      <h3>Status Summary</h3>
+      <p>
+        Lists all scanned devices across the cluster — node hostname, device path,
+        last scan timestamp. Each device shows a status badge:
+        <span class="tag tag-green">OK</span>,
+        <span class="tag tag-yellow">Warning</span>, or
+        <span class="tag tag-red">Critical</span>
+        based on the configured thresholds.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Key Metrics per Device</h3>
+      <ul>
+        <li><strong>Temperature</strong> — current reading from S.M.A.R.T. data</li>
+        <li><strong>Wear Level</strong> — SSD lifetime remaining (if available)</li>
+        <li><strong>Reallocated Sectors</strong> — count of remapped bad sectors</li>
+        <li><strong>Disk Usage</strong> — used/available from <code>df</code> for <code>/data</code> mountpoints</li>
+        <li><strong>S.M.A.R.T. Status</strong> — overall pass/fail from <code>smartctl</code></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Per-Device Detail View</h3>
+      <p>
+        Clicking a device row opens a detail drawer showing the full S.M.A.R.T. report:
+      </p>
+      <ul>
+        <li>Device model and serial number</li>
+        <li>User capacity (bytes)</li>
+        <li>All ATA S.M.A.R.T. attributes table</li>
+        <li>Temperature history chart for the selected device</li>
+      </ul>
+    </div>
+
+    <!-- ───── Historical Data ───── -->
+    <h2>Historical Data Charts</h2>
+    <p>
+      The <code>GET /api/disk-health/history/{node}/{device}?days=30</code> endpoint
+      returns time-series data for temperature and wear level over the requested period
+      (default 30 days). The frontend renders this as a line chart (Recharts) with
+      threshold lines overlaid for warn/crit levels.
+    </p>
+
+    <pre><code># Fetch 30-day temperature history for a specific device
+curl -s "http://localhost:8000/api/disk-health/history/10.10.95.101/sda?days=30"</code></pre>
+
+    <p>Each data point includes:</p>
+    <ul>
+      <li><code>timestamp</code> — Unix timestamp of the scan</li>
+      <li><code>temp</code> — Temperature in °C (from S.M.A.R.T. data)</li>
+      <li><code>wear</code> — Wear level value (from ATA attributes table, 0 if unavailable)</li>
+    </ul>
+
+    <!-- ───── Manual Scan ───── -->
+    <h2>Manual Scan Trigger</h2>
+    <p>
+      Administrators can trigger an immediate scan from the Disk Health page or via API:
+    </p>
+
+    <pre><code># Trigger an immediate scan (requires cluster:write permission)
+curl -X POST http://localhost:8000/api/disk-health/scan \
+  -H "Cookie: session=..." \
+  -H "X-CSRF-Token: ..."</code></pre>
+
+    <p>The scan runs asynchronously; the endpoint returns <code>{"ok": true}</code> immediately.</p>
+
+    <hr>
+
+    <h2>API Reference</h2>
+
+    <div class="card">
+      <h3><span class="tag tag-blue">GET</span> /api/disk-health/status</h3>
+      <p>Returns whether disk health is enabled and a list of scanned devices.</p>
+      <pre><code>{
+  "enabled": true,
+  "devices": [
+    {"node": "10.10.95.101", "device": "/dev/sda", "last_scan": 1715900000.0}
+  ]
+}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3><span class="tag tag-purple">POST</span> /api/disk-health/scan</h3>
+      <p>Triggers an immediate scan of all nodes. Requires <code>cluster:write</code> permission.</p>
+      <pre><code>{"ok": true}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3><span class="tag tag-blue">GET</span> /api/disk-health/{node}/{device}</h3>
+      <p>Returns the latest S.M.A.R.T. record for a specific device.</p>
+      <pre><code>{"node": "10.10.95.101", "device": "/dev/sda", "timestamp": 1715900000.0, "smart": {...}}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3><span class="tag tag-blue">GET</span> /api/disk-health/history/{node}/{device}?days=30</h3>
+      <p>Returns time-series temperature and wear data for charting.</p>
+      <pre><code>[{"timestamp": 1715900000.0, "temp": 42, "wear": 95}]</code></pre>
+    </div>
+
+    <hr>
+
+    <h2>Schema</h2>
+    <pre><code>CREATE TABLE disk_health (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node TEXT NOT NULL,
+    device TEXT NOT NULL,
+    timestamp REAL NOT NULL,
+    smart_json TEXT
+);
+
+CREATE INDEX idx_disk_health_node_device ON disk_health(node, device);
+CREATE INDEX idx_disk_health_ts ON disk_health(timestamp);</code></pre>
+  </main>
+</div>
+</body>
+</html>

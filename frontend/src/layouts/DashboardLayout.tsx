@@ -23,6 +23,7 @@ import {
   ReadOutlined,
   BookOutlined,
   ApiOutlined,
+  RobotOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -30,7 +31,7 @@ import api from '../services/api'
 
 const { Header, Sider, Content } = Layout
 
-const menuItems = [
+const baseMenuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
   { key: '/cluster', icon: <ClusterOutlined />, label: 'Cluster' },
   { key: '/volumes', icon: <HddOutlined />, label: 'Volumes' },
@@ -48,6 +49,7 @@ const menuItems = [
   },
   { key: '/backup', icon: <SafetyOutlined />, label: 'Backup' },
   { key: '/workers', icon: <ToolOutlined />, label: 'Workers' },
+  { key: '/chatbot', icon: <RobotOutlined />, label: 'AI Chat' },
   { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
@@ -72,6 +74,29 @@ export default function DashboardLayout() {
   const location = useLocation()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+
+  const roleLabel: Record<string, string> = {
+  admin: 'System Administrator',
+  operator: 'Operator',
+  viewer: 'Read-only Viewer',
+  user: 'Standard User',
+}
+
+const userAllowedKeys = new Set(['/dashboard', '/cluster', '/volumes', '/filer', '/s3'])
+
+function getMenuItems(role?: string) {
+  let items = [...baseMenuItems]
+
+  if (role === 'admin') {
+    items = [...items.slice(0, -1), { key: '/api-keys', icon: <KeyOutlined />, label: 'API Keys' }, items[items.length - 1]]
+  } else if (role === 'user') {
+    items = items.filter((item) => userAllowedKeys.has(item.key as string))
+  }
+
+  return items
+}
+
+  const menuItems = getMenuItems(user?.role)
 
   useEffect(() => {
     api.get('/info').then((r) => setVersion(r.data?.version || '')).catch(() => {})
@@ -113,7 +138,7 @@ export default function DashboardLayout() {
         <div style={{ padding: '4px 0' }}>
           <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{user?.username}</div>
           <div style={{ fontSize: 12, color: '#a855f7' }}>
-            {user?.role === 'admin' ? 'System Administrator' : user?.role === 'operator' ? 'Operator' : 'Read-only Viewer'}
+            {roleLabel[user?.role || ''] || user?.role || 'Unknown Role'}
           </div>
         </div>
       ),

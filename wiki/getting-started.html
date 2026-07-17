@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting Started — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html" class="active">Installation &amp; Setup</a>
+    <a href="#requirements">System Requirements</a>
+    <a href="#installation">Installation</a>
+    <a href="#configuration">Configuration</a>
+    <a href="#starting">Starting the Dashboard</a>
+    <a href="#login">Default Login</a>
+    <a href="#deployment">Deployment</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster</h2>
+    <a href="cluster.html">Topology View</a>
+
+    <h2>Volumes</h2>
+    <a href="volumes.html">Volume List</a>
+
+    <h2>More</h2>
+    <a href="index.html">&#x2190; Back to Home</a>
+  </aside>
+
+  <main class="content">
+    <h1>Getting Started</h1>
+    <p>Everything you need to install, configure, and deploy the SeaweedFS Dashboard. Follow the steps below to get up and running.</p>
+
+    <h2 id="requirements">System Requirements</h2>
+
+    <div class="card">
+      <h3>Minimum Requirements</h3>
+      <table>
+        <tr><th>Component</th><th>Version</th><th>Notes</th></tr>
+        <tr><td>Operating System</td><td>Linux (Ubuntu 20.04+, Debian 11+, RHEL 8+)</td><td>Dashboard server</td></tr>
+        <tr><td>Python</td><td>3.11+</td><td>Backend runtime</td></tr>
+        <tr><td>Node.js</td><td>20+</td><td>Frontend build</td></tr>
+        <tr><td>Nginx</td><td>1.18+</td><td>Production reverse proxy / static serve</td></tr>
+        <tr><td>Memory</td><td>512 MB minimum</td><td>1 GB recommended</td></tr>
+        <tr><td>Disk</td><td>100 MB (app only)</td><td>+ extra for SQLite data</td></tr>
+      </table>
+    </div>
+
+    <div class="note">
+      <strong>Standalone server:</strong> The dashboard runs on its own server (10.10.0.80), not on any SeaweedFS node. This keeps monitoring independent of the storage cluster.
+    </div>
+
+    <h2 id="installation">Installation</h2>
+
+    <h3>1. Clone the Repository</h3>
+    <pre><code>git clone git@github.com:batmunkhcom/seaweedfs-dashboard.git
+cd seaweed-dashboard</code></pre>
+
+    <h3>2. Backend Setup</h3>
+    <pre><code>cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env</code></pre>
+
+    <p>Edit <code>.env</code> to match your cluster configuration (see <a href="#configuration">Configuration</a> section below).</p>
+
+    <h3>3. Frontend Setup</h3>
+    <pre><code>cd frontend
+npm install</code></pre>
+
+    <h2 id="configuration">Configuration</h2>
+
+    <p>All infrastructure configuration lives in <code>backend/.env</code>. This is the <strong>single source of truth</strong> for hosts, ports, credentials, and feature flags.</p>
+
+    <div class="card">
+      <h3>Required Variables</h3>
+      <table>
+        <tr><th>Variable</th><th>Example</th><th>Description</th></tr>
+        <tr><td><code>SEAWEEDFS_MASTER_HOSTS</code></td><td><code>10.10.95.101:9333,10.10.95.103:9333,10.10.95.105:9333</code></td><td>CSV of master API endpoints</td></tr>
+        <tr><td><code>SEAWEEDFS_FILER_HOST</code></td><td><code>10.10.95.102:8888,10.10.95.104:8888</code></td><td>CSV of filer endpoints (HA group)</td></tr>
+        <tr><td><code>DATABASE_URL</code></td><td><code>sqlite:///data/data.db</code></td><td>SQLite path or PG connection</td></tr>
+        <tr><td><code>ADMIN_USER</code></td><td><code>admin</code></td><td>Admin username</td></tr>
+        <tr><td><code>ADMIN_PASSWORD</code></td><td><code>changeme</code></td><td>Admin password (change immediately!)</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Optional Variables</h3>
+      <table>
+        <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>READONLY_USER</code></td><td><code>viewer</code></td><td>Read-only username</td></tr>
+        <tr><td><code>READONLY_PASSWORD</code></td><td><code>viewpass</code></td><td>Read-only password</td></tr>
+        <tr><td><code>REDIS_URL</code></td><td>&mdash;</td><td>Redis for cache/rate/session/SSE pub/sub</td></tr>
+        <tr><td><code>SEAWEEDFS_REQUEST_TIMEOUT</code></td><td><code>30</code></td><td>Timeout (seconds) for SeaweedFS API calls</td></tr>
+        <tr><td><code>SESSION_SECRET</code></td><td>auto-generated</td><td>JWT signing secret</td></tr>
+        <tr><td><code>MAX_UPLOAD_SIZE_MB</code></td><td><code>500</code></td><td>Max file upload size via filer</td></tr>
+        <tr><td><code>ALLOWED_EXTENSIONS</code></td><td><code>.jpg,.png,.pdf,.zip,.gz</code></td><td>Comma-separated allowed file types</td></tr>
+        <tr><td><code>MAX_FILES_PER_UPLOAD</code></td><td><code>10</code></td><td>Max files per batch upload</td></tr>
+        <tr><td><code>SNAPSHOT_INTERVAL_SECONDS</code></td><td><code>60</code></td><td>Metrics polling interval</td></tr>
+        <tr><td><code>SNAPSHOT_RETENTION_DAYS</code></td><td><code>30</code></td><td>How long to keep historical data</td></tr>
+        <tr><td><code>ALERT_DISK_USAGE_PCT</code></td><td><code>90</code></td><td>Disk usage percent alert trigger</td></tr>
+        <tr><td><code>ALERT_GARBAGE_RATIO</code></td><td><code>0.5</code></td><td>Garbage ratio alert trigger</td></tr>
+        <tr><td><code>ALERT_MAX_READONLY_VOLUMES</code></td><td><code>3</code></td><td>Max readonly volumes before alert</td></tr>
+        <tr><td><code>DISK_HEALTH_ENABLED</code></td><td><code>false</code></td><td>Enable S.M.A.R.T. monitoring</td></tr>
+        <tr><td><code>DISK_HEALTH_SSH_USER</code></td><td><code>root</code></td><td>SSH user for S.M.A.R.T. queries</td></tr>
+        <tr><td><code>DISK_HEALTH_SSH_KEY_PATH</code></td><td><code>~/.ssh/id_rsa</code></td><td>SSH key path</td></tr>
+        <tr><td><code>DISK_HEALTH_SCAN_INTERVAL_HOURS</code></td><td><code>24</code></td><td>S.M.A.R.T. scan frequency</td></tr>
+        <tr><td><code>DISK_HEALTH_TEMP_WARN_C</code></td><td><code>55</code></td><td>Temperature warning threshold (&deg;C)</td></tr>
+        <tr><td><code>DISK_HEALTH_TEMP_CRIT_C</code></td><td><code>65</code></td><td>Temperature critical threshold (&deg;C)</td></tr>
+        <tr><td><code>DISK_HEALTH_WEAR_WARN_PCT</code></td><td><code>85</code></td><td>Wear level warning percent</td></tr>
+        <tr><td><code>DISK_HEALTH_REALLOC_WARN_COUNT</code></td><td><code>10</code></td><td>Reallocated sector warning count</td></tr>
+      </table>
+    </div>
+
+    <div class="warn">
+      <strong>Important:</strong> Environment variables are only for infrastructure config (hosts, ports, credentials). Operational settings (thresholds, limits, intervals) belong in the <code>runtime_settings</code> SQLite table and can be changed via the Settings UI without restarting the server.
+    </div>
+
+    <div class="note">
+      <strong>Redis is optional.</strong> When <code>REDIS_URL</code> is not set, in-memory fallbacks handle rate limiting and caching. Redis is only needed if you want persistent sessions across server restarts or SSE pub/sub for multi-process deployments.
+    </div>
+
+    <h2 id="starting">Starting the Dashboard</h2>
+
+    <p>The project includes <code>manage.sh</code> — a unified command interface for all operations:</p>
+
+    <div class="card">
+      <h3>manage.sh Commands</h3>
+      <table>
+        <tr><th>Command</th><th>Description</th></tr>
+        <tr><td><code>./manage.sh dev</code></td><td>Dev mode — backend hot-reload + Vite HMR (ports 8000 + 5173)</td></tr>
+        <tr><td><code>./manage.sh up</code></td><td>Start all — backend (bg) + Nginx on port 8081</td></tr>
+        <tr><td><code>./manage.sh stop</code></td><td>Stop all services</td></tr>
+        <tr><td><code>./manage.sh restart</code></td><td>Stop then up</td></tr>
+        <tr><td><code>./manage.sh build</code></td><td>Build frontend for production</td></tr>
+        <tr><td><code>./manage.sh status</code></td><td>Show running services + health check</td></tr>
+        <tr><td><code>./manage.sh lint</code></td><td>Run backend + frontend linters</td></tr>
+        <tr><td><code>./manage.sh test</code></td><td>Run all tests</td></tr>
+        <tr><td><code>./manage.sh logs</code></td><td>Tail backend logs</td></tr>
+        <tr><td><code>./manage.sh info</code></td><td>Show ports, domain, project path</td></tr>
+      </table>
+    </div>
+
+    <h3>Development Mode</h3>
+    <pre><code>./manage.sh dev
+# Backend: http://localhost:8000 (hot-reload)
+# Frontend: http://localhost:5173 (HMR, proxies /api to :8000)</code></pre>
+
+    <h3>Production Mode</h3>
+    <pre><code>./manage.sh build   # Compile frontend static files
+./manage.sh up       # Start backend + Nginx
+# Access: http://&lt;server&gt;:8081</code></pre>
+
+    <h2 id="login">Default Login</h2>
+
+    <div class="card">
+      <h3>Default Credentials</h3>
+      <table>
+        <tr><th>Role</th><th>Username</th><th>Password</th><th>Permissions</th></tr>
+        <tr><td>Admin</td><td><code>admin</code></td><td><code>changeme</code></td><td><span class="tag tag-green">Full access</span> — create/delete volumes, manage S3, trigger backups, change settings</td></tr>
+        <tr><td>Read-only</td><td><code>viewer</code></td><td><code>viewpass</code></td><td><span class="tag tag-blue">View only</span> — monitor dashboards, browse files, view topology (no modifications)</td></tr>
+      </table>
+    </div>
+
+    <div class="warn">
+      <strong>Change passwords immediately!</strong> Edit <code>ADMIN_PASSWORD</code> and <code>READONLY_PASSWORD</code> in <code>.env</code> before exposing the dashboard to any network.
+    </div>
+
+    <h2 id="deployment">Production Deployment</h2>
+
+    <h3>Backend — systemd Service</h3>
+    <p>Create <code>/etc/systemd/system/seaweed-dashboard.service</code>:</p>
+    <pre><code>[Unit]
+Description=SeaweedFS Dashboard Backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/srv/seaweed-dashboard/backend
+EnvironmentFile=/srv/seaweed-dashboard/backend/.env
+ExecStart=/srv/seaweed-dashboard/backend/venv/bin/uvicorn app.main:app \
+  --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+
+    <pre><code>sudo systemctl daemon-reload
+sudo systemctl enable seaweed-dashboard
+sudo systemctl start seaweed-dashboard</code></pre>
+
+    <h3>Nginx — Reverse Proxy</h3>
+    <p>Create <code>/etc/nginx/sites-available/seaweed-dashboard</code>:</p>
+    <pre><code>server {
+    listen 8081;
+    root /srv/seaweed-dashboard/frontend/dist;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
+}</code></pre>
+
+    <pre><code>sudo ln -s /etc/nginx/sites-available/seaweed-dashboard /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx</code></pre>
+
+    <h3>Cloudflared Tunnel</h3>
+    <p>For public access via <code>seaweed.mbm.mn</code>:</p>
+    <pre><code>ingress:
+  - hostname: seaweed.mbm.mn
+    service: http://10.10.0.80:8081
+  - hostname: s3.mbm.mn
+    service: http://10.10.1.8:80
+  - service: http_status:404</code></pre>
+
+    <div class="note">
+      <strong>Port 8081 is the contract.</strong> Nginx always listens on port 8081. Cloudflared, proxy configs, and firewall rules all depend on this. Never change this port without updating all external dependencies.
+    </div>
+
+    <h3>Docker Deployment</h3>
+    <pre><code>docker compose up -d</code></pre>
+    <p>Multi-stage build compiles the frontend to static files, then serves everything through Nginx with the API proxy configured.</p>
+
+    <hr>
+
+    <h2>Next Steps</h2>
+    <ul>
+      <li><a href="dashboard.html">Dashboard Overview</a> — learn about KPIs, real-time data, and alerts</li>
+      <li><a href="cluster.html">Cluster &amp; Topology</a> — explore the cluster topology tree and server tables</li>
+      <li><a href="volumes.html">Volume Management</a> — manage volumes, collections, and garbage collection</li>
+    </ul>
+  </main>
+</div>
+
+</body>
+</html>

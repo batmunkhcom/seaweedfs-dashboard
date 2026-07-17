@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SeaweedFS Dashboard — Documentation</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+    <a href="getting-started.html#configuration">Configuration</a>
+    <a href="getting-started.html#deployment">Deployment</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+    <a href="dashboard.html#real-time">Real-time SSE</a>
+    <a href="dashboard.html#history">Historical Charts</a>
+    <a href="dashboard.html#alerts">Alert Panel</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="cluster.html">Topology View</a>
+    <a href="cluster.html#servers">Server Tables</a>
+    <a href="cluster.html#leader">Leader Election</a>
+    <a href="cluster.html#limits">Node Limits</a>
+
+    <h2>Volume Management</h2>
+    <a href="volumes.html">Volume List</a>
+    <a href="volumes.html#grow">Volume Grow</a>
+    <a href="volumes.html#vacuum">Vacuum Trigger</a>
+    <a href="volumes.html#collections">Collections</a>
+
+    <h2>Filer Browser</h2>
+    <a href="#">Navigation &amp; Upload</a>
+    <a href="#">Metadata</a>
+
+    <h2>S3 Management</h2>
+    <a href="s3.html">Buckets &amp; Endpoints</a>
+    <a href="s3.html#s3-users--secrets">Users &amp; Keys</a>
+    <a href="s3.html#s3-policies">Policies</a>
+    <a href="s3.html#iam-sync">IAM Sync</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="backup.html">Status &amp; Sync</a>
+    <a href="backup.html#restore-process">Snapshots &amp; Restore</a>
+
+    <h2>Workers</h2>
+    <a href="workers.html">Job History</a>
+    <a href="workers.html#triggering-jobs">Detect &amp; Execute</a>
+
+    <h2>Disk Health</h2>
+    <a href="disk-health.html">SMART Monitoring</a>
+    <a href="disk-health.html">Lifespan Estimation</a>
+
+    <h2>API Keys</h2>
+    <a href="api-keys.html">Key Management</a>
+
+    <h2>User Management</h2>
+    <a href="#">Admin &amp; Read-Only</a>
+
+    <h2>Settings</h2>
+    <a href="#">Runtime Configuration</a>
+
+    <h2>Glossary</h2>
+    <a href="#">Terminology</a>
+
+    <h2>API Reference</h2>
+    <a href="#">Endpoints</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="#">Architecture Flows</a>
+  </aside>
+
+  <main class="content">
+    <h1>SeaweedFS Dashboard</h1>
+    <p>Web management dashboard for the dc03 SeaweedFS cluster — providing a unified UI for cluster monitoring, volume management, filer browsing, S3 bucket administration, backups, worker management, and disk health monitoring.</p>
+
+    <div class="card">
+      <h3>Project Overview</h3>
+      <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Deploy Server</td><td>10.10.0.80</td></tr>
+        <tr><td>Public Domain</td><td><code>seaweed.mbm.mn</code></td></tr>
+        <tr><td>External Port</td><td>8081 (Nginx)</td></tr>
+        <tr><td>Backend Port</td><td>8000 (Uvicorn, internal)</td></tr>
+        <tr><td>Frontend Dev Port</td><td>5173 (Vite dev server)</td></tr>
+        <tr><td>Cluster Nodes</td><td>10.10.95.101 &ndash; 10.10.95.107</td></tr>
+        <tr><td>Datacenter</td><td>dc03</td></tr>
+        <tr><td>Replication</td><td><span class="tag tag-purple">001</span> (2 copies)</td></tr>
+        <tr><td>Master Nodes</td><td>.101, .103, .105</td></tr>
+        <tr><td>Filer HA Group</td><td>.102, .104</td></tr>
+        <tr><td>S3 Gateway Nodes</td><td>.102, .104, .106, .107</td></tr>
+        <tr><td>Volume Nodes</td><td>All 7 nodes</td></tr>
+        <tr><td>Disk per Node</td><td>~1.8 TB XFS</td></tr>
+        <tr><td>Volume Size</td><td>30 GB each</td></tr>
+        <tr><td>Version</td><td>weed 30GB 4.39</td></tr>
+      </table>
+    </div>
+
+    <h2>Quick Links</h2>
+
+    <div class="card">
+      <h3><a href="getting-started.html">Getting Started</a></h3>
+      <p>System requirements, installation, configuration, first-time setup, and production deployment with systemd + Nginx + Cloudflared.</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="dashboard.html">Dashboard Overview</a></h3>
+      <p>Real-time KPI cards, historical trend charts, SSE data stream, disk usage pie chart, volume growth area chart, and the configurable alert panel.</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="cluster.html">Cluster &amp; Topology</a></h3>
+      <p>Full topology tree (DC &rarr; Rack &rarr; Node), master/volume/filer server tables, leader election info, per-node volume limits, search/filter/sort.</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="volumes.html">Volume Management</a></h3>
+      <p>Volume list with detail drawer, grow operation, vacuum/garbage collection trigger, collections CRUD, status indicators (ReadOnly, TTL, compaction).</p>
+    </div>
+
+    <div class="card">
+      <h3>Filer Browser</h3>
+      <p>Directory navigation with breadcrumbs and pagination, file upload (drag-drop, multi-file, live progress), download, delete, create folders, metadata viewer.</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="s3.html">S3 Management</a></h3>
+      <p>Bucket CRUD, user management with access/secret key generation, policy editor with JSON validation, IAM sync to S3 gateway nodes via SSH. Gateway endpoints at <code>.102:8333</code>, <code>.104:8333</code>, <code>.106:8333</code>, <code>.107:8333</code>.</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="backup.html">Backup &amp; Restore</a></h3>
+      <p>Filer metadata (LevelDB) backup via SSH/SFTP to dashboard server, restore process with filer restart, 30-day retention policy, API key authentication (<code>bkp_</code> prefix).</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="workers.html">Workers</a></h3>
+      <p>Background job management — detect cluster work, execute volume balance/replication repair/garbage collect/filer repair/system check jobs. Monitor progress and review job history.</p>
+    </div>
+
+    <div class="card">
+      <h3><a href="disk-health.html">Disk Health</a></h3>
+      <p>S.M.A.R.T. monitoring via SSH (<code>smartctl --json</code>), lifespan estimation (power-on hours, wear %, TBW), temperature and reallocated sector alerts.</p>
+    </div>
+
+    <h2>Architecture</h2>
+    <pre><code>Browser                    Backend (BFF)                SeaweedFS Cluster
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;    HTTP     &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;    httpx     &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+&#x2502; React 19 &#x2502; &#x25C0;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x25B6; &#x2502; FastAPI      &#x2502; &#x25C0;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x25B6; &#x2502; Master  (x3)    &#x2502;
+&#x2502; Antd 5   &#x2502;    SSE      &#x2502; structlog    &#x2502;              &#x2502; Volume  (x7)    &#x2502;
+&#x2502; Recharts &#x2502;             &#x2502; SQLite / PG  &#x2502;              &#x2502; Filer   (x2 HA) &#x2502;
+&#x2502; Zustand  &#x2502;             &#x2502; Redis*       &#x2502;              &#x2502; S3 GW   (x4)    &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;             &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;              &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+     :5173                    :8000                       :9333 :8888 :8333</code></pre>
+
+    <div class="note">
+      <strong>Note:</strong> The dashboard backend acts as a BFF (Backend For Frontend) — it proxies and aggregates SeaweedFS API calls, handling multi-master failover transparently. The frontend never calls SeaweedFS directly.
+    </div>
+
+    <h2>Tech Stack</h2>
+    <table>
+      <tr><th>Layer</th><th>Technology</th></tr>
+      <tr><td>Frontend</td><td>React 19, TypeScript, Vite, Ant Design 5, Recharts, Zustand</td></tr>
+      <tr><td>Backend</td><td>Python 3.11+, FastAPI, httpx, Pydantic v2, structlog</td></tr>
+      <tr><td>Database</td><td>SQLite (default) or PostgreSQL</td></tr>
+      <tr><td>Cache</td><td>Redis (optional — rate limiting, sessions, SSE pub/sub)</td></tr>
+      <tr><td>Auth</td><td>Session-based JWT, CSRF protection, role-based (admin / read-only)</td></tr>
+    </table>
+
+    <h2>Key Features</h2>
+    <ul>
+      <li><strong>Multi-master failover</strong> — automatic switching with audit logging</li>
+      <li><strong>Real-time monitoring</strong> — SSE push, no polling, auto-reconnect</li>
+      <li><strong>Historical trends</strong> — configurable snapshot interval (default 60s), SQLite time-series storage</li>
+      <li><strong>Smart alerts</strong> — configurable thresholds (disk &gt; 90%, node offline, garbage &gt; 0.5, readonly volumes)</li>
+      <li><strong>Per-node volume limits</strong> — capacity planning with inline editing and growth enforcement</li>
+      <li><strong>S.M.A.R.T. disk health</strong> — lifespan estimation, temperature/wear/reallocated sector monitoring</li>
+      <li><strong>IAM sync</strong> — auto-sync S3 users/policies to gateway nodes via SSH</li>
+      <li><strong>Structured logging</strong> — JSON-format logs via structlog with full audit trail</li>
+    </ul>
+  </main>
+</div>
+
+</body>
+</html>

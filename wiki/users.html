@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Users &amp; Roles — SeaweedFS Dashboard Wiki</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Dashboard</h2>
+    <a href="overview.html">Overview</a>
+    <a href="real-time.html">Real-time SSE</a>
+    <a href="history.html">Historical Data</a>
+    <a href="alerts.html">Alert Engine</a>
+
+    <h2>Cluster</h2>
+    <a href="topology.html">Topology &amp; Servers</a>
+    <a href="volumes.html">Volumes</a>
+    <a href="collections.html">Collections</a>
+    <a href="filer.html">Filer Browser</a>
+
+    <h2>Management</h2>
+    <a href="s3.html">S3 &amp; Object Store</a>
+    <a href="backup.html">Backup</a>
+    <a href="workers.html">Workers</a>
+    <a href="disk-health.html">Disk Health</a>
+
+    <h2>Security</h2>
+    <a href="users.html" class="active">Users &amp; Roles</a>
+    <a href="api-keys.html">API Keys</a>
+  </nav>
+
+  <main class="content">
+    <h1>Users &amp; Roles</h1>
+    <p>
+      The dashboard uses a role-based access control (RBAC) system with three built-in roles.
+      Users authenticate via session-based login (bcrypt password hashing) and every user
+      automatically receives S3 credentials for direct SeaweedFS S3 gateway access.
+    </p>
+
+    <div class="note">
+      Seeded accounts: <code>admin</code> (full access) and <code>viewer</code> (read-only).
+      Credentials are set via <code>ADMIN_USER</code>/<code>ADMIN_PASSWORD</code> and
+      <code>READONLY_USER</code>/<code>READONLY_PASSWORD</code> in <code>.env</code>.
+    </div>
+
+    <!-- ───── RBAC Roles ───── -->
+    <h2>Role-Based Access Control</h2>
+    <p>
+      Permissions are defined in <code>rbac.json</code> at the project root. Each role maps to a list
+      of granular permission strings in <code>domain:action</code> format:
+    </p>
+
+    <div class="card">
+      <h3><span class="tag tag-red">admin</span> — Full System Access</h3>
+      <p>Complete control over every aspect of the system, including user management and settings.</p>
+      <table>
+        <tr><th>Domain</th><th>Permissions</th></tr>
+        <tr><td>Dashboard</td><td><code>dashboard:read</code>, <code>sse:read</code></td></tr>
+        <tr><td>Cluster</td><td><code>cluster:read</code></td></tr>
+        <tr><td>Volumes</td><td><code>volumes:read</code>, <code>volumes:write</code></td></tr>
+        <tr><td>Collections</td><td><code>collections:read</code>, <code>collections:delete</code></td></tr>
+        <tr><td>Filer</td><td><code>filer:read</code>, <code>filer:write</code></td></tr>
+        <tr><td>S3</td><td><code>s3:read</code>, <code>s3:write</code></td></tr>
+        <tr><td>Backup</td><td><code>backup:read</code>, <code>backup:write</code></td></tr>
+        <tr><td>Workers</td><td><code>workers:read</code>, <code>workers:write</code></td></tr>
+        <tr><td>Alerts</td><td><code>alerts:read</code>, <code>alerts:write</code></td></tr>
+        <tr><td>Disk Health</td><td><code>disk_health:read</code></td></tr>
+        <tr><td>Users</td><td><code>users:read</code>, <code>users:write</code></td></tr>
+        <tr><td>Settings</td><td><code>settings:read</code>, <code>settings:write</code></td></tr>
+        <tr><td>Audit</td><td><code>audit:read</code></td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3><span class="tag tag-purple">operator</span> — Operational Management</h3>
+      <p>Full cluster operations without the ability to modify users or system settings.</p>
+      <p>
+        Identical to admin permissions <strong>minus</strong>: <code>users:read</code>,
+        <code>users:write</code>, <code>settings:read</code>, <code>settings:write</code>,
+        <code>collections:delete</code>, <code>audit:read</code>.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3><span class="tag tag-blue">viewer</span> — Read-Only Monitoring</h3>
+      <p>Can view all dashboards and data but cannot perform any write operations.</p>
+      <p>
+        Limited to read-only permissions across all domains plus <code>sse:read</code>.
+        The default role for new users when no role is specified.
+      </p>
+    </div>
+
+    <!-- ───── Permission Reference ───── -->
+    <h2>Complete Permission Reference</h2>
+    <table>
+      <tr>
+        <th>Permission</th>
+        <th>admin</th>
+        <th>operator</th>
+        <th>viewer</th>
+      </tr>
+      <tr><td><code>dashboard:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>cluster:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>volumes:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>volumes:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>collections:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>collections:delete</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>filer:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>filer:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>s3:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>s3:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>backup:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>backup:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>workers:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>workers:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>alerts:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>alerts:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>disk_health:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+      <tr><td><code>settings:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>settings:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>users:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>users:write</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>audit:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-red">✗</span></td><td><span class="tag tag-red">✗</span></td></tr>
+      <tr><td><code>sse:read</code></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td><td><span class="tag tag-green">✓</span></td></tr>
+    </table>
+
+    <!-- ───── User CRUD ───── -->
+    <h2>User Management (CRUD)</h2>
+
+    <div class="card">
+      <h3>Create User</h3>
+      <p><strong>Requires:</strong> Admin role. The create form includes:</p>
+      <ul>
+        <li><strong>Username, first name, last name, email</strong> — all required</li>
+        <li><strong>Phone</strong> — optional</li>
+        <li><strong>Role</strong> — dropdown: admin, operator, viewer (defaults to <code>default_role</code> from rbac.json)</li>
+        <li><strong>Password</strong> — set at creation time</li>
+        <li><strong>S3 permission</strong> — <code>readwrite</code> (default) or <code>read</code></li>
+        <li><strong>Create S3 bucket</strong> — checkbox to auto-create <code>user-{username}</code> bucket</li>
+      </ul>
+      <pre><code>POST /api/users
+{
+  "username": "operator1",
+  "password": "secure-password",
+  "firstname": "Jane",
+  "lastname": "Smith",
+  "email": "jane@example.com",
+  "role": "operator",
+  "create_bucket": true,
+  "s3_permission": "readwrite"
+}</code></pre>
+      <p>Response includes generated S3 credentials and bucket creation status:</p>
+      <pre><code>{
+  "username": "operator1",
+  "role": "operator",
+  "enabled": true,
+  "s3_access_key": "AKa1b2c3d4e5f6a7b8c9d0e1f2",
+  "s3_secret_key": "f3a5b7c9d1e2...",
+  "bucket_created": true
+}</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Update User</h3>
+      <p><strong>Requires:</strong> Admin role. All fields are optional — only provided fields are updated:</p>
+      <pre><code>PUT /api/users/{user_id}
+{
+  "firstname": "Janet",
+  "role": "admin",
+  "enabled": false
+}</code></pre>
+      <p>Enabling/disabling a user sets <code>enabled</code> to <code>1</code> or <code>0</code>. Disabled users cannot log in.</p>
+    </div>
+
+    <div class="card">
+      <h3>Delete User</h3>
+      <p><strong>Requires:</strong> Admin role. The <code>admin</code> user cannot be deleted.</p>
+      <pre><code>DELETE /api/users/{user_id}
+
+{"ok": true}</code></pre>
+      <p>Any user creation, update, or deletion triggers an asynchronous S3 gateway sync across all configured gateways.</p>
+    </div>
+
+    <!-- ───── S3 Integration ───── -->
+    <h2>S3 Bucket Auto-Creation</h2>
+    <p>
+      Every user automatically receives S3 access credentials (<code>s3_access_key</code>,
+      <code>s3_secret_key</code>) generated at creation time:
+    </p>
+    <ul>
+      <li>Access key format: <code>AK</code> + 20 hex characters (<code>secrets.token_hex(10)</code>)</li>
+      <li>Secret key: 40 hex characters (<code>secrets.token_hex(20)</code>)</li>
+    </ul>
+
+    <p>
+      When <code>create_bucket: true</code> is passed, a bucket named <code>user-{username}</code>
+      is created in the filer via <code>POST /{bucket}?op=mkdir</code>. This can also be triggered
+      later by the user themselves:
+    </p>
+    <pre><code>POST /api/users/me/bucket
+
+{"bucket": "user-operator1", "ok": true}</code></pre>
+
+    <!-- ───── Password Management ───── -->
+    <h2>Password Management</h2>
+
+    <div class="card">
+      <h3>Self-Service Password Change</h3>
+      <p>Any authenticated user can change their own password. The current password must be verified first:</p>
+      <pre><code>POST /api/users/me/password
+{
+  "current_password": "old-password",
+  "new_password": "new-secure-password"
+}</code></pre>
+      <p>
+        The current password is verified against the stored bcrypt hash. On success, the
+        new password is hashed with bcrypt and stored. The session remains active.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Admin Password Reset</h3>
+      <p>
+        There is no dedicated "reset password" endpoint. An admin updates a user's password
+        by creating a new user with the same username (the <code>UNIQUE</code> constraint will
+        fail) or directly via the database. A password reset UI is planned for a future release.
+      </p>
+    </div>
+
+    <!-- ───── Profile Management ───── -->
+    <h2>User Profile Management</h2>
+    <p>Each user can view and update their own profile information:</p>
+
+    <pre><code>GET /api/users/me/profile
+
+{
+  "username": "operator1",
+  "firstname": "Jane",
+  "lastname": "Smith",
+  "email": "jane@example.com",
+  "phone": "+97699112233",
+  "role": "operator",
+  "s3_access_key": "AKa1b2c3d4e5f6a7b8c9d0e1f2",
+  "created_at": "2026-07-15 10:30:00"
+}</code></pre>
+
+    <pre><code>PUT /api/users/me/profile
+{
+  "firstname": "Janet",
+  "email": "janet@newdomain.com",
+  "phone": "+97699887766"
+}</code></pre>
+
+    <p>Updatable fields: <code>firstname</code>, <code>lastname</code>, <code>email</code>, <code>phone</code>. Role and username cannot be changed by the user.</p>
+
+    <div class="warn">
+      The <code>admin</code> system user cannot be deleted (returns 400). Always ensure
+      at least one admin user exists in the database.
+    </div>
+
+    <hr>
+
+    <h2>Schema</h2>
+    <pre><code>CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    firstname TEXT NOT NULL DEFAULT '',
+    lastname TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'viewer',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    s3_access_key TEXT NOT NULL DEFAULT '',
+    s3_secret_key TEXT NOT NULL DEFAULT '',
+    s3_permission TEXT NOT NULL DEFAULT 'readwrite',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</code></pre>
+
+    <hr>
+
+    <h2>Configuration Reference</h2>
+    <table>
+      <tr><th>Env Variable</th><th>Purpose</th><th>Example</th></tr>
+      <tr><td><code>ADMIN_USER</code></td><td>Seeded admin username</td><td><code>admin</code></td></tr>
+      <tr><td><code>ADMIN_PASSWORD</code></td><td>Seeded admin password (bcrypt hashed at startup)</td><td><code>changeme</code></td></tr>
+      <tr><td><code>READONLY_USER</code></td><td>Seeded viewer username</td><td><code>viewer</code></td></tr>
+      <tr><td><code>READONLY_PASSWORD</code></td><td>Seeded viewer password (bcrypt hashed at startup)</td><td><code>viewpass</code></td></tr>
+      <tr><td><code>SESSION_SECRET</code></td><td>Key for session cookie encryption</td><td><code>random-64-char-string</code></td></tr>
+    </table>
+
+    <div class="note">
+      Seeded user passwords in <code>.env</code> are <strong>only used at first startup</strong>
+      (via migration <code>004_users.sql</code>). To change a password after initial seeding,
+      use the self-service change password endpoint or update the bcrypt hash directly in the database.
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

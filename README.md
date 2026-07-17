@@ -255,6 +255,16 @@ Apache License 2.0 — use, modify, and distribute freely. Attribution must be r
 
 ---
 
+## About
+
+SeaweedFS Dashboard is developed using [mBm AI Assistant](https://console.mbm.mn) — an AI-powered engineering and operations assistant by [mBm TECHNOLOGY LLC](https://www.mbm.technology) that handles rapid coding, server management, deployments, and full-stack troubleshooting.
+
+Try mBm AI Assistant: [console.mbm.mn](https://console.mbm.mn)
+
+Built and battle-tested on the **dc03** SeaweedFS production cluster at mBm TECHNOLOGY.
+
+---
+—
 <p align="center">
-  Developed by <a href="https://console.mbm.mn">mBm AI Assistant</a> at <a href="https://www.mbm.technology">mBm TECHNOLOGY</a>
+  Developed with <a href="https://console.mbm.mn">mBm AI Assistant</a> at <a href="https://www.mbm.technology">mBm TECHNOLOGY LLC</a>
 </p>

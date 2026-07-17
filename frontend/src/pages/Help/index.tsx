@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Tabs, Typography, Alert, Table, Tag } from 'antd'
+import { Card, Tabs, Typography, Alert, Table, Tag, Spin } from 'antd'
 import { LinkOutlined, ApiOutlined, CloudServerOutlined } from '@ant-design/icons'
 import api from '../../services/api'
 
@@ -7,9 +7,10 @@ const { Title, Paragraph } = Typography
 
 export default function HelpPage() {
   const [info, setInfo] = useState<any>(null)
+  const [infoLoading, setInfoLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/info').then((r) => setInfo(r.data)).catch(() => {})
+    api.get('/info').then((r) => setInfo(r.data)).catch(() => {}).finally(() => setInfoLoading(false))
   }, [])
 
   const endpoints = info ? [
@@ -82,7 +83,7 @@ export default function HelpPage() {
           {
             key: 'connect',
             label: <span><LinkOutlined /> Connect from VM</span>,
-            children: (
+            children: infoLoading ? <Spin style={{ display: 'block', margin: '40px auto' }} /> : (
               <div>
                 <Card title="Option 1: S3 (easiest)" style={{ marginBottom: 16 }}>
                   <Paragraph>Install AWS CLI and point it to the S3 gateway:</Paragraph>
@@ -92,9 +93,9 @@ aws configure set aws_access_key_id YOUR_ACCESS_KEY
 aws configure set aws_secret_access_key YOUR_SECRET_KEY
 
 # Use the S3 endpoint
-aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} ls
-aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} cp file.tar.gz s3://my-bucket/
-aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} sync /data s3://my-bucket/data`}
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} ls
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} cp file.tar.gz s3://my-bucket/
+aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} sync /data s3://my-bucket/data`}
                   </pre>
                 </Card>
 
@@ -102,11 +103,11 @@ aws s3 --endpoint-url=${info?.endpoints?.public_s3 || 'https://s3.mbm.mn'} sync 
                   <Paragraph>Use Dashboard REST API through the public endpoint:</Paragraph>
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
 {`# List directory
-curl ${info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'}/api/filer/list/vm-01/ \\
+curl ${info?.endpoints?.public_dashboard || ''}/api/filer/list/vm-01/ \\
   -H "Cookie: session=..."
 
 # Upload file
-curl -X POST ${info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'}/api/filer/upload/vm-01/ \\
+curl -X POST ${info?.endpoints?.public_dashboard || ''}/api/filer/upload/vm-01/ \\
   -F "files=@backup.tar.gz" \\
   -H "Cookie: session=..." -H "X-CSRF-Token: ..."`}
                   </pre>
@@ -116,7 +117,7 @@ curl -X POST ${info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'}/ap
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
 {`# Mount (VPN/internal network required)
 ./weed mount \\
-  -filer=${info?.endpoints?.internal_filer || '172.16.0.2:8888'} \\
+  -filer=${info?.endpoints?.internal_filer || ''} \\
   -dir=/mnt/seaweed \\
   -collection=vm-01`}
                   </pre>
@@ -126,11 +127,11 @@ curl -X POST ${info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'}/ap
                   <pre style={{ background: '#0f172a', padding: 16, borderRadius: 8, color: '#a5f3fc', overflow: 'auto' }}>
 {`# Run WebDAV server
 ./weed webdav \\
-  -filer=${info?.endpoints?.internal_filer || '172.16.0.2:8888'} \\
+  -filer=${info?.endpoints?.internal_filer || ''} \\
   -port=7333
 
 # Mount on client
-mount -t davfs http://${info?.endpoints?.internal_filer?.split(':')[0] || '172.16.0.2'}:7333 /mnt/seaweed`}
+mount -t davfs http://${info?.endpoints?.internal_filer?.split(':')[0] || ''}:7333 /mnt/seaweed`}
                   </pre>
                 </Card>
               </div>
@@ -179,9 +180,13 @@ aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} ls`}
                     { role: 'admin', desc: 'Full system access', perms: 'All operations, user management, settings' },
                     { role: 'operator', desc: 'Operational management', perms: 'Volumes, filer, S3, backup, workers (no user/settings changes)' },
                     { role: 'viewer', desc: 'Read-only monitoring', perms: 'View all pages, no modifications' },
+                    { role: 'user', desc: 'Standard dashboard access', perms: 'Dashboard, cluster, volumes, filer, S3 — limited sidebar' },
                   ]}
                   columns={[
-                    { title: 'Role', dataIndex: 'role', key: 'role', render: (v: string) => <Tag color={v === 'admin' ? 'pink' : v === 'operator' ? 'purple' : 'blue'}>{v}</Tag> },
+                    { title: 'Role', dataIndex: 'role', key: 'role', render: (v: string) => {
+                      const colors: Record<string, string> = { admin: 'pink', operator: 'purple', viewer: 'blue', user: 'cyan' }
+                      return <Tag color={colors[v] || 'blue'}>{v}</Tag>
+                    }},
                     { title: 'Description', dataIndex: 'desc', key: 'desc' },
                     { title: 'Permissions', dataIndex: 'perms', key: 'perms' },
                   ]}
@@ -189,6 +194,48 @@ aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} ls`}
                   size="small"
                 />
               </Card>
+            ),
+          },
+          {
+            key: 'wiki',
+            label: 'Wiki & Flows',
+            children: (
+              <div>
+                <Card title="Documentation Wiki" style={{ marginBottom: 16 }}>
+                  <Paragraph>
+                    Full documentation is available in the <code>wiki/</code> directory:
+                  </Paragraph>
+                  <ul>
+                    <li><a href="/wiki/getting-started.html" target="_blank">Getting Started</a> — Installation &amp; setup</li>
+                    <li><a href="/wiki/dashboard.html" target="_blank">Dashboard</a> — KPI cards, SSE, charts, alerts</li>
+                    <li><a href="/wiki/cluster.html" target="_blank">Cluster &amp; Topology</a> — Node management, leader election</li>
+                    <li><a href="/wiki/volumes.html" target="_blank">Volumes &amp; Collections</a> — Grow, vacuum, capacity planning</li>
+                    <li><a href="/wiki/s3.html" target="_blank">S3 Management</a> — Buckets, users, policies, IAM sync</li>
+                    <li><a href="/wiki/backup.html" target="_blank">Backup &amp; Restore</a> — Filer metadata snapshots, restore flow</li>
+                    <li><a href="/wiki/workers.html" target="_blank">Workers</a> — Job management, detect/execute</li>
+                    <li><a href="/wiki/disk-health.html" target="_blank">Disk Health</a> — S.M.A.R.T. monitoring</li>
+                    <li><a href="/wiki/api-keys.html" target="_blank">API Keys</a> — Key creation, permissions, usage tracking</li>
+                    <li><a href="/wiki/users.html" target="_blank">Users &amp; RBAC</a> — Roles, permissions, profile</li>
+                    <li><a href="/wiki/glossary.html" target="_blank">Glossary</a> — SeaweedFS terminology</li>
+                    <li><a href="/wiki/api-reference.html" target="_blank">API Reference</a> — Full endpoint documentation</li>
+                  </ul>
+                </Card>
+                <Card title="Flow Diagrams" style={{ marginBottom: 16 }}>
+                  <Paragraph>Visual walkthroughs of key system processes (<code>wiki/flow/</code>):</Paragraph>
+                  <ul>
+                    <li><a href="/wiki/flow/system-architecture.html" target="_blank">System Architecture</a></li>
+                    <li><a href="/wiki/flow/auth-flow.html" target="_blank">Authentication Flow</a></li>
+                    <li><a href="/wiki/flow/backup-flow.html" target="_blank">Backup Flow</a></li>
+                    <li><a href="/wiki/flow/restore-flow.html" target="_blank">Restore Flow</a></li>
+                    <li><a href="/wiki/flow/api-key-auth-flow.html" target="_blank">API Key Authentication</a></li>
+                    <li><a href="/wiki/flow/volume-lifecycle.html" target="_blank">Volume Lifecycle</a></li>
+                    <li><a href="/wiki/flow/s3-iam-sync.html" target="_blank">S3 IAM Sync</a></li>
+                    <li><a href="/wiki/flow/disk-health-scan.html" target="_blank">Disk Health Scan</a></li>
+                    <li><a href="/wiki/flow/sse-real-time.html" target="_blank">SSE Real-Time Data</a></li>
+                    <li><a href="/wiki/flow/master-failover.html" target="_blank">Master Failover</a></li>
+                  </ul>
+                </Card>
+              </div>
             ),
           },
           {

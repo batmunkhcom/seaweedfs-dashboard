@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Key Authentication Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+    <a href="../getting-started.html">Getting Started</a>
+    <a href="../dashboard.html">Dashboard</a>
+    <a href="../cluster.html">Cluster</a>
+    <a href="../volumes.html">Volumes</a>
+    <a href="../s3.html">S3</a>
+    <a href="../backup.html">Backup</a>
+    <a href="../workers.html">Workers</a>
+    <a href="../disk-health.html">Disk Health</a>
+    <a href="../api-keys.html">API Keys</a>
+    <a href="../users.html">Users</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Authentication Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html" class="active">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>API Key Authentication Flow</h1>
+    <p>API keys provide programmatic access to the SeaweedFS Dashboard for automation, CI/CD pipelines, and service-to-service communication. Keys use the <code>X-API-Key</code> HTTP header and bypass session/cookie-based auth entirely. Each key is assigned granular permissions at creation time, and usage is tracked (count, last used timestamp, last endpoint).</p>
+
+    <div class="note">
+      Keys are generated with the prefix <code>bkp_</code> followed by 64 hex characters (<code>secrets.token_hex(32)</code>). The full key is shown exactly once at creation time and stored as-is (not hashed) in the <code>api_keys</code> table — unlike user passwords which use bcrypt.
+    </div>
+
+    <h2>Key Management Lifecycle</h2>
+    <pre class="mermaid">
+sequenceDiagram
+    actor A as 👤 Admin User
+    actor S as 🤖 Service/CLI
+
+    participant FP as Frontend (API Keys Page)
+    participant AKR as API Keys Route
+    participant AKS as API Key Service
+    participant DB as SQLite (api_keys + users)
+
+    Note over A,DB: === CREATE KEY ===
+
+    A->>FP: Navigate to API Keys → Click "Create Key"
+    FP->>FP: Modal: Key Name + Permission checkboxes
+    A->>FP: Enter name, select permissions, click Create
+    FP->>AKR: POST /api/api-keys/create<br/>{name: "Backup Script", permissions: "backup:read,backup:write"}
+    AKR->>AKR: require_admin() — session user must be admin
+    AKR->>AKS: create_api_key(name, permissions, created_by="admin")
+    AKS->>AKS: key = "bkp_" + secrets.token_hex(32)
+    AKS->>DB: INSERT INTO api_keys<br/>(key, name, permissions, created_by)<br/>VALUES (?, ?, ?, ?)
+    DB-->>AKS: committed
+    AKS-->>AKR: {key: "bkp_a1b2c3...", name, permissions}
+    AKR-->>FP: Full key returned
+    FP->>FP: Show key in modal: "This key will not be shown again!"
+    A->>FP: Clicks "Copy Key" → copies to clipboard
+    A->>A: Stores key in vault/.env/CI secrets
+    FP->>FP: Modal closed — key is now masked in table
+
+    Note over S,DB: === SERVICE USES KEY ===
+
+    S->>S: Set header: X-API-Key: bkp_a1b2c3d4e5f6...
+    S->>AKR: GET /api/backup/status<br/>X-API-Key: bkp_a1b2c3...
+
+    Note over AKR: AuthMiddleware intercepts
+    AKR->>AKS: validate_api_key("bkp_a1b2c3...")
+    AKS->>AKS: Check: starts with "bkp_"?
+    AKS->>DB: SELECT * FROM api_keys<br/>WHERE key = ? AND is_active = 1
+    DB-->>AKS: {id: 1, name: "Backup Script", permissions: "backup:read,backup:write", ...}
+
+    alt Key valid
+        AKS-->>AKR: key_data dict
+        AKR->>AKR: request.state.user = "api_key"
+        AKR->>AKR: request.state.role = "backup_admin"
+        AKR->>AKR: request.state.permissions = ["backup:read", "backup:write"]
+        AKR->>AKR: request.state.api_key_id = 1
+        AKR->>AKS: record_usage(key_id=1, endpoint="/api/backup/status")
+        AKS->>DB: UPDATE api_keys<br/>SET usage_count = usage_count + 1,<br/>    last_used_at = NOW(),<br/>    last_used_endpoint = "/api/backup/status"<br/>WHERE id = 1
+
+        Note over AKR: Route handler checks require_permission("backup:read")
+        alt Permission in key's list
+            AKR-->>S: 200 OK (data returned)
+        else Permission missing
+            AKR-->>S: 403 "Missing permission: backup:read"
+        end
+    else Key invalid/revoked
+        AKS-->>AKR: None
+        AKR->>AKR: Fallback: check session? → No session
+        AKR-->>S: 401 "Not authenticated"
+    end
+
+    Note over A,DB: === REVEAL KEY ===
+
+    A->>FP: Click eye icon on key row
+    FP->>FP: Modal: Enter admin password
+    A->>FP: Enter password, click "Reveal"
+    FP->>AKR: POST /api/api-keys/reveal<br/>{key_id: 1, admin_password: "..."}
+    AKR->>AKS: reveal_api_key(key_id=1, admin_password, username="admin")
+    AKS->>DB: SELECT password_hash FROM users<br/>WHERE username = "admin" AND enabled = 1
+    DB-->>AKS: password_hash
+    AKS->>AKS: bcrypt.checkpw(admin_password, password_hash)
+
+    alt Password correct
+        AKS->>DB: SELECT key FROM api_keys WHERE id = 1
+        DB-->>AKS: "bkp_a1b2c3..."
+        AKS-->>AKR: "bkp_a1b2c3..."
+        AKR-->>FP: {key: "bkp_a1b2c3..."}
+        FP->>FP: Show full key + copy button
+    else Password wrong
+        AKS-->>AKR: None
+        AKR-->>FP: 403 "Invalid admin password or key not found"
+    end
+
+    Note over A,DB: === REVOKE KEY ===
+
+    A->>FP: Click delete/revoke button on key row
+    FP->>FP: Popconfirm: "Revoke this API key?"
+    A->>FP: Confirm revocation
+    FP->>AKR: POST /api/api-keys/revoke/1
+    AKR->>AKR: require_admin() check
+    AKR->>AKS: revoke_api_key(key_id=1)
+    AKS->>DB: UPDATE api_keys SET is_active = 0 WHERE id = 1
+    DB-->>AKS: committed
+    AKS-->>AKR: True
+    AKR-->>FP: {ok: true}
+    FP->>A: Success toast: "API key revoked"
+
+    Note over S: Any further requests with this key → 401
+
+    Note over A,DB: === VIEW DETAILS ===
+
+    A->>FP: Click info icon on key row
+    FP->>AKR: GET /api/api-keys/{id}/detail
+    AKR->>AKS: get_api_key_detail(key_id=1)
+    AKS->>DB: SELECT id, name, permissions, created_at,<br/>       last_used_at, is_active, usage_count,<br/>       last_used_endpoint, created_by<br/>FROM api_keys WHERE id = 1
+    DB-->>AKS: Full row
+    AKS->>AKS: Split permissions string → list
+    AKS-->>AKR: Detail dict
+    AKR-->>FP: Full detail
+    FP->>FP: Drawer with all fields (key NOT included)
+    </pre>
+
+    <h2>Step-by-Step: Key Lifecycle</h2>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Create Key</strong>
+        <span>Admin navigates to API Keys page, opens modal, enters name and selects permissions via checkboxes. Backend generates <code>"bkp_" + secrets.token_hex(32)</code> (68 chars total). The full key is shown exactly once — after the modal closes, it's masked.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Service Uses Key</strong>
+        <span>Service/CLI sends <code>X-API-Key: bkp_...</code> header. <code>AuthMiddleware</code> validates: checks prefix <code>bkp_</code>, queries <code>api_keys</code> table for active key. Sets <code>request.state.user = "api_key"</code>, <code>role = "backup_admin"</code>, <code>permissions</code> from DB. Records usage (increment counter, set <code>last_used_at</code> and <code>last_used_endpoint</code>).</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Permission Check</strong>
+        <span>For <code>backup_admin</code> role, <code>require_permission()</code> checks if the required permission string exists in <code>request.state.permissions</code> (from the key's DB record). Returns <code>403</code> if the permission is not in the list. For session users, delegates to <code>rbac.json</code> role mapping.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Reveal Key</strong>
+        <span>To view a previously created key, admin clicks the eye icon, enters their admin password in a modal. Backend verifies via <code>bcrypt.checkpw()</code> against the current admin's stored hash. If correct, the full key is returned. This ensures a hijacked session cannot reveal keys without the admin password.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Revoke Key</strong>
+        <span>Admin clicks delete/revoke, confirms in a Popconfirm. Backend sets <code>is_active = 0</code> (soft delete). The key remains in the database for audit but all future requests return <code>401</code>. The list shows a <span class="tag tag-red">Revoked</span> tag.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>View Details</strong>
+        <span>Clicking the info icon opens a detail drawer showing: name, permissions, created_at, last_used_at, usage_count, last_used_endpoint, created_by, is_active status. The key itself is <strong>not</strong> shown in the detail view.</span>
+      </div>
+    </div>
+
+    <h2>Permission Model</h2>
+
+    <div class="card">
+      <h3>Available Permissions</h3>
+      <table>
+        <tr><th>Permission String</th><th>Controls Access To</th></tr>
+        <tr><td><code>backup:read</code></td><td><code>GET /api/backup/status</code>, <code>GET /api/backup/snapshots</code></td></tr>
+        <tr><td><code>backup:write</code></td><td><code>POST /api/backup/sync</code>, <code>POST /api/backup/snapshots</code>, <code>DELETE /api/backup/snapshots/{name}</code>, <code>POST /api/backup/restore/{name}</code></td></tr>
+        <tr><td><code>filer:read</code></td><td><code>GET /api/filer/list/*</code></td></tr>
+        <tr><td><code>filer:write</code></td><td><code>POST /api/filer/mkdir/*</code>, <code>DELETE /api/filer/delete/*</code>, <code>POST /api/filer/upload/*</code></td></tr>
+        <tr><td><code>s3:read</code></td><td><code>GET /api/s3/buckets</code>, <code>GET /api/s3/users</code>, <code>GET /api/s3/policies</code></td></tr>
+        <tr><td><code>s3:write</code></td><td><code>POST /api/s3/buckets</code>, <code>DELETE /api/s3/buckets</code>, <code>POST /api/s3/users</code>, etc.</td></tr>
+        <tr><td><code>workers:read</code></td><td><code>GET /api/workers/status</code>, <code>GET /api/workers/jobs</code></td></tr>
+        <tr><td><code>workers:execute</code></td><td><code>POST /api/workers/jobs/detect</code>, <code>POST /api/workers/jobs/execute</code></td></tr>
+      </table>
+    </div>
+
+    <div class="note">
+      A key can hold multiple permissions simultaneously (e.g., <code>"backup:read,backup:write,filer:read"</code>). The frontend uses Ant Design <code>Checkbox.Group</code> for permission selection.
+    </div>
+
+    <h2>Key Format and Generation</h2>
+    <div class="card">
+      <table>
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td><strong>Prefix</strong></td><td><code>bkp_</code> (used by <code>validate_api_key</code> to reject non-backup keys)</td></tr>
+        <tr><td><strong>Random portion</strong></td><td>64 hex characters (32 bytes of entropy via <code>secrets.token_hex(32)</code>)</td></tr>
+        <tr><td><strong>Total length</strong></td><td>68 characters</td></tr>
+        <tr><td><strong>Example</strong></td><td><code>bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2</code></td></tr>
+      </table>
+    </div>
+
+    <h2>Usage Tracking</h2>
+    <p>Every API key request triggers <code>record_usage()</code> which updates:</p>
+    <pre><code>UPDATE api_keys
+SET usage_count = usage_count + 1,
+    last_used_at = '&lt;ISO 8601 timestamp&gt;',
+    last_used_endpoint = '/api/backup/status'
+WHERE id = &lt;key_id&gt;</code></pre>
+
+    <p>This allows administrators to see which keys are actively used vs dormant, identify the last endpoint each key accessed, and decide whether to revoke unused keys.</p>
+
+    <h2>Key Visibility and Security</h2>
+    <div class="card">
+      <table>
+        <tr><th>State</th><th>Visibility</th><th>How to Access</th></tr>
+        <tr><td><span class="tag tag-green">At creation</span></td><td>Full key shown once</td><td>Modal with copy button</td></tr>
+        <tr><td><span class="tag tag-blue">In table (routine)</span></td><td>Masked: <code>bkp_a1b2...</code> (first 8 chars)</td><td>API Keys list page</td></tr>
+        <tr><td><span class="tag tag-purple">In detail drawer</span></td><td>Key NOT shown</td><td>Click info icon</td></tr>
+        <tr><td><span class="tag tag-yellow">Reveal</span></td><td>Full key after admin password verification</td><td>Eye icon &rarr; password prompt &rarr; bcrypt check</td></tr>
+        <tr><td><span class="tag tag-red">After revocation</span></td><td>Still masked in list</td><td>Marked with red "Revoked" tag</td></tr>
+        <tr><td>In localStorage</td><td>Stored as plain text when user enters it</td><td>Browser DevTools &rarr; Application &rarr; Local Storage</td></tr>
+      </table>
+    </div>
+
+    <h2>Revocation</h2>
+    <p>Revocation is a <strong>soft delete</strong> — the <code>is_active</code> column is set to <code>0</code>. The key remains in the database for audit purposes but is rejected by <code>validate_api_key()</code>:</p>
+    <pre><code>async def validate_api_key(key: str) -> dict | None:
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM api_keys WHERE key = ? AND is_active = 1", (key,)
+    )
+    row = await cursor.fetchone()
+    return dict(row) if row else None</code></pre>
+
+    <p>Revoked keys return <code>401</code> on any future request, remain visible in the list with a red <span class="tag tag-red">Revoked</span> tag, and cannot be revealed or re-activated.</p>
+
+    <h2>Comparison: Session Auth vs API Key Auth</h2>
+    <div class="card">
+      <table>
+        <tr><th>Aspect</th><th>Session Auth</th><th>API Key Auth</th></tr>
+        <tr><td><strong>Trigger</strong></td><td>Browser cookie (auto-sent)</td><td><code>X-API-Key</code> header (explicit)</td></tr>
+        <tr><td><strong>Identity</strong></td><td><code>request.session["user"]</code></td><td><code>request.state.user = "api_key"</code></td></tr>
+        <tr><td><strong>Role</strong></td><td><code>admin</code> or <code>readonly</code> (from session)</td><td>Always <code>backup_admin</code></td></tr>
+        <tr><td><strong>Permissions</strong></td><td>RBAC (<code>rbac.json</code> role mapping)</td><td>Explicit list from <code>api_keys.permissions</code></td></tr>
+        <tr><td><strong>CSRF</strong></td><td>Required for state-changing requests</td><td>Not required (key is bearer token)</td></tr>
+        <tr><td><strong>Expiry</strong></td><td>Browser-session lifetime</td><td>Permanent (until revoked)</td></tr>
+        <tr><td><strong>Use case</strong></td><td>Interactive dashboard users</td><td>Automation scripts, CI/CD, S3 clients</td></tr>
+        <tr><td><strong>Storage</strong></td><td>HttpOnly cookie + localStorage</td><td><code>localStorage</code> (frontend) / env vars (CLI)</td></tr>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#a855f7',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#a855f7',
+      textColor: '#e2e8f0',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backup Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+    <a href="../getting-started.html">Getting Started</a>
+    <a href="../dashboard.html">Dashboard</a>
+    <a href="../cluster.html">Cluster</a>
+    <a href="../volumes.html">Volumes</a>
+    <a href="../s3.html">S3</a>
+    <a href="../backup.html">Backup</a>
+    <a href="../workers.html">Workers</a>
+    <a href="../disk-health.html">Disk Health</a>
+    <a href="../api-keys.html">API Keys</a>
+    <a href="../users.html">Users</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Authentication Flow</a>
+    <a href="backup-flow.html" class="active">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>Backup Flow</h1>
+    <p>The backup system creates full snapshots of the SeaweedFS Filer's LevelDB metadata database. It connects to filer nodes via SSH, tars the filer database directory, transfers the archive via SFTP to the dashboard server, and records the backup in SQLite. Old backups are automatically cleaned up based on retention settings.</p>
+
+    <div class="warn">
+      <strong>Important:</strong> Backups capture filer metadata only — file/directory names, paths, sizes, permissions, timestamps, and directory structure. File content is stored separately on volume servers and is not included in filer backups.
+    </div>
+
+    <h2>Backup Creation Flow</h2>
+    <pre class="mermaid">
+sequenceDiagram
+    actor U as 👤 Admin User
+    participant FP as Frontend (Backup Page)
+    participant AX as Axios (+ X-API-Key)
+    participant AM as Auth Middleware
+    participant BR as Backup Route
+    participant BS as Backup Service
+    participant DB as SQLite (backup_snapshots)
+    participant SS as Settings Service
+    participant SSH as SSH (paramiko)
+    participant F102 as Filer Node .102
+    participant F104 as Filer Node .104
+    participant FS as Local FS (/srv/seaweed-backups/)
+
+    U->>FP: Enters API key → clicks "Sync Now" or "New Backup"
+    FP->>FP: LocalStorage.setItem('backup_api_key', key)
+
+    Note over U,FS: === SYNC NOW (POST /api/backup/sync) ===
+
+    U->>FP: Click "Sync Now"
+    FP->>AX: POST /api/backup/sync<br/>Header: X-API-Key: bkp_...
+    AX->>AM: Request intercepted
+    AM->>AM: X-API-Key detected → validate_api_key()
+    AM->>AM: Set role=backup_admin, permissions=[...]
+    AM->>BR: Forward (check require_permission("backup:write"))
+    BR->>BS: create_backup(name=None)
+    BS->>SS: get_setting("backup_enabled", "true")
+
+    alt Backup disabled
+        BS-->>BR: {ok: false, error: "Backup is disabled"}
+        BR-->>FP: Error shown
+    else Backup enabled
+        BS->>SS: get_setting("seaweedfs_filer_host", "<default from config>")
+        SS-->>BS: "10.10.95.102,10.10.95.104"
+        BS->>SS: get_setting("backup_filer_db_path", "/data/dc03/filer/filerldb2")
+        SS-->>BS: "/data/dc03/filer/filerldb2"
+
+        Note over BS: Generate backup name: "backup-20260717_143052"
+        BS->>FS: mkdir -p /srv/seaweed-backups/
+
+        BS->>DB: INSERT INTO backup_snapshots<br/>(name, s3_key, filer_hosts, status='running', created_at)
+        DB-->>BS: sync_id
+
+        Note over BS,FS: === SIZE CHECK (Primary Filer First) ===
+
+        BS->>SSH: _ssh_exec(.102, "du -sb /data/dc03/filer/filerldb2")
+        SSH->>F102: SSH connect + exec_command
+        F102-->>SSH: stdout: "536870912\n" (approx 512MB)
+        SSH-->>BS: total_bytes += 536870912
+
+        Note over BS,FS: === BACKUP FROM PRIMARY FILER ===
+
+        BS->>SSH: _ssh_exec(.102, "tar czf /tmp/filer-backup-...tar.gz -C /data/dc03/filer/filerldb2 .")
+        SSH->>F102: tar czf ... (tars LevelDB directory)
+        F102-->>SSH: exit_code=0 (success)
+
+        BS->>SSH: _sftp_fetch(.102, "/tmp/filer-backup-...tar.gz", "/srv/seaweed-backups/backup-...tar.gz")
+        SSH->>F102: SFTP GET (download archive)
+        F102-->>SSH: transfer complete
+        SSH-->>BS: ok=True
+
+        BS->>SSH: _ssh_exec(.102, "rm -f /tmp/filer-backup-...tar.gz")
+        SSH->>F102: Cleanup temp file
+        BS->>BS: results[".102"] = "ok"
+
+        Note over BS,FS: === BACKUP FROM SECONDARY FILER ===
+
+        alt Secondary filer (.104) fails
+            BS->>SSH: _ssh_exec(.104, "du -sb ...") → fails
+            BS->>BS: results[".104"] = "connection refused"
+            BS->>BS: error_msg = "10.10.95.104: connection refused"
+        else Secondary filer succeeds
+            BS->>SSH: tar + SFTP to same backup file
+            BS->>BS: results[".104"] = "ok"
+        end
+
+        Note over BS,FS: === STATUS DETERMINATION ===
+
+        alt All filers succeeded AND total_bytes > 0
+            BS->>BS: status = "uploaded"
+        else Some failed
+            BS->>BS: status = "partial"
+        else All failed
+            BS->>BS: status = "failed"
+        end
+
+        BS->>DB: UPDATE backup_snapshots<br/>SET size_bytes, status, created_at WHERE id=?
+        DB-->>BS: committed
+
+        BS-->>BR: {ok, syncId, name, s3Key, bytesSynced, results, finishedAt}
+        BR-->>FP: Response
+
+        alt ok=true
+            FP->>U: Success toast with size
+        else ok=false (partial/failed)
+            FP->>U: Warning/error toast with details
+        end
+
+        Note over BS,FS: === ASYNC CLEANUP ===
+        BS->>BS: asyncio.create_task(cleanup_old_backups())
+        BS->>SS: get_setting_int("backup_retention_days", 30)
+        BS->>DB: SELECT name, s3_key FROM backup_snapshots<br/>WHERE created_at < cutoff AND status='uploaded'
+        loop For each expired backup
+            BS->>FS: file_path.unlink() (delete .tar.gz)
+            BS->>DB: DELETE FROM backup_snapshots WHERE name=?
+        end
+    end
+    </pre>
+
+    <h2>Status Transitions</h2>
+    <pre class="mermaid">
+stateDiagram-v2
+    [*] --> running: Backup initiated
+
+    running --> uploaded: All filer hosts succeeded
+    running --> partial: Some filer hosts failed
+    running --> failed: All filer hosts failed
+
+    uploaded --> missing: Physical file deleted from disk
+    partial --> missing: Physical file deleted from disk
+
+    uploaded --> [*]: Retention cleanup or manual delete
+    partial --> [*]: Retention cleanup or manual delete
+    failed --> [*]: Manual delete
+    missing --> [*]: Manual delete
+    </pre>
+
+    <h2>Step-by-Step Explanation</h2>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>API Key Entry</strong>
+        <span>The user enters their backup API key (format: <code>bkp_&lt;64-hex-chars&gt;</code>) on the Backup page. The key is stored in <code>localStorage</code> under <code>backup_api_key</code>. The Axios request interceptor detects backup-related URLs and attaches the <code>X-API-Key</code> header automatically.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Permission Check</strong>
+        <span>The <code>AuthMiddleware</code> validates the API key against the <code>api_keys</code> table (<code>is_active=1</code>), sets <code>request.state.role = "backup_admin"</code> and <code>request.state.permissions</code> from the key's permissions field. The route uses <code>Depends(require_permission("backup:write"))</code> to gate the operation.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Configuration Lookup</strong>
+        <span><code>create_backup()</code> fetches settings from the <code>runtime_settings</code> SQLite table (cached by <code>settings_service</code>): <code>backup_enabled</code> must be <code>"true"</code>, <code>seaweedfs_filer_host</code> lists filer hosts, <code>backup_filer_db_path</code> is the LevelDB path on each filer (default: <code>/data/dc03/filer/filerldb2</code>).</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Filer Host Resolution</strong>
+        <span>IP addresses are extracted from host strings (e.g., <code>10.10.95.102:8888</code> &rarr; <code>10.10.95.102</code>). SSH connections are made to port 22.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Size Measurement</strong>
+        <span>Before backing up, <code>du -sb &lt;db_path&gt;</code> is run on the first filer node to get the raw byte count. This is logged and stored as <code>size_bytes</code>. If this command fails, the backup continues but <code>total_bytes</code> remains 0, resulting in <code>status="failed"</code>.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>Tar Creation (On Each Filer)</strong>
+        <span>For each filer host: <code>tar czf /tmp/filer-backup-{timestamp}.tar.gz -C {db_path} .</code> compresses the LevelDB directory. The <code>-C</code> flag changes to the db directory before archiving, so the archive root is <code>.</code> (relative paths). Uses gzip compression (<code>-z</code>).</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">7</div>
+      <div class="flow-body">
+        <strong>SFTP Download</strong>
+        <span>The tar.gz file is downloaded from the filer node to <code>/srv/seaweed-backups/{name}.tar.gz</code> via SFTP (paramiko's <code>sftp.get</code>). All filer backups go into the same archive file (sequential from first node). The temporary file on the filer node is deleted after download.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">8</div>
+      <div class="flow-body">
+        <strong>Database Record</strong>
+        <span>A row is inserted into <code>backup_snapshots</code> with: <code>name</code> (backup identifier), <code>s3_key</code> (full path to local <code>.tar.gz</code>), <code>filer_hosts</code> (JSON array), <code>status</code> (starts as <code>"running"</code>, updated to <code>"uploaded"</code>/<code>"partial"</code>/<code>"failed"</code>), <code>size_bytes</code> (total raw bytes), <code>created_at</code> (ISO 8601 timestamp).</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">9</div>
+      <div class="flow-body">
+        <strong>Cleanup (Async)</strong>
+        <span>After the backup completes, <code>cleanup_old_backups()</code> runs as an <code>asyncio.create_task()</code> background task. It reads <code>backup_retention_days</code> from runtime settings (default: 30), finds all <code>uploaded</code> backups older than the cutoff date, and deletes the physical <code>.tar.gz</code> file and the database row for each.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">10</div>
+      <div class="flow-body">
+        <strong>Response to Frontend</strong>
+        <span>The response includes <code>ok</code>, <code>syncId</code>, <code>name</code>, <code>s3Key</code>, <code>bytesSynced</code>, <code>results</code> (per-host status map), and <code>finishedAt</code> timestamp.</span>
+      </div>
+    </div>
+
+    <h2>Error Handling</h2>
+    <div class="card">
+      <table>
+        <tr><th>Failure Point</th><th>Behavior</th></tr>
+        <tr><td>SSH connection to filer fails</td><td>Result logged as <code>"connection refused"</code> or timeout message. Next filer attempted. Overall status &rarr; <code>"partial"</code> or <code>"failed"</code>.</td></tr>
+        <tr><td><code>du -sb</code> fails</td><td><code>total_bytes</code> stays 0. Backup continues.</td></tr>
+        <tr><td><code>tar czf</code> fails</td><td>Specific filer marked as failed. SFTP not attempted for that host.</td></tr>
+        <tr><td>SFTP download fails</td><td><code>RuntimeError("SFTP download failed")</code> raised. Temp file still cleaned up.</td></tr>
+        <tr><td>All filers fail</td><td>Status set to <code>"failed"</code>. Error messages aggregated.</td></tr>
+        <tr><td>Disk full on <code>/srv/seaweed-backups/</code></td><td>Backup fails during SFTP with I/O error. Previous partial file may exist.</td></tr>
+      </table>
+    </div>
+
+    <h2>Listing and Deleting Backups</h2>
+
+    <div class="card">
+      <h3>List (<code>GET /api/backup/snapshots</code>)</h3>
+      <p>Reads all rows from <code>backup_snapshots</code> ordered by <code>id DESC</code>. For each row:</p>
+      <ul>
+        <li>If the physical <code>.tar.gz</code> file exists, uses its actual file size (updating the DB if <code>size_bytes</code> was 0).</li>
+        <li>If the file is missing, sets status to <code>"missing"</code>.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>Delete (<code>DELETE /api/backup/snapshots/{name}</code>)</h3>
+      <ol>
+        <li>Looks up the backup by name in SQLite</li>
+        <li>Deletes the physical <code>.tar.gz</code> file from <code>/srv/seaweed-backups/</code></li>
+        <li>Deletes the database row</li>
+        <li>Returns <code>404</code> if the backup name is not found</li>
+      </ol>
+    </div>
+
+    <h2>Backup Directory Structure</h2>
+    <pre><code>/srv/seaweed-backups/
+├── backup-20260715_081200.tar.gz    (256 MB)
+├── backup-20260716_090000.tar.gz    (258 MB)
+├── backup-20260717_143052.tar.gz    (512 MB)
+└── custom-name.tar.gz               (500 MB)</code></pre>
+
+    <div class="note">
+      Each backup is a <strong>full snapshot</strong> — not incremental. Encryption at the volume level is transparent; if filer store uses disk encryption (LUKS), the encrypted data is backed up identically.
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#a855f7',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#a855f7',
+      textColor: '#e2e8f0',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -29,7 +29,15 @@
         "s3:read", "backup:read", "workers:read",
         "alerts:read", "disk_health:read", "sse:read"
       ]
+    },
+    "user": {
+      "description": "Standard user — dashboard access and file browsing",
+      "permissions": [
+        "dashboard:read", "cluster:read", "volumes:read",
+        "filer:read",
+        "s3:read", "alerts:read", "sse:read"
+      ]
     }
   },
-  "default_role": "viewer"
+  "default_role": "user"
 }

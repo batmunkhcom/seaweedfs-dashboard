@@ -6,6 +6,7 @@ import secrets
 from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
+from app.rbac import get_roles, get_default_role
 import asyncio
 
 router = APIRouter(prefix="/users", tags=["users"])

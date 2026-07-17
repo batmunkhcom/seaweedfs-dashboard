@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backup &amp; Restore — SeaweedFS Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+    <a href="getting-started.html#configuration">Configuration</a>
+    <a href="getting-started.html#deployment">Deployment</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+    <a href="dashboard.html#real-time">Real-time SSE</a>
+    <a href="dashboard.html#history">Historical Charts</a>
+    <a href="dashboard.html#alerts">Alert Panel</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="cluster.html">Topology View</a>
+    <a href="cluster.html#servers">Server Tables</a>
+    <a href="cluster.html#leader">Leader Election</a>
+    <a href="cluster.html#limits">Node Limits</a>
+
+    <h2>Volume Management</h2>
+    <a href="volumes.html">Volume List</a>
+    <a href="volumes.html#grow">Volume Grow</a>
+    <a href="volumes.html#vacuum">Vacuum Trigger</a>
+    <a href="volumes.html#collections">Collections</a>
+
+    <h2>Filer Browser</h2>
+    <a href="#">Navigation &amp; Upload</a>
+    <a href="#">Metadata</a>
+
+    <h2>S3 Management</h2>
+    <a href="s3.html">Buckets &amp; Endpoints</a>
+    <a href="s3.html#s3-users--secrets">Users &amp; Keys</a>
+    <a href="s3.html#s3-policies">Policies</a>
+    <a href="s3.html#iam-sync">IAM Sync</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="backup.html" class="active">Status &amp; Sync</a>
+    <a href="backup.html#restore-process">Snapshots &amp; Restore</a>
+
+    <h2>Workers</h2>
+    <a href="workers.html">Job History</a>
+    <a href="workers.html#triggering-jobs">Detect &amp; Execute</a>
+
+    <h2>Disk Health</h2>
+    <a href="disk-health.html">SMART Monitoring</a>
+    <a href="disk-health.html">Lifespan Estimation</a>
+
+    <h2>API Keys</h2>
+    <a href="api-keys.html">Key Management</a>
+
+    <h2>Settings</h2>
+    <a href="#">Runtime Configuration</a>
+
+    <h2>API Reference</h2>
+    <a href="#">Endpoints</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="#">Architecture Flows</a>
+  </aside>
+
+  <main class="content">
+    <h1>Backup &amp; Restore</h1>
+    <p>
+      The backup system protects the Filer metadata (LevelDB state) by periodically
+      archiving it to the dashboard server. File content stored on volume servers
+      is <strong>not</strong> included — only the directory structure, attributes,
+      and chunk-to-volume mappings are backed up.
+    </p>
+
+    <!-- ── What Is / Is Not Backed Up ── -->
+    <h2>Scope of Backup</h2>
+
+    <div class="card">
+      <h3>What IS Backed Up</h3>
+      <ul>
+        <li>Filer LevelDB metadata &mdash; <code>/data/dc03/filer/filerldb2/</code></li>
+        <li>Directory tree structure and file entries</li>
+        <li>File attributes (size, modification time, mode, owner)</li>
+        <li>Chunk-to-volume-ID mappings (the "needle map")</li>
+        <li>Filer store configuration and IAM data</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3>What Is NOT Backed Up</h3>
+      <ul>
+        <li>Actual file content (stored on volume servers as <code>.idx</code> / <code>.dat</code> pairs)</li>
+        <li>Volume index files and data files</li>
+        <li>S3 object payloads (these live on volume servers)</li>
+      </ul>
+    </div>
+
+    <div class="note">
+      <strong>Recovery strategy:</strong> Volume data is protected by replication
+      (<code>001</code> — two copies per volume). To recover from a total volume-server
+      failure, re-replicate from surviving copies. The filer metadata backup ensures
+      you can reconstruct the directory tree and find which chunks belong to which files.
+    </div>
+
+    <!-- ── How Backup Works ── -->
+    <h2>How Backup Works</h2>
+
+    <div class="card">
+      <h3>Step 1 — SSH to Filer</h3>
+      <p>
+        The dashboard server SSH's into each filer node as <code>root</code>
+        using the configured SSH key. Both HA filers are backed up individually:
+      </p>
+      <table>
+        <thead><tr><th>Filer Node</th><th>SSH Target</th><th>LevelDB Path</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Primary</td>
+            <td><code>root@10.10.95.102</code></td>
+            <td><code>/data/dc03/filer/filerldb2</code></td>
+          </tr>
+          <tr>
+            <td>Secondary</td>
+            <td><code>root@10.10.95.104</code></td>
+            <td><code>/data/dc03/filer/filerldb2</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Step 2 — Tar Archive</h3>
+      <p>The filer compresses its LevelDB directory into a tarball:</p>
+      <pre><code>tar -czf /tmp/filer-backup-20260717-120000.tar.gz \
+    -C /data/dc03/filer filerldb2</code></pre>
+      <p>Compression reduces the typical LevelDB size from ~500 MB to ~80 MB.</p>
+    </div>
+
+    <div class="card">
+      <h3>Step 3 — SFTP Download</h3>
+      <p>The tarball is transferred via SFTP from the filer to the dashboard server:</p>
+      <pre><code>Destination: /srv/seaweed-backups/
+Filename:    filer-102_20260717-120000.tar.gz</code></pre>
+      <p>After a successful transfer the remote tarball is cleaned up.</p>
+    </div>
+
+    <div class="card">
+      <h3>Step 4 — Retention</h3>
+      <p>
+        Backups older than <strong>30 days</strong> are automatically pruned.
+        The retention window is configurable in runtime settings.
+      </p>
+    </div>
+
+    <p><strong>Backup frequency:</strong> Manual trigger only &mdash; use
+       <strong>New Backup</strong> or <strong>Sync Now</strong> buttons in the UI.</p>
+
+    <!-- ── Restore Process ── -->
+    <h2>Restore Process</h2>
+
+    <div class="card">
+      <h3>Step 1 — Select a Backup Snapshot</h3>
+      <p>
+        Choose a backup from the list. Only backups with <span class="tag tag-green">uploaded</span>
+        status can be used for restore. Backups marked <span class="tag tag-red">missing</span>
+        or <span class="tag tag-red">failed</span> are not restorable.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Step 2 — SFTP Upload to Filer</h3>
+      <p>The backup tarball is pushed back to the target filer:</p>
+      <pre><code>scp /srv/seaweed-backups/filer-102_20260717-120000.tar.gz \
+    root@10.10.95.102:/tmp/</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Step 3 — Extract into LevelDB Directory</h3>
+      <pre><code># On the filer node (auto-executed by restore):
+systemctl stop seaweed-filer
+rm -rf /data/dc03/filer/filerldb2
+tar -xzf /tmp/filer-102_20260717-120000.tar.gz -C /data/dc03/filer/
+systemctl start seaweed-filer</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Step 4 — Verify Filer Health</h3>
+      <p>
+        The dashboard checks that the filer comes back online and responds to
+        <code>GET /cluster/filer</code> before marking the restore as complete.
+      </p>
+    </div>
+
+    <div class="warn">
+      <strong>Downtime required:</strong> The filer must be stopped during restore.
+      S3 and filer operations are unavailable for the duration (typically 1&ndash;3 minutes).
+    </div>
+
+    <!-- ── Encryption ── -->
+    <h2>Encryption Compatibility</h2>
+    <p>
+      The backup archive itself is <strong>not encrypted</strong> &mdash; it is a raw
+      tarball of the LevelDB data. If encryption is required, the following approaches
+      are compatible:
+    </p>
+
+    <table>
+      <thead><tr><th>Encryption Layer</th><th>Compatibility</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Volume Encryption</td>
+          <td><span class="tag tag-green">compatible</span></td>
+          <td>SeaweedFS volume-level encryption (at rest) does not affect filer metadata</td>
+        </tr>
+        <tr>
+          <td>LUKS (disk)</td>
+          <td><span class="tag tag-green">compatible</span></td>
+          <td>Full-disk encryption on the filer node is transparent to the backup process</td>
+        </tr>
+        <tr>
+          <td>Transport (SSH)</td>
+          <td><span class="tag tag-green">enforced</span></td>
+          <td>SFTP/SCP transfers are encrypted via the SSH tunnel</td>
+        </tr>
+        <tr>
+          <td>Rest Encryption</td>
+          <td><span class="tag tag-yellow">manual</span></td>
+          <td>Encrypt tarballs with GPG before storing if needed</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ── API Key ── -->
+    <h2>API Key Requirement</h2>
+    <p>
+      All backup and restore operations require an API key passed in the
+      <code>X-API-Key</code> header:
+    </p>
+    <pre><code>X-API-Key: bkp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+    <p>API keys use the <strong><code>bkp_</code></strong> prefix convention. Configure the
+       key in <code>.env</code> as <code>BACKUP_API_KEY</code>. The dashboard UI
+       automatically includes this header for all backup operations.</p>
+
+    <div class="warn">
+      <strong>Guard the API key:</strong> Anyone with a valid backup API key can download
+      filer metadata and trigger restore operations. Store it securely and rotate periodically.
+    </div>
+
+    <!-- ── Retention ── -->
+    <h2>Retention Policy</h2>
+    <p>
+      Backups are kept for <strong>30 days</strong> by default. A cron-style cleanup
+      job runs daily and removes any archive older than the retention threshold from
+      <code>/srv/seaweed-backups/</code>.
+    </p>
+    <p>
+      The retention period is configurable via <code>runtime_settings</code>:
+    </p>
+    <pre><code>Key:   backup_retention_days
+Value: 30 (default)</code></pre>
+
+    <!-- ── Buttons & Statuses ── -->
+    <h2>Backup Actions</h2>
+
+    <div class="card">
+      <h3>New Backup</h3>
+      <p>
+        Creates a fresh backup by SSH-ing to each filer, archiving the LevelDB,
+        and downloading the tarball. This is a full backup — incremental/differential
+        backups are not supported.
+      </p>
+      <p><span class="tag tag-purple">admin only</span></p>
+    </div>
+
+    <div class="card">
+      <h3>Sync Now</h3>
+      <p>
+        Reconciles the backup list with what's actually on disk at
+        <code>/srv/seaweed-backups/</code>. Useful after manually adding or removing
+        backup files, or if the dashboard backup metadata gets out of sync.
+      </p>
+      <p><span class="tag tag-purple">admin only</span></p>
+    </div>
+
+    <h2>Backup Status Indicators</h2>
+
+    <table>
+      <thead><tr><th>Status</th><th>Meaning</th><th>Restore Available</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tag tag-green">uploaded</span></td>
+          <td>Backup completed successfully; tarball present on dashboard server</td>
+          <td><span class="tag tag-green">yes</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-yellow">partial</span></td>
+          <td>One filer backed up but the other failed or is unreachable</td>
+          <td><span class="tag tag-yellow">partial</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-red">failed</span></td>
+          <td>Backup operation did not complete (SSH error, disk full, tar failure)</td>
+          <td><span class="tag tag-red">no</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-red">missing</span></td>
+          <td>Tarball metadata exists but the file is absent from disk</td>
+          <td><span class="tag tag-red">no</span></td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-blue">running</span></td>
+          <td>Backup is currently in progress (SSH + tar + download)</td>
+          <td><span class="tag tag-yellow">wait</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>Restore button behavior:</strong> The <strong>Restore</strong> button
+      is disabled (greyed out) for backups with <code>missing</code> or <code>failed</code>
+      status. It is enabled only when at least one filer's backup is marked
+      <code>uploaded</code>.
+    </div>
+
+    <hr>
+
+    <h2>Disaster Recovery Checklist</h2>
+    <ol>
+      <li>Identify the latest backup with <span class="tag tag-green">uploaded</span> status</li>
+      <li>Verify the backup file exists: <code>ls -lh /srv/seaweed-backups/</code></li>
+      <li>Click <strong>Restore</strong> on the target backup entry</li>
+      <li>Monitor the restore progress in the UI</li>
+      <li>Once complete, verify filer is healthy via <code>GET /cluster/filer</code></li>
+      <li>Spot-check a few known file paths to confirm directory tree integrity</li>
+    </ol>
+  </main>
+</div>
+
+</body>
+</html>

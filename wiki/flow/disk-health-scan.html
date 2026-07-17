@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Disk Health Scan Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#a855f7',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#a855f7',
+        textColor: '#e2e8f0',
+        fontSize: '14px'
+      }
+    });
+  </script>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+
+    <h2>Getting Started</h2>
+    <a href="../getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="../dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="../cluster.html">Topology View</a>
+
+    <h2>Volume Management</h2>
+    <a href="../volumes.html">Volume List</a>
+
+    <h2>S3 Management</h2>
+    <a href="../s3.html">Buckets &amp; Endpoints</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="../backup.html">Status &amp; Sync</a>
+
+    <h2>Workers</h2>
+    <a href="../workers.html">Job History</a>
+
+    <h2>Disk Health</h2>
+    <a href="../disk-health.html">SMART Monitoring</a>
+
+    <h2>API Keys</h2>
+    <a href="../api-keys.html">Key Management</a>
+
+    <h2>User Management</h2>
+    <a href="../users.html">Admin &amp; Read-Only</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Auth Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html" class="active">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>Disk Health Scan Flow</h1>
+    <p>Automated S.M.A.R.T. disk health monitoring across all 7 cluster nodes via SSH.</p>
+
+    <div class="card">
+      <h3>Cluster Nodes</h3>
+      <table>
+        <tr><th>Node</th><th>IP</th><th>Disk</th><th>Mount</th></tr>
+        <tr><td>st95101</td><td><code>10.10.95.101</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+        <tr><td>st95102</td><td><code>10.10.95.102</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+        <tr><td>st395103</td><td><code>10.10.95.103</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+        <tr><td>st395104</td><td><code>10.10.95.104</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+        <tr><td>st395105</td><td><code>10.10.95.105</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+        <tr><td>st395106</td><td><code>10.10.95.106</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+        <tr><td>st395107</td><td><code>10.10.95.107</code></td><td>1.8 TB</td><td><code>/data/dc03</code></td></tr>
+      </table>
+    </div>
+
+    <p>All nodes are Intel N150 2-core, 3.9 GB RAM, running <code>weed</code> with 30 GB volumes on XFS.</p>
+
+    <h2>Configuration</h2>
+    <table>
+      <tr><th>Setting</th><th>Default</th><th>Source</th></tr>
+      <tr><td><code>DISK_HEALTH_ENABLED</code></td><td><code>false</code></td><td><span class="tag tag-purple">.env</span></td></tr>
+      <tr><td><code>DISK_HEALTH_SCAN_INTERVAL_HOURS</code></td><td><code>24</code></td><td><span class="tag tag-blue">runtime_settings</span></td></tr>
+      <tr><td><code>DISK_HEALTH_SSH_USER</code></td><td><code>root</code></td><td><span class="tag tag-purple">.env</span></td></tr>
+      <tr><td><code>DISK_HEALTH_SSH_KEY_PATH</code></td><td><code>~/.ssh/id_rsa</code></td><td><span class="tag tag-purple">.env</span></td></tr>
+      <tr><td><code>DISK_HEALTH_TEMP_WARN_C</code></td><td><code>55</code></td><td><span class="tag tag-blue">runtime_settings</span></td></tr>
+      <tr><td><code>DISK_HEALTH_TEMP_CRIT_C</code></td><td><code>65</code></td><td><span class="tag tag-blue">runtime_settings</span></td></tr>
+      <tr><td><code>DISK_HEALTH_WEAR_WARN_PCT</code></td><td><code>85</code></td><td><span class="tag tag-blue">runtime_settings</span></td></tr>
+      <tr><td><code>DISK_HEALTH_REALLOC_WARN_COUNT</code></td><td><code>10</code></td><td><span class="tag tag-blue">runtime_settings</span></td></tr>
+    </table>
+
+    <h2>Full Scan Sequence</h2>
+
+    <pre class="mermaid">
+sequenceDiagram
+    participant Scheduler as Scan Scheduler (every N hours)
+    participant Service as DiskHealthService
+    participant Guard as Singleton/Cooldown Guard
+    participant SSH as paramiko SSH Pool
+    participant Node as Cluster Node (x7)
+    participant smartctl as smartctl
+    participant lsblk as lsblk
+    participant df as df -h
+    participant DB as SQLite (disk_health)
+    participant Heartbeat as services_health
+    participant UI as Dashboard UI
+
+    Scheduler->>Service: _scan_loop wakeup
+    Service->>Guard: Check singleton (active task?)
+    alt Already running
+        Guard-->>Service: Cancel previous task
+        Service->>Service: await cancelled task
+    end
+    Service->>Guard: Check cooldown (< 300s since last restart?)
+    alt Within cooldown
+        Guard-->>Service: Refuse restart
+    else Cooldown passed
+        Guard-->>Service: Proceed
+    end
+
+    Service->>Service: asyncio.create_task(_scan_all_nodes)
+
+    loop For each node (10.10.95.101–107)
+        Service->>SSH: Connect (paramiko, key auth, 10s timeout)
+
+        rect rgb(240, 248, 255)
+            Note over SSH,lsblk: Phase 1: Discover block devices
+            SSH->>Node: lsblk --json -o NAME,SIZE,TYPE,MOUNTPOINT
+            Node->>lsblk: Enumerate block devices
+            lsblk-->>SSH: JSON: [{ name: "sda", type: "disk", ... }]
+            SSH-->>Service: List of disk devices
+        end
+
+        rect rgb(255, 248, 240)
+            Note over SSH,smartctl: Phase 2: S.M.A.R.T. query per disk
+            loop For each disk device
+                SSH->>Node: smartctl --json -a /dev/sda
+                Node->>smartctl: Query S.M.A.R.T. data
+                alt S.M.A.R.T. available
+                    smartctl-->>SSH: Full S.M.A.R.T. JSON
+                    SSH-->>Service: S.M.A.R.T. JSON result
+                    Service->>DB: INSERT into disk_health (smart_json)
+                else S.M.A.R.T. not supported
+                    smartctl-->>SSH: Empty output
+                    SSH-->>Service: No S.M.A.R.T. data
+
+                    rect rgb(255, 240, 240)
+                        Note over SSH,df: Phase 2b: Fallback - basic info
+                        SSH->>Node: lsblk --json -b -o NAME,SIZE,TYPE,MOUNTPOINT
+                        SSH->>Node: df -B1 --output=size,used,avail,pcent /data/dc03
+                        Node->>df: Get filesystem usage
+                        df-->>SSH: size/used/avail/pct
+                        SSH-->>Service: Basic disk info + usage
+                        Service->>DB: INSERT into disk_health (minimal smart_json + usage)
+                    end
+                end
+            end
+        end
+
+        SSH->>SSH: Close connection
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Service,Heartbeat: Phase 3: Post-scan
+        Service->>DB: Parse latest S.M.A.R.T. JSON from disk_health
+
+        alt Threshold exceeded
+            Service->>Service: TEMP > 55°C or > 65°C
+            Service->>Service: Wear > 85%
+            Service->>Service: Reallocated sectors > 10
+            Service->>Service: Create alert via AlertEngine
+        end
+
+        Service->>Heartbeat: INSERT OR REPLACE into services_health
+        Note over Heartbeat: last_heartbeat = now(), ttl_seconds = 300
+    end
+
+    Note over UI: Frontend polls or loads page
+    UI->>Service: GET /api/disk-health/status
+    Service->>DB: SELECT node, device, MAX(timestamp)
+    Service-->>UI: { enabled: true, devices: [...] }
+
+    UI->>Service: GET /api/disk-health/history/{node}/{device}?days=30
+    Service->>DB: SELECT timestamp, smart_json
+    Service-->>UI: [{ timestamp, temp, wear }...]
+    </pre>
+
+    <h2>Step-by-Step Explanation</h2>
+
+    <h3>1. Singleton and Cooldown Guard</h3>
+    <p>Before starting a scan, <code>DiskHealthService</code> enforces two safety checks:</p>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Singleton enforcement</strong>
+        <span>Only one live <code>_scan_loop</code> task at a time. If <code>start()</code> is called while a task is already running, the previous task is cancelled and awaited before creating a new one.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Cooldown check</strong>
+        <span>Refuses restarts within 300 seconds of the last <code>start()</code> call, preventing rapid start/stop cycles.</span>
+      </div>
+    </div>
+
+    <h3>2. Device Discovery (lsblk)</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>SSH connection</strong>
+        <span>Opens an SSH connection via paramiko using <code>DISK_HEALTH_SSH_USER</code> and <code>DISK_HEALTH_SSH_KEY_PATH</code> (10s timeout).</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Enumerate block devices</strong>
+        <span>Runs <code>lsblk --json -o NAME,SIZE,TYPE,MOUNTPOINT</code> and filters for devices with <code>type: "disk"</code> (e.g. <code>sda</code>, <code>nvme0n1</code>).</span>
+      </div>
+    </div>
+
+    <h3>3. S.M.A.R.T. Query (smartctl)</h3>
+    <p>For each discovered disk device, the service runs:</p>
+    <pre><code>smartctl --json -a /dev/sda</code></pre>
+    <p>The JSON output is stored raw in <code>disk_health.smart_json</code> for later parsing. Key fields extracted at query time:</p>
+    <table>
+      <tr><th>S.M.A.R.T. Attribute</th><th>Meaning</th><th>Threshold</th></tr>
+      <tr><td><code>temperature.current</code></td><td>Current drive temperature (&deg;C)</td><td>Warn &gt; 55, Critical &gt; 65</td></tr>
+      <tr><td><code>ata_smart_attributes.table[].value</code></td><td>Wear leveling / endurance</td><td>Warn &gt; 85%</td></tr>
+      <tr><td><code>power_on_hours</code></td><td>Total powered-on time</td><td>Informational</td></tr>
+      <tr><td><code>reallocated_sector_ct</code></td><td>Number of remapped bad sectors</td><td>Warn &gt; 10</td></tr>
+    </table>
+
+    <h3>4. Fallback for Non-S.M.A.R.T. Disks</h3>
+    <p>When <code>smartctl</code> returns no output (common for virtual disks, some NVMe drives, or LVM-backed storage), the service falls back to:</p>
+    <pre><code>lsblk --json -b -o NAME,SIZE,TYPE,MOUNTPOINT
+df -B1 --output=size,used,avail,pcent /data/dc03</code></pre>
+    <p>A minimal <code>smart_json</code> record is constructed with <code>model_name: "Virtual Disk"</code>, <code>user_capacity</code> from <code>lsblk</code> size, <code>smart_status.passed: true</code>, and a <code>usage</code> object from <code>df</code>. Only disks with a <code>/data</code> mount point or &ge; 100 GB capacity are persisted (filters out boot/system partitions).</p>
+
+    <h3>5. Threshold Evaluation &amp; Alerting</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Evaluate S.M.A.R.T. data</strong>
+        <span>After each scan, the service evaluates the latest S.M.A.R.T. data against configured thresholds.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Create alerts</strong>
+        <span>Alerts are created via the alert engine when any threshold is exceeded. Alerts remain open until the condition clears and the alert is acknowledged/resolved.</span>
+      </div>
+    </div>
+
+    <h3>6. Heartbeat</h3>
+    <p>After each successful scan cycle, the service writes to <code>services_health</code>:</p>
+    <table>
+      <tr><th>Field</th><th>Value</th></tr>
+      <tr><td><code>name</code></td><td><code>"disk_health"</code></td></tr>
+      <tr><td><code>last_heartbeat</code></td><td>Current timestamp</td></tr>
+      <tr><td><code>ttl_seconds</code></td><td><code>300</code> (5 minutes &mdash; slow service)</td></tr>
+    </table>
+    <p>The <code>/api/health</code> endpoint reports this heartbeat so operators can see if the scan service is alive.</p>
+
+    <h3>7. Manual Scan Trigger</h3>
+    <p>Admins can trigger an immediate scan without waiting for the interval:</p>
+    <pre><code>POST /api/disk-health/scan</code></pre>
+    <p>This creates a new <code>asyncio.create_task</code> that runs <code>_scan_all_nodes()</code> once (not blocking the interval loop).</p>
+
+    <h2>Data Storage</h2>
+    <p>The <code>disk_health</code> table schema:</p>
+    <pre><code>CREATE TABLE disk_health (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node TEXT NOT NULL,       -- e.g. "10.10.95.101"
+    device TEXT NOT NULL,     -- e.g. "/dev/sda"
+    timestamp REAL NOT NULL,  -- Unix epoch
+    smart_json TEXT NOT NULL  -- Full S.M.A.R.T. JSON or fallback struct
+);</code></pre>
+    <p>No automatic cleanup &mdash; rows accumulate indefinitely. Historical data is queried by timestamp range via the API.</p>
+
+    <h2>API Reference</h2>
+    <table>
+      <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
+      <tr><td><code>/api/disk-health/status</code></td><td>GET</td><td>List all devices and their last scan timestamps</td></tr>
+      <tr><td><code>/api/disk-health/scan</code></td><td>POST</td><td>Trigger immediate scan (admin)</td></tr>
+      <tr><td><code>/api/disk-health/{node}/{device}</code></td><td>GET</td><td>Latest S.M.A.R.T. data for a device</td></tr>
+      <tr><td><code>/api/disk-health/history/{node}/{device}?days=30</code></td><td>GET</td><td>Temperature and wear trend over time</td></tr>
+    </table>
+
+    <h2>Troubleshooting</h2>
+    <table>
+      <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+      <tr><td>All nodes return "no S.M.A.R.T."</td><td>SSH key path wrong or key not authorized</td><td>Verify <code>~/.ssh/id_rsa</code> exists and is in each node's <code>authorized_keys</code></td></tr>
+      <tr><td>Single node fails</td><td>Node unreachable or <code>smartctl</code> not installed</td><td>Check network, verify <code>smartmontools</code> package is installed</td></tr>
+      <tr><td>Service stops after startup</td><td><code>DISK_HEALTH_ENABLED=false</code></td><td>Set <code>true</code> in <code>.env</code>, restart backend</td></tr>
+      <tr><td>Scan triggers but no data</td><td>Interval not elapsed yet</td><td>Use <code>POST /api/disk-health/scan</code> for immediate scan</td></tr>
+    </table>
+  </main>
+</div>
+
+</body>
+</html>

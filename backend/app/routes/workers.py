@@ -1,118 +1,99 @@
-from fastapi import APIRouter, Depends
-from datetime import datetime, timezone
+import time
+from fastapi import APIRouter, Depends, Query
 
 from app.middleware.auth_middleware import require_permission
-from app.database import get_db
 from app.logging_config import get_logger
-from app.config import settings
+from app.models.workers import (
+    WorkerNode,
+    WorkerJob,
+    WorkerStatusResponse,
+    ExecuteRequest,
+    DetectResponse,
+    ExecuteResponse,
+)
+from app.services.worker_service import (
+    detect_workers,
+    execute_job,
+    list_jobs,
+    get_job,
+    get_node_volumes,
+    JOB_TYPES,
+    _ensure_table,
+    _record_job,
+    _finish_job,
+)
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 logger = get_logger("workers")
 
 
-async def _ensure_table():
-    db = await get_db()
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS worker_jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            duration_ms INTEGER,
-            error TEXT,
-            created_at TEXT NOT NULL,
-            node TEXT
-        )
-        """
-    )
-    await db.commit()
-
-
-@router.get("/status")
+@router.get("/status", response_model=WorkerStatusResponse)
 async def worker_status():
     await _ensure_table()
-    workers = []
-    try:
-        from app.services.seaweed_client import get_seaweed_client
-        client = get_seaweed_client()
-        resp = await client.master_get("/cluster/status")
-        data = resp.json()
-        for node, info in data.get("DataCenters", {}).get(settings.datacenter, {}).get("Racks", {}).get(settings.rack, {}).get("DataNodes", {}).items():
-            workers.append({
-                "name": node,
-                "capabilities": ["volume", "master"][:1] if info.get("IsLeader") else ["volume"],
-                "lastSeen": datetime.now(timezone.utc).isoformat(),
-                "healthy": True,
-                "address": node,
-                "volumes": info.get("Volumes", 0),
-                "ecShards": info.get("EcShards", 0),
-                "maxVolumes": info.get("MaxVolumes", 0),
-            })
-    except Exception:
-        logger.error("worker_status_failed", exc_info=True)
-
-    return workers
+    detection = await detect_workers()
+    return WorkerStatusResponse(
+        total=detection["total"],
+        healthy=detection["healthy"],
+        nodes=[WorkerNode(**n) for n in detection["nodes"]],
+    )
 
 
 @router.get("/jobs")
-async def list_jobs(limit: int = 50):
+async def list_worker_jobs(limit: int = Query(50, ge=1, le=200)):
     await _ensure_table()
-    db = await get_db()
-    cursor = await db.execute("SELECT id, type, status, duration_ms, error, created_at, node FROM worker_jobs ORDER BY id DESC LIMIT ?", (limit,))
-    rows = await cursor.fetchall()
-    return [{"id": str(r[0]), "type": r[1], "status": r[2], "durationMs": r[3], "error": r[4], "createdAt": r[5], "node": r[6]} for r in rows]
+    return await list_jobs(limit)
 
 
 @router.get("/jobs/{job_id}")
-async def get_job(job_id: str):
+async def get_worker_job(job_id: str):
     await _ensure_table()
-    db = await get_db()
-    cursor = await db.execute("SELECT id, type, status, duration_ms, error, created_at, node FROM worker_jobs WHERE id=?", (int(job_id),))
-    row = await cursor.fetchone()
-    if not row:
-        return {"id": job_id, "type": "unknown", "status": "pending", "durationMs": None, "error": "not found", "createdAt": ""}
-    return {"id": str(row[0]), "type": row[1], "status": row[2], "durationMs": row[3], "error": row[4], "createdAt": row[5], "node": row[6]}
+    job = await get_job(int(job_id))
+    if not job:
+        return {"id": job_id, "type": "unknown", "status": "missing", "durationMs": None, "error": "not found", "result": None, "createdAt": "", "node": ""}
+    return job
 
 
-@router.post("/jobs/detect")
+@router.post("/jobs/detect", response_model=DetectResponse)
 async def trigger_detect(_: bool = Depends(require_permission("workers:write"))):
     await _ensure_table()
-    db = await get_db()
-    now = datetime.now(timezone.utc).isoformat()
-    await db.execute("INSERT INTO worker_jobs (type, status, created_at) VALUES (?, 'running', ?)", ("detect", now))
-    await db.commit()
-    cursor = await db.execute("SELECT last_insert_rowid()")
-    jid = (await cursor.fetchone())[0]
-
-    count = 0
+    start_time = time.monotonic()
+    job_id = await _record_job("detect")
     try:
-        from app.services.seaweed_client import get_seaweed_client
-        client = get_seaweed_client()
-        resp = await client.master_get("/cluster/status")
-        data = resp.json()
-        for node in data.get("DataCenters", {}).get(settings.datacenter, {}).get("Racks", {}).get(settings.rack, {}).get("DataNodes", {}).keys():
-            count += 1
-        await db.execute("UPDATE worker_jobs SET status='success', duration_ms=0 WHERE id=?", (jid,))
-    except Exception:
-        logger.error("worker_detect_failed", exc_info=True)
-        await db.execute("UPDATE worker_jobs SET status='failed', error=? WHERE id=?", ("Detection failed", jid))
+        result = await detect_workers()
+        await _finish_job(
+            job_id, start_time, "success",
+            result=f"Total: {result['total']}, Healthy: {result['healthy']}"
+        )
+        return DetectResponse(
+            ok=True, job_id=str(job_id),
+            workers_found=result["total"],
+            healthy=result["healthy"],
+            unhealthy=result["total"] - result["healthy"],
+        )
+    except Exception as e:
+        logger.error("detect_trigger_failed", exc_info=True)
+        await _finish_job(
+            job_id, start_time, "failed", error=str(e)[:200]
+        )
+        return DetectResponse(ok=False, job_id=str(job_id), workers_found=0, healthy=0, unhealthy=0)
 
-    await db.commit()
-    return {"ok": True, "jobId": jid, "workersFound": count}
 
-
-@router.post("/jobs/execute")
-async def trigger_execute(body: dict, _: bool = Depends(require_permission("workers:write"))):
+@router.post("/jobs/execute", response_model=ExecuteResponse)
+async def trigger_execute(body: ExecuteRequest, _: bool = Depends(require_permission("workers:write"))):
     await _ensure_table()
-    db = await get_db()
-    job_type = body.get("type", "unknown")
-    node = body.get("node", "")
-    now = datetime.now(timezone.utc).isoformat()
-    await db.execute("INSERT INTO worker_jobs (type, status, created_at, node) VALUES (?, 'running', ?, ?)", (job_type, now, node))
-    await db.commit()
-    cursor = await db.execute("SELECT last_insert_rowid()")
-    jid = (await cursor.fetchone())[0]
+    result = await execute_job(body.type, body.node, body.volume_param)
+    return ExecuteResponse(**result)
 
-    await db.execute("UPDATE worker_jobs SET status='success', duration_ms=0 WHERE id=?", (jid,))
-    await db.commit()
-    return {"ok": True, "jobId": jid, "type": job_type}
+
+@router.get("/job-types")
+async def job_types():
+    return [
+        {"type": k, "description": v}
+        for k, v in sorted(JOB_TYPES.items())
+    ]
+
+
+@router.get("/nodes/{node:path}/volumes")
+async def node_volumes(node: str):
+    ids = await get_node_volumes(node)
+    return {"node": node, "volume_ids": ids, "count": len(ids)}

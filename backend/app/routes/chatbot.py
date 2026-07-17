@@ -1,0 +1,81 @@
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+import httpx
+import json
+
+from app.logging_config import get_logger
+from app.services.chatbot_service import chat_stream, is_ai_enabled, _get_setting
+
+router = APIRouter(prefix="/chatbot", tags=["chatbot"])
+logger = get_logger("chatbot_routes")
+
+
+class ChatRequest(BaseModel):
+    prompt: str
+    history: list[dict] = []
+
+
+class TestConnectionRequest(BaseModel):
+    provider: str
+    api_base_url: str
+    api_key: str = ""
+
+
+@router.post("/test-connection")
+async def test_connection(body: TestConnectionRequest):
+    api_base = body.api_base_url.rstrip("/")
+    api_key = body.api_key
+
+    try:
+        if body.provider == "ollama":
+            url = f"{api_base}/api/tags"
+            headers = {}
+        else:
+            url = f"{api_base}/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return {"ok": False, "error": f"API returned {resp.status_code}", "models": []}
+
+            data = resp.json()
+
+        models = []
+        if body.provider == "ollama":
+            for m in data.get("models", []):
+                models.append({"id": m.get("name", ""), "name": m.get("name", "")})
+        else:
+            for m in data.get("data", []):
+                models.append({"id": m.get("id", ""), "name": m.get("id", "")})
+
+        return {"ok": True, "models": models[:50]}
+    except Exception as e:
+        logger.error("test_connection_failed", exc_info=True)
+        return {"ok": False, "error": str(e)[:200], "models": []}
+
+
+@router.get("/stats")
+async def ai_stats():
+    from app.services.ai_embedding import embedding_stats
+    emb_stats = await embedding_stats()
+
+    from app.database import get_db
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END),0), "
+        "COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) "
+        "FROM worker_jobs WHERE type='ai_query'"
+    )
+    row = await cursor.fetchone()
+
+    return {
+        "enabled": await is_ai_enabled(),
+        "provider": await _get_setting("ai_provider", "openai"),
+        "model": await _get_setting("ai_model", "?"),
+        "total_queries": row[0] or 0,
+        "successful": row[1] or 0,
+        "failed": row[2] or 0,
+        "embeddings": emb_stats,
+    }

@@ -78,11 +78,24 @@ export default function ApiDocPage() {
   const miscEndpoints = [
     { method: 'GET', path: '/api/settings', auth: 'Session', desc: 'Runtime settings' },
     { method: 'PUT', path: '/api/settings', auth: 'Admin', desc: 'Update settings. Body: {key: value, ...}' },
+    { method: 'POST', path: '/api/api-keys/create', auth: 'Admin', desc: 'Create API key. Body: {name, permissions}' },
+    { method: 'GET', path: '/api/api-keys/list', auth: 'Session', desc: 'List API keys (masked)' },
+    { method: 'GET', path: '/api/api-keys/:id/detail', auth: 'Session', desc: 'Key detail with usage stats' },
+    { method: 'POST', path: '/api/api-keys/reveal', auth: 'Session', desc: 'Reveal full key (requires admin password)' },
+    { method: 'POST', path: '/api/api-keys/revoke/:id', auth: 'Admin', desc: 'Revoke API key' },
     { method: 'GET', path: '/api/backup/status', auth: 'Session', desc: 'Backup status' },
     { method: 'POST', path: '/api/backup/sync', auth: 'Admin/Operator', desc: 'Trigger backup sync' },
+    { method: 'GET', path: '/api/backup/snapshots', auth: 'Session', desc: 'List backup snapshots' },
+    { method: 'POST', path: '/api/backup/snapshots', auth: 'Admin/Operator', desc: 'Create snapshot. Body: {name, path}' },
+    { method: 'DELETE', path: '/api/backup/snapshots/:id', auth: 'Admin/Operator', desc: 'Delete snapshot' },
+    { method: 'POST', path: '/api/backup/restore/:name', auth: 'Admin/Operator', desc: 'Restore backup' },
     { method: 'GET', path: '/api/workers/status', auth: 'Session', desc: 'Worker status' },
+    { method: 'GET', path: '/api/workers/jobs', auth: 'Session', desc: 'Job history' },
     { method: 'POST', path: '/api/workers/jobs/detect', auth: 'Admin/Operator', desc: 'Trigger job detection' },
-    { method: 'GET', path: '/api/disk-health/summary', auth: 'Session', desc: 'Disk health summary' },
+    { method: 'POST', path: '/api/workers/jobs/execute', auth: 'Admin/Operator', desc: 'Execute job. Body: {type, node}' },
+    { method: 'GET', path: '/api/disk-health/status', auth: 'Session', desc: 'Disk health summary' },
+    { method: 'GET', path: '/api/disk-health/:node/:device', auth: 'Session', desc: 'Disk health detail + S.M.A.R.T. data' },
+    { method: 'GET', path: '/api/disk-health/history/:node/:device', auth: 'Session', desc: 'Disk health history' },
   ]
 
   const mkTable = (data: any[]) => (
@@ -153,6 +166,35 @@ export default function ApiDocPage() {
             key: 'users',
             label: 'Users',
             children: mkTable(userEndpoints),
+          },
+          {
+            key: 'apikeys',
+            label: 'API Keys & Backup',
+            children: (
+              <div>
+                <Card title="API Keys" size="small" style={{ marginBottom: 12, background: 'rgba(30,41,59,0.5)' }}>
+                  <Paragraph>
+                    API keys (<code>bkp_</code> prefix) provide key-based authentication independent of user sessions.
+                    Used for backup operations, S3 automation, and service-to-service access.
+                    Send via <Tag>X-API-Key</Tag> header.
+                  </Paragraph>
+                </Card>
+                {mkTable(miscEndpoints.slice(0, 6))}
+                <Card title="Backup & Restore" size="small" style={{ marginTop: 16, marginBottom: 12, background: 'rgba(30,41,59,0.5)' }}>
+                  <Paragraph>
+                    Backup captures Filer LevelDB metadata via SSH/SFTP. Restore uploads tar.gz back to filer nodes.
+                    Requires <Tag>X-API-Key</Tag> header.
+                  </Paragraph>
+                </Card>
+                {mkTable(miscEndpoints.slice(6, 11))}
+                <Card title="Workers & Disk Health" size="small" style={{ marginTop: 16, marginBottom: 12, background: 'rgba(30,41,59,0.5)' }}>
+                  <Paragraph>
+                    Worker management and disk health monitoring endpoints.
+                  </Paragraph>
+                </Card>
+                {mkTable(miscEndpoints.slice(11))}
+              </div>
+            ),
           },
           {
             key: 'misc',

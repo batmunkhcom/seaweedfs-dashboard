@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Volume Management — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster</h2>
+    <a href="cluster.html">Topology View</a>
+
+    <h2>Volume Management</h2>
+    <a href="volumes.html" class="active">Volume List</a>
+    <a href="#list">Volume List</a>
+    <a href="#grow">Volume Grow</a>
+    <a href="#vacuum">Vacuum Trigger</a>
+    <a href="#collections">Collections</a>
+    <a href="#status">Status Indicators</a>
+    <a href="#capacity">Capacity Planning</a>
+
+    <h2>More</h2>
+    <a href="index.html">&#x2190; Back to Home</a>
+  </aside>
+
+  <main class="content">
+    <h1>Volume Management</h1>
+    <p>SeaweedFS volumes are the fundamental storage units — each a 30 GB block on a volume server's disk. The Volume Management page lets you view, grow, clean up, and organize volumes across the entire cluster.</p>
+
+    <h2 id="list">Volume List</h2>
+    <p>The volume list is a searchable, sortable, filterable table showing every volume in the cluster. Key columns include volume ID, collection, size, server location, replication, and status.</p>
+
+    <div class="card">
+      <h3>Volume List Columns</h3>
+      <table>
+        <tr><th>Column</th><th>Description</th><th>Example</th></tr>
+        <tr><td>Volume ID</td><td>Unique numeric identifier</td><td><code>42</code></td></tr>
+        <tr><td>Collection</td><td>Logical grouping (optional)</td><td><code>"images"</code> or empty</td></tr>
+        <tr><td>Size</td><td>Current data + garbage</td><td><code>28.4 GB</code></td></tr>
+        <tr><td>Files</td><td>Number of stored files</td><td><code>15,230</code></td></tr>
+        <tr><td>Server</td><td>Volume server IP:port</td><td><code>10.10.95.101:8080</code></td></tr>
+        <tr><td>Replication</td><td>Replication type</td><td><span class="tag tag-purple">001</span></td></tr>
+        <tr><td>Status</td><td>Health / ReadOnly indicator</td><td><span class="tag tag-green">Healthy</span></td></tr>
+        <tr><td>TTL</td><td>Time-to-live (if set)</td><td><code>7d</code> or &mdash;</td></tr>
+        <tr><td>Disk Type</td><td>Underlying disk type</td><td><code>hdd</code> / <code>ssd</code></td></tr>
+      </table>
+    </div>
+
+    <h3>API Endpoints</h3>
+    <pre><code>GET  /api/volumes              # List all volumes
+GET  /api/volumes/{volume_id}  # Get volume detail</code></pre>
+
+    <h3>Volume Detail Drawer</h3>
+    <p>Click any volume row to open a side drawer with detailed information:</p>
+    <ul>
+      <li><strong>Full metadata</strong> — ID, collection, disk type, file count, delete count</li>
+      <li><strong>Storage breakdown</strong> — data size vs. garbage size, compaction status</li>
+      <li><strong>Replication info</strong> — type, number of replicas, replication status per replica</li>
+      <li><strong>TTL status</strong> — expiration time, remaining duration</li>
+      <li><strong>Server context</strong> — host node IP, hostname, disk usage of the parent server</li>
+    </ul>
+
+    <div class="note">
+      <strong>Replication type 001:</strong> In the dc03 cluster, volumes use 001 replication — the primary copy plus one replica on a different node. Total: 2 copies of each volume. The detail drawer shows the location of each replica.
+    </div>
+
+    <h2 id="grow">Volume Grow</h2>
+    <p>Creating new volumes increases total cluster capacity. The grow operation assigns one or more new 30 GB volumes to available volume servers.</p>
+
+    <div class="card">
+      <h3>Grow Operation</h3>
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-body">
+          <strong>Open the grow modal</strong>
+          <span>Click "Grow Volume" button — admin only</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-body">
+          <strong>Configure parameters</strong>
+          <span>Set count, replication, collection, TTL, data center, rack</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-body">
+          <strong>Validate node capacity</strong>
+          <span>Backend checks each target node's volume limit — blocks grow if any node is full</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-body">
+          <strong>Execute &amp; confirm</strong>
+          <span>Master assigns volumes, result shown in toast notification</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Grow Request Parameters</h3>
+    <table>
+      <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+      <tr><td><code>count</code></td><td>1</td><td>Number of volumes to create</td></tr>
+      <tr><td><code>replication</code></td><td><code>001</code></td><td>Replication type (dc03 default: 001 = 2 copies)</td></tr>
+      <tr><td><code>collection</code></td><td>&mdash;</td><td>Assign to a named collection (optional)</td></tr>
+      <tr><td><code>ttl</code></td><td>&mdash;</td><td>Auto-expire after duration (e.g., <code>7d</code>, <code>30d</code>)</td></tr>
+      <tr><td><code>data_center</code></td><td><code>dc03</code></td><td>Target datacenter</td></tr>
+      <tr><td><code>rack</code></td><td><code>rack2</code></td><td>Target rack</td></tr>
+    </table>
+
+    <h3>API Endpoint</h3>
+    <pre><code>POST /api/volumes/grow
+Content-Type: application/json
+
+{
+  "count": 2,
+  "replication": "001",
+  "collection": "images",
+  "ttl": "30d",
+  "data_center": "dc03",
+  "rack": "rack2"
+}</code></pre>
+
+    <div class="warn">
+      <strong>Admin only:</strong> Volume grow requires admin authentication. Read-only users cannot create volumes. Growth is automatically blocked if any target node has reached its configured volume limit.
+    </div>
+
+    <h2 id="vacuum">Vacuum (Garbage Collection)</h2>
+    <p>When files are deleted or overwritten in SeaweedFS, the old data remains on disk as "garbage" until vacuum compaction reclaims that space. The vacuum trigger initiates garbage collection across all or selected volumes.</p>
+
+    <h3>When to Vacuum</h3>
+    <ul>
+      <li><strong>After bulk deletions</strong> — large cleanup operations leave significant garbage</li>
+      <li><strong>Low disk space</strong> — if free space is tight, vacuuming can recover gigabytes</li>
+      <li><strong>Periodic maintenance</strong> — schedule during low-traffic windows</li>
+    </ul>
+
+    <h3>How It Works</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Trigger</strong>
+        <span>Admin clicks "Vacuum" or sends <code>POST /api/volumes/vacuum</code></span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Compaction</strong>
+        <span>Volume server rewrites each volume, excluding deleted/tombstoned records</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Commit</strong>
+        <span>New compacted files replace old ones; disk space is reclaimed</span>
+      </div>
+    </div>
+
+    <h3>API Endpoint</h3>
+    <pre><code>POST /api/volumes/vacuum
+Content-Type: application/json
+
+{
+  "garbage_threshold": 0.3
+}
+
+# Optionally target a specific collection:
+{
+  "collection": "images"
+}</code></pre>
+
+    <div class="note">
+      <strong>Performance note:</strong> Vacuum rewrites volume files on disk. On HDDs with large volumes, this can take minutes and impact I/O. Consider running vacuum during maintenance windows. The <code>garbage_threshold</code> parameter (0.0–1.0) controls the minimum garbage ratio required to trigger vacuum on a volume — set higher to only compact volumes with significant garbage.
+    </div>
+
+    <h2 id="collections">Collections Management</h2>
+    <p>Collections are logical groupings of volumes — useful for organizing data by purpose (e.g., <code>"images"</code>, <code>"backups"</code>, <code>"logs"</code>). The Collections page lists all collections with volume counts and supports deletion.</p>
+
+    <h3>API Endpoints</h3>
+    <pre><code>GET    /api/collections              # List all collections with volume counts
+DELETE /api/collections/{name}       # Delete a collection (admin)</code></pre>
+
+    <div class="warn">
+      <strong>Deleting a collection removes all volumes in it.</strong> This is irreversible. The delete endpoint requires admin authentication and shows a confirmation dialog before execution.
+    </div>
+
+    <h2 id="status">Volume Status Indicators</h2>
+    <p>Each volume displays status tags that communicate its current state:</p>
+
+    <table>
+      <tr><th>Indicator</th><th>Tag</th><th>Meaning</th></tr>
+      <tr><td>Healthy</td><td><span class="tag tag-green">Healthy</span></td><td>Normal operation, writable</td></tr>
+      <tr><td>ReadOnly</td><td><span class="tag tag-red">ReadOnly</span></td><td>Volume cannot accept writes — usually disk full or filesystem error</td></tr>
+      <tr><td>Compacting</td><td><span class="tag tag-yellow">Compacting</span></td><td>Vacuum/garbage collection in progress</td></tr>
+      <tr><td>Full</td><td><span class="tag tag-yellow">Full</span></td><td>Volume has reached its 30 GB capacity limit</td></tr>
+      <tr><td>TTL Active</td><td><span class="tag tag-blue">TTL: 7d</span></td><td>Volume will auto-expire and release space after the specified duration</td></tr>
+    </table>
+
+    <div class="warn">
+      <strong>Monitor ReadOnly volumes closely.</strong> The alert engine triggers when the number of readonly volumes exceeds the configured threshold (default: 3). A readonly volume means its disk partition may be full or experiencing errors. Investigate immediately.
+    </div>
+
+    <h2 id="capacity">Capacity Planning</h2>
+    <p>Understanding how many volumes can fit on each node is essential for cluster sizing:</p>
+
+    <div class="card">
+      <h3>dc03 Capacity Formula</h3>
+      <pre><code>Node disk:        ~1,800 GB (XFS, ~1.8 TB)
+Volume size:        30 GB (configured at startup)
+Max volumes:        60 per node (1800 / 30)
+Replication:        001 (2x overhead)
+Effective cap:      30 volumes per node (after replication)
+                                    or
+                    ~900 GB usable per node
+
+Cluster total:  7 nodes × ~900 GB = ~6.3 TB usable</code></pre>
+    </div>
+
+    <p>Per-node volume limits are set on the Cluster page. When a node approaches its limit, the dashboard warns you to either grow volumes on other nodes or increase the limit if disk space allows.</p>
+
+    <hr>
+
+    <h2>Replication Types Reference</h2>
+    <table>
+      <tr><th>Type</th><th>Copies</th><th>Use Case</th></tr>
+      <tr><td><code>000</code></td><td>1 (no replication)</td><td>Development, ephemeral data</td></tr>
+      <tr><td><code>001</code></td><td>2 (1 primary + 1 replica)</td><td>Production — dc03 default</td></tr>
+      <tr><td><code>010</code></td><td>2 (rack-aware)</td><td>Multi-rack redundancy</td></tr>
+      <tr><td><code>100</code></td><td>2 (DC-aware)</td><td>Cross-datacenter</td></tr>
+      <tr><td><code>002</code></td><td>3 (1 primary + 2 replicas)</td><td>High durability</td></tr>
+    </table>
+  </main>
+</div>
+
+</body>
+</html>

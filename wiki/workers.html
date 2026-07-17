@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workers — SeaweedFS Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+    <a href="getting-started.html#configuration">Configuration</a>
+    <a href="getting-started.html#deployment">Deployment</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+    <a href="dashboard.html#real-time">Real-time SSE</a>
+    <a href="dashboard.html#history">Historical Charts</a>
+    <a href="dashboard.html#alerts">Alert Panel</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="cluster.html">Topology View</a>
+    <a href="cluster.html#servers">Server Tables</a>
+    <a href="cluster.html#leader">Leader Election</a>
+    <a href="cluster.html#limits">Node Limits</a>
+
+    <h2>Volume Management</h2>
+    <a href="volumes.html">Volume List</a>
+    <a href="volumes.html#grow">Volume Grow</a>
+    <a href="volumes.html#vacuum">Vacuum Trigger</a>
+    <a href="volumes.html#collections">Collections</a>
+
+    <h2>Filer Browser</h2>
+    <a href="#">Navigation &amp; Upload</a>
+    <a href="#">Metadata</a>
+
+    <h2>S3 Management</h2>
+    <a href="s3.html">Buckets &amp; Endpoints</a>
+    <a href="s3.html#s3-users--secrets">Users &amp; Keys</a>
+    <a href="s3.html#s3-policies">Policies</a>
+    <a href="s3.html#iam-sync">IAM Sync</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="backup.html">Status &amp; Sync</a>
+    <a href="backup.html#restore-process">Snapshots &amp; Restore</a>
+
+    <h2>Workers</h2>
+    <a href="workers.html" class="active">Job History</a>
+    <a href="workers.html#triggering-jobs">Detect &amp; Execute</a>
+
+    <h2>Disk Health</h2>
+    <a href="disk-health.html">SMART Monitoring</a>
+    <a href="disk-health.html">Lifespan Estimation</a>
+
+    <h2>API Keys</h2>
+    <a href="api-keys.html">Key Management</a>
+
+    <h2>Settings</h2>
+    <a href="#">Runtime Configuration</a>
+
+    <h2>API Reference</h2>
+    <a href="#">Endpoints</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="#">Architecture Flows</a>
+  </aside>
+
+  <main class="content">
+    <h1>Workers</h1>
+    <p>
+      The worker system manages background job execution within the SeaweedFS cluster.
+      Jobs run on the filer nodes and handle tasks like replication repair, volume
+      balancing, garbage collection, and custom processing pipelines.
+    </p>
+
+    <!-- ── Worker Status ── -->
+    <h2>Worker Status Monitoring</h2>
+    <p>
+      The dashboard polls each filer's worker endpoint (<code>/cluster/workers</code>)
+      to track active workers and their health.
+    </p>
+
+    <div class="card">
+      <h3>Health Indicators</h3>
+      <table>
+        <thead>
+          <tr><th>State</th><th>Indicator</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Healthy</td>
+            <td><span class="tag tag-green">active</span></td>
+            <td>Worker process is running and responding to heartbeat checks</td>
+          </tr>
+          <tr>
+            <td>Degraded</td>
+            <td><span class="tag tag-yellow">lagging</span></td>
+            <td>Worker is alive but job queue is growing faster than processing rate</td>
+          </tr>
+          <tr>
+            <td>Unhealthy</td>
+            <td><span class="tag tag-red">unreachable</span></td>
+            <td>Worker has not responded within the heartbeat timeout window</td>
+          </tr>
+          <tr>
+            <td>Stopped</td>
+            <td><span class="tag tag-yellow">idle</span></td>
+            <td>Worker is registered but has no active jobs and is waiting</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>View worker status via the API:</p>
+    <pre><code>GET /api/workers/status</code></pre>
+
+    <div class="card">
+      <h3>Worker List Response</h3>
+      <pre><code>{
+  "workers": [
+    {
+      "id": "worker-01",
+      "host": "10.10.95.102",
+      "status": "active",
+      "uptime_seconds": 120384,
+      "current_job": "vol_balance_20260717_001",
+      "queue_depth": 3,
+      "last_heartbeat": "2026-07-17T10:30:00Z"
+    }
+  ],
+  "total_active": 2,
+  "total_idle": 0
+}</code></pre>
+    </div>
+
+    <!-- ── Job History ── -->
+    <h2>Job History &amp; Lifecycle</h2>
+    <p>
+      Every job passes through a defined lifecycle with four terminal states.
+      The job history table retains records for completed and failed jobs.
+    </p>
+
+    <div class="card">
+      <h3>Job States</h3>
+      <table>
+        <thead>
+          <tr><th>State</th><th>Badge</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Pending</td>
+            <td><span class="tag tag-yellow">pending</span></td>
+            <td>Job is queued and waiting for an available worker slot</td>
+          </tr>
+          <tr>
+            <td>Running</td>
+            <td><span class="tag tag-blue">running</span></td>
+            <td>Job is actively executing on a worker node</td>
+          </tr>
+          <tr>
+            <td>Success</td>
+            <td><span class="tag tag-green">success</span></td>
+            <td>Job completed without errors</td>
+          </tr>
+          <tr>
+            <td>Failed</td>
+            <td><span class="tag tag-red">failed</span></td>
+            <td>Job terminated with an unrecoverable error</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>List all jobs:</p>
+    <pre><code>GET /api/workers/jobs</code></pre>
+
+    <p>Get details for a specific job:</p>
+    <pre><code>GET /api/workers/jobs/{jobId}</code></pre>
+
+    <div class="card">
+      <h3>Job Detail Response</h3>
+      <pre><code>{
+  "id": "vol_balance_20260717_001",
+  "type": "volume_balance",
+  "status": "running",
+  "worker_id": "worker-01",
+  "created_at": "2026-07-17T10:25:00Z",
+  "started_at": "2026-07-17T10:25:02Z",
+  "finished_at": null,
+  "progress_pct": 62,
+  "result": null,
+  "error": null,
+  "retry_count": 0,
+  "max_retries": 3
+}</code></pre>
+    </div>
+
+    <!-- ── Job Triggering ── -->
+    <h2>Triggering Jobs</h2>
+
+    <div class="card">
+      <h3>Detect Jobs</h3>
+      <p>
+        Scans the cluster for work that needs to be done and enqueues the
+        appropriate jobs. This is a read-only reconnaissance operation —
+        it identifies tasks but does not execute them.
+      </p>
+      <p><strong>What it scans for:</strong></p>
+      <ul>
+        <li>Volumes with replica count below the configured replication factor</li>
+        <li>Uneven volume distribution across servers</li>
+        <li>Orphaned volume IDs referenced by filer but missing from volume servers</li>
+        <li>Garbage collections that are overdue</li>
+      </ul>
+      <pre><code>POST /api/workers/jobs/detect</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+      <p>
+        The detect operation returns a summary of enqueued jobs. Each job type
+        has a configurable concurrency limit so that a single detection run
+        won't overwhelm the cluster.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>Execute Jobs</h3>
+      <p>
+        Triggers execution of all pending jobs in the queue. Workers pick up
+        jobs in FIFO order. A job that fails may be retried up to its configured
+        <code>max_retries</code> count before being marked as <code>failed</code>.
+      </p>
+      <pre><code>POST /api/workers/jobs/execute</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+      <div class="note">
+        <strong>Idempotency:</strong> Most job types are designed to be idempotent.
+        Running the same job twice should produce the same result without side effects.
+        Exceptions are noted in the job type documentation below.
+      </div>
+    </div>
+
+    <!-- ── Job Types ── -->
+    <h2>Job Types &amp; Capabilities</h2>
+
+    <div class="card">
+      <h3>volume_balance</h3>
+      <p>Redistributes volumes across volume servers to achieve even disk usage.</p>
+      <table>
+        <thead><tr><th>Property</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Concurrency</td><td>1 (serial)</td></tr>
+          <tr><td>Max Retries</td><td>2</td></tr>
+          <tr><td>Idempotent</td><td><span class="tag tag-green">yes</span></td></tr>
+          <tr><td>Impact</td><td>Network-intensive (volume data transfer)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>volume_fix_replication</h3>
+      <p>Repairs volumes that have fewer replicas than the configured replication factor (001).</p>
+      <table>
+        <thead><tr><th>Property</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Concurrency</td><td>3 (parallel)</td></tr>
+          <tr><td>Max Retries</td><td>3</td></tr>
+          <tr><td>Idempotent</td><td><span class="tag tag-green">yes</span></td></tr>
+          <tr><td>Impact</td><td>Network + disk I/O</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>garbage_collect</h3>
+      <p>Compacts volumes by purging deleted or overwritten entries from <code>.dat</code> files.</p>
+      <table>
+        <thead><tr><th>Property</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Concurrency</td><td>1 per volume server</td></tr>
+          <tr><td>Max Retries</td><td>1</td></tr>
+          <tr><td>Idempotent</td><td><span class="tag tag-green">yes</span></td></tr>
+          <tr><td>Impact</td><td>Disk I/O (read + rewrite), temporary space needed</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>filer_repair</h3>
+      <p>Detects and repairs inconsistencies between filer metadata and volume server state.</p>
+      <table>
+        <thead><tr><th>Property</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Concurrency</td><td>1</td></tr>
+          <tr><td>Max Retries</td><td>2</td></tr>
+          <tr><td>Idempotent</td><td><span class="tag tag-yellow">partially</span></td></tr>
+          <tr><td>Impact</td><td>Reads from all volume servers</td></tr>
+        </tbody>
+      </table>
+      <div class="warn">
+        <strong>Caution:</strong> <code>filer_repair</code> may delete filer entries
+        that reference non-existent volume chunks. Review the detect report before executing.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>system_check</h3>
+      <p>Runs a comprehensive health check across all cluster nodes and reports findings.</p>
+      <table>
+        <thead><tr><th>Property</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Concurrency</td><td>7 (all nodes parallel)</td></tr>
+          <tr><td>Max Retries</td><td>1</td></tr>
+          <tr><td>Idempotent</td><td><span class="tag tag-green">yes</span></td></tr>
+          <tr><td>Impact</td><td>Minimal (read-only)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <hr>
+
+    <h2>Workflow</h2>
+    <p>A typical maintenance workflow using the worker system:</p>
+    <ol>
+      <li>Click <strong>Detect Jobs</strong> — the dashboard scans the cluster and enqueues any needed work</li>
+      <li>Review the pending job list — check types, estimated duration, and concurrency limits</li>
+      <li>Click <strong>Execute Jobs</strong> — workers begin processing the queue</li>
+      <li>Monitor progress in the job list — each job shows <code>progress_pct</code></li>
+      <li>Investigate any <span class="tag tag-red">failed</span> jobs — check the <code>error</code> field for details</li>
+      <li>Optionally execute again to retry failed jobs (up to their <code>max_retries</code>)</li>
+    </ol>
+
+    <div class="note">
+      <strong>Best practice:</strong> Run detection and execution during off-peak hours.
+      Jobs like <code>volume_balance</code> and <code>volume_fix_replication</code>
+      transfer significant data between nodes and can impact S3/filer performance.
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

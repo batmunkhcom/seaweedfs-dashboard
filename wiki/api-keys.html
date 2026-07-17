@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Keys — SeaweedFS Dashboard Wiki</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <h2>Dashboard</h2>
+    <a href="overview.html">Overview</a>
+    <a href="real-time.html">Real-time SSE</a>
+    <a href="history.html">Historical Data</a>
+    <a href="alerts.html">Alert Engine</a>
+
+    <h2>Cluster</h2>
+    <a href="topology.html">Topology &amp; Servers</a>
+    <a href="volumes.html">Volumes</a>
+    <a href="collections.html">Collections</a>
+    <a href="filer.html">Filer Browser</a>
+
+    <h2>Management</h2>
+    <a href="s3.html">S3 &amp; Object Store</a>
+    <a href="backup.html">Backup</a>
+    <a href="workers.html">Workers</a>
+    <a href="disk-health.html">Disk Health</a>
+
+    <h2>Security</h2>
+    <a href="users.html">Users &amp; Roles</a>
+    <a href="api-keys.html" class="active">API Keys</a>
+  </nav>
+
+  <main class="content">
+    <h1>API Keys</h1>
+    <p>
+      The API Key system provides token-based authentication for programmatic access to the dashboard
+      backend. Unlike session-based auth (login form + cookie), API keys are designed for automated
+      clients, backup scripts, and service-to-service communication.
+    </p>
+
+    <div class="note">
+      API keys are <strong>not</strong> limited to backup use cases. They support a flexible
+      permission model covering backup, filer, S3, and worker operations.
+    </div>
+
+    <!-- ───── Key Format ───── -->
+    <h2>Key Format</h2>
+    <p>
+      Every API key follows the format:
+    </p>
+    <pre><code>bkp_&lt;64-character hex token&gt;</code></pre>
+
+    <p>
+      The <code>bkp_</code> prefix is required — keys without it are rejected during validation.
+      The token body is generated via <code>secrets.token_hex(32)</code> producing a cryptographically
+      random 64-character hex string. Example:
+    </p>
+    <pre><code>bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2</code></pre>
+
+    <!-- ───── Permission Model ───── -->
+    <h2>Permission Model</h2>
+    <p>
+      Each API key has a set of granular permissions, stored as a comma-separated string in the database.
+      There are 8 available permission scopes:
+    </p>
+
+    <table>
+      <tr>
+        <th>Permission</th>
+        <th>Scope</th>
+        <th>Typical Use Case</th>
+      </tr>
+      <tr>
+        <td><code>backup:read</code></td>
+        <td><span class="tag tag-blue">Reading</span></td>
+        <td>List backup status, view snapshots</td>
+      </tr>
+      <tr>
+        <td><code>backup:write</code></td>
+        <td><span class="tag tag-purple">Writing</span></td>
+        <td>Trigger sync, create/delete snapshots</td>
+      </tr>
+      <tr>
+        <td><code>filer:read</code></td>
+        <td><span class="tag tag-blue">Reading</span></td>
+        <td>Browse directories, list files</td>
+      </tr>
+      <tr>
+        <td><code>filer:write</code></td>
+        <td><span class="tag tag-purple">Writing</span></td>
+        <td>Upload, delete, create directories</td>
+      </tr>
+      <tr>
+        <td><code>s3:read</code></td>
+        <td><span class="tag tag-blue">Reading</span></td>
+        <td>List buckets, users, policies</td>
+      </tr>
+      <tr>
+        <td><code>s3:write</code></td>
+        <td><span class="tag tag-purple">Writing</span></td>
+        <td>Create/delete buckets, manage users</td>
+      </tr>
+      <tr>
+        <td><code>workers:read</code></td>
+        <td><span class="tag tag-blue">Reading</span></td>
+        <td>View worker status, job history</td>
+      </tr>
+      <tr>
+        <td><code>workers:execute</code></td>
+        <td><span class="tag tag-purple">Writing</span></td>
+        <td>Trigger detect/execute jobs</td>
+      </tr>
+    </table>
+
+    <p>
+      The default permission set for a new key is <code>backup:read,backup:write</code>.
+      Keys can have any combination of the 8 permissions.
+    </p>
+
+    <!-- ───── Key Creation ───── -->
+    <h2>Key Creation</h2>
+    <p>
+      Only <strong>admin</strong> users can create API keys. The creation UI presents:
+    </p>
+    <ul>
+      <li>A <strong>name</strong> field for human identification of the key</li>
+      <li>A <strong>permission selector</strong> — checkbox group with all 8 permission options</li>
+    </ul>
+
+    <p>Creating a key via API:</p>
+    <pre><code>curl -X POST http://localhost:8000/api/api-keys/create \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -H "X-CSRF-Token: ..." \
+  -d '{
+    "name": "Nightly Backup Script",
+    "permissions": "backup:read,backup:write"
+  }'</code></pre>
+
+    <p>Response:</p>
+    <pre><code>{
+  "key": "bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "name": "Nightly Backup Script",
+  "permissions": "backup:read,backup:write"
+}</code></pre>
+
+    <div class="warn">
+      The full key value is returned <strong>only once</strong> — at creation time.
+      Copy and store it securely. It cannot be retrieved later without the reveal flow.
+    </div>
+
+    <!-- ───── Key Reveal ───── -->
+    <h2>Key Reveal</h2>
+    <p>
+      Once a key has been created, its plaintext value is not displayed in any list view.
+      To retrieve the key again, use the reveal endpoint which requires the current user's
+      <strong>admin password</strong> for verification:
+    </p>
+
+    <pre><code>curl -X POST http://localhost:8000/api/api-keys/reveal \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -H "X-CSRF-Token: ..." \
+  -d '{"key_id": 1, "admin_password": "your-password"}'</code></pre>
+
+    <p>
+      The password is verified against the current session user's bcrypt hash in the
+      <code>users</code> table. If incorrect, the request is rejected with a 403.
+      Successful reveals are logged.
+    </p>
+
+    <!-- ───── Key Revocation ───── -->
+    <h2>Key Revocation</h2>
+    <p>
+      Admin users can revoke (deactivate) a key. Revocation sets <code>is_active = 0</code>
+      in the database — the key record is preserved for audit but future authentication
+      attempts will be rejected.
+    </p>
+
+    <pre><code>curl -X POST http://localhost:8000/api/api-keys/revoke/1 \
+  -H "Cookie: session=..." \
+  -H "X-CSRF-Token: ..."</code></pre>
+
+    <p>Revoked keys return <code>None</code> from <code>validate_api_key()</code>, resulting in a fallback to session-based auth (or 401 if unauthenticated).</p>
+
+    <!-- ───── Usage Tracking ───── -->
+    <h2>Usage Tracking</h2>
+    <p>Each API key tracks three usage metrics:</p>
+
+    <table>
+      <tr>
+        <th>Column</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><code>usage_count</code></td>
+        <td>Total number of authenticated requests made with this key</td>
+      </tr>
+      <tr>
+        <td><code>last_used_at</code></td>
+        <td>ISO 8601 timestamp of the most recent request</td>
+      </tr>
+      <tr>
+        <td><code>last_used_endpoint</code></td>
+        <td>The URL path of the most recent request (e.g., <code>/api/backup/status</code>)</td>
+      </tr>
+    </table>
+
+    <p>
+      Usage is recorded synchronously in the auth middleware via <code>record_usage()</code>
+      on every successful API key authentication. This data is visible in the key list
+      and detail drawer in the UI.
+    </p>
+
+    <!-- ───── Detail Drawer ───── -->
+    <h2>Detail Drawer</h2>
+    <p>
+      Clicking a key row in the UI opens a detail drawer showing:
+    </p>
+    <ul>
+      <li>Key name and ID</li>
+      <li>Permission list (rendered as tags)</li>
+      <li>Created by (username of the admin who created the key)</li>
+      <li>Creation timestamp</li>
+      <li>Active/revoked status badge</li>
+      <li>Usage count, last used timestamp, and last endpoint</li>
+    </ul>
+
+    <p>The detail endpoint returns:</p>
+    <pre><code>GET /api/api-keys/{key_id}/detail
+
+{
+  "id": 1,
+  "name": "Nightly Backup Script",
+  "permissions": ["backup:read", "backup:write"],
+  "created_at": "2026-07-15 10:30:00",
+  "last_used_at": "2026-07-17 02:00:00",
+  "is_active": 1,
+  "usage_count": 47,
+  "last_used_endpoint": "/api/backup/status",
+  "created_by": "admin"
+}</code></pre>
+
+    <p>
+      Note that <code>permissions</code> is stored as a CSV string in the database
+      (<code>"backup:read,backup:write"</code>) but returned as a JSON array in the API response for easier consumption.
+    </p>
+
+    <!-- ───── How Middleware Works ───── -->
+    <h2>Authentication Flow</h2>
+    <p>API key authentication is handled in the auth middleware:</p>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Client sends <code>X-API-Key</code> header</strong>
+        <span>The middleware checks for this header before falling back to session auth.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Prefix validation</strong>
+        <span>Key must start with <code>bkp_</code> — rejected immediately if not.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Database lookup</strong>
+        <span>Queries <code>api_keys WHERE key = ? AND is_active = 1</code>.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Set request state</strong>
+        <span><code>request.state.user = "api_key"</code>, <code>request.state.role = "backup_admin"</code>,
+        <code>request.state.permissions = [...]</code>, <code>request.state.api_key_id = key_data["id"]</code></span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Record usage</strong>
+        <span>Increments <code>usage_count</code>, updates <code>last_used_at</code> and <code>last_used_endpoint</code>.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>Permission check</strong>
+        <span>Protected routes use <code>require_permission()</code> which checks the key's
+        explicit permission list (not RBAC roles). If the required permission is absent, 403 is returned.</span>
+      </div>
+    </div>
+
+    <div class="note">
+      API key users are assigned the special role <code>backup_admin</code> internally,
+      but this role does <strong>not</strong> use RBAC — permissions are checked directly
+      against the key's permission list. This keeps API keys independent from the user RBAC system.
+    </div>
+
+    <!-- ───── Using API Keys ───── -->
+    <h2>Using an API Key</h2>
+    <p>Include the key in the <code>X-API-Key</code> header of any request. No session cookie or CSRF token is needed:</p>
+
+    <pre><code>curl -s http://localhost:8000/api/backup/status \
+  -H "X-API-Key: bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"</code></pre>
+
+    <p>This works for any client that can set HTTP headers — shell scripts, Python <code>httpx</code>/<code>requests</code>, Go, etc.</p>
+
+    <div class="warn">
+      API keys bypass CSRF protection and session timeout. Treat them like passwords.
+      Rotate them regularly and revoke any that are compromised.
+    </div>
+
+    <hr>
+
+    <h2>Schema</h2>
+    <pre><code>CREATE TABLE api_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    permissions TEXT NOT NULL DEFAULT 'backup:read,backup:write',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    usage_count INTEGER DEFAULT 0,
+    last_used_endpoint TEXT,
+    created_by TEXT DEFAULT 'admin'
+);</code></pre>
+
+  </main>
+</div>
+</body>
+</html>

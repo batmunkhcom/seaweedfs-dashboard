@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html" class="active">Overview &amp; KPIs</a>
+    <a href="#real-time">Real-time SSE</a>
+    <a href="#history">Historical Charts</a>
+    <a href="#alerts">Alert Panel</a>
+    <a href="#settings">Settings</a>
+
+    <h2>Cluster</h2>
+    <a href="cluster.html">Topology View</a>
+
+    <h2>Volumes</h2>
+    <a href="volumes.html">Volume List</a>
+
+    <h2>More</h2>
+    <a href="index.html">&#x2190; Back to Home</a>
+  </aside>
+
+  <main class="content">
+    <h1>Dashboard Overview</h1>
+    <p>The dashboard is the landing page after login. It provides a real-time, high-level view of the entire SeaweedFS cluster: key performance indicators, resource usage, and active alerts — all refreshed automatically.</p>
+
+    <h2>KPI Stat Cards</h2>
+    <p>Six stat cards sit at the top of the dashboard, showing critical metrics at a glance:</p>
+
+    <div class="card">
+      <h3>Metrics Displayed</h3>
+      <table>
+        <tr><th>Card</th><th>Source</th><th>Description</th></tr>
+        <tr><td><strong>Total Volumes</strong></td><td>Master API</td><td>Count of all active volumes across the cluster</td></tr>
+        <tr><td><strong>Total Files</strong></td><td>Filer API</td><td>Number of files tracked by the filer</td></tr>
+        <tr><td><strong>Total Size</strong></td><td>Master API</td><td>Aggregated data size across all volumes (human-readable: GB/TB)</td></tr>
+        <tr><td><strong>Free Space</strong></td><td>Volume servers</td><td>Available disk space percentage across all nodes</td></tr>
+        <tr><td><strong>Volume Servers</strong></td><td>Master API</td><td>Number of registered volume servers</td></tr>
+        <tr><td><strong>Master Leader</strong></td><td>Master API</td><td>Current Raft leader IP and port</td></tr>
+      </table>
+    </div>
+
+    <h3 id="api-response">API Endpoint</h3>
+    <pre><code>GET /api/dashboard/stats</code></pre>
+    <p>Response:</p>
+    <pre><code>{
+  "total_volumes": 42,
+  "total_files": 15230,
+  "total_size_bytes": 8589934592,
+  "free_space": 24,
+  "max_space": 28,
+  "volume_servers": 7,
+  "healthy_nodes": 7,
+  "master_leader": "10.10.95.105:9333",
+  "filer_status": "connected",
+  "version": "3.75"
+}</code></pre>
+
+    <h2 id="real-time">Real-time SSE Data Stream</h2>
+    <p>The dashboard uses <strong>Server-Sent Events (SSE)</strong> for real-time updates — no polling, no stale data. A single persistent SSE connection pushes cluster stats to the browser whenever values change.</p>
+
+    <div class="card">
+      <h3>SSE Architecture</h3>
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-body">
+          <strong>Frontend connects</strong>
+          <span><code>useSSE</code> hook opens <code>GET /api/dashboard/sse</code> via EventSource API</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-body">
+          <strong>Backend polls masters</strong>
+          <span><code>SseManager</code> periodically fetches <code>/api/dashboard/stats</code> from the master API</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-body">
+          <strong>Data pushed to browser</strong>
+          <span>Changes are emitted as SSE events with <code>event: stats</code> type</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-body">
+          <strong>UI updates reactively</strong>
+          <span>Zustand store receives the event, components re-render with fresh data</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Auto-reconnect:</strong> The SSE client automatically reconnects with exponential backoff (1s &rarr; 2s &rarr; 4s &rarr; 8s &rarr; max 30s) on connection loss. If Redis is configured, SSE events use pub/sub for multi-worker deployments.
+    </div>
+
+    <h2 id="history">Historical Charts</h2>
+    <p>The <code>SnapshotService</code> runs in the background, polling cluster metrics at a configurable interval (default: 60 seconds) and storing them in SQLite. This time-series data powers the trend charts.</p>
+
+    <h3>Snapshot Configuration</h3>
+    <table>
+      <tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+      <tr><td><code>SNAPSHOT_INTERVAL_SECONDS</code></td><td>60</td><td>How often to poll and save metrics</td></tr>
+      <tr><td><code>SNAPSHOT_RETENTION_DAYS</code></td><td>30</td><td>How long to keep historical records (auto-purge)</td></tr>
+    </table>
+
+    <h3>API Endpoint</h3>
+    <pre><code>GET /api/dashboard/history?hours=24&amp;resolution=5m</code></pre>
+    <p>Returns time-series data aggregated by the requested resolution.</p>
+
+    <div class="note">
+      <strong>Resolution options:</strong> <code>1m</code>, <code>5m</code>, <code>15m</code>, <code>1h</code>, <code>6h</code>. Shorter resolutions are only available for narrower time windows to keep responses fast.
+    </div>
+
+    <h3>Disk Usage Pie Chart</h3>
+    <p>Shows per-server disk usage distribution. Each slice represents a volume server, with labels for node IP and percentage. Color intensity reflects usage level — warmer colors as usage increases.</p>
+
+    <h3>Volume Growth Trend</h3>
+    <p>An area chart (Recharts) plots total volume count over time. The configurable time range selector (12h, 24h, 7d, 30d) lets you zoom in on recent activity or view long-term growth patterns. Hovering over data points shows exact values at each snapshot interval.</p>
+
+    <h2 id="alerts">Alert Panel</h2>
+    <p>The alert panel (Ant Design <code>Alert</code> / <code>List</code> components) displays active cluster warnings. Each alert has a severity, timestamp, and actionable controls.</p>
+
+    <div class="card">
+      <h3>Alert Types</h3>
+      <table>
+        <tr><th>Alert</th><th>Trigger Condition</th><th>Default</th><th>Severity</th></tr>
+        <tr><td>Disk Usage</td><td>Any node exceeds usage percent</td><td>&gt; 90%</td><td><span class="tag tag-red">Critical</span></td></tr>
+        <tr><td>Node Offline</td><td>A volume server stops responding</td><td>Immediate</td><td><span class="tag tag-red">Critical</span></td></tr>
+        <tr><td>Garbage Ratio</td><td>Garbage ratio exceeds threshold</td><td>&gt; 0.5</td><td><span class="tag tag-yellow">Warning</span></td></tr>
+        <tr><td>ReadOnly Volumes</td><td>Read-only volume count exceeds max</td><td>&gt; 3</td><td><span class="tag tag-yellow">Warning</span></td></tr>
+        <tr><td>Disk Temperature</td><td>Drive temperature exceeds limit (S.M.A.R.T.)</td><td>&gt; 55&deg;C</td><td><span class="tag tag-yellow">Warning</span></td></tr>
+        <tr><td>Disk Wear</td><td>SSD wear level exceeds percent (S.M.A.R.T.)</td><td>&gt; 85%</td><td><span class="tag tag-red">Critical</span></td></tr>
+      </table>
+    </div>
+
+    <h3>Alert Lifecycle</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>New</strong>
+        <span>Threshold exceeded — alert created with timestamp and deduplication key</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Acknowledged</strong>
+        <span>Operator clicks "Acknowledge" — alert dims, stops re-notifying</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Resolved</strong>
+        <span>Condition clears — alert moves to resolved state, hidden from active panel</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Deduplication:</strong> The alert engine prevents duplicate alerts for the same issue. If a node exceeds 90% disk usage, only one alert fires. It won't fire again until the condition resolves and reoccurs.
+    </div>
+
+    <h3>API Endpoints</h3>
+    <pre><code>GET  /api/dashboard/alerts           # List all active alerts
+GET  /api/dashboard/alerts?status=all # Include acknowledged &amp; resolved
+PUT  /api/dashboard/alerts/{id}/acknowledge  [admin]
+GET  /api/dashboard/alerts/config     # Get alert thresholds
+PUT  /api/dashboard/alerts/config     # Update thresholds  [admin]</code></pre>
+
+    <h2 id="settings">Configurable Thresholds</h2>
+    <p>Thresholds are stored in the <code>runtime_settings</code> SQLite table and managed through the Settings UI. Changes take effect immediately without a server restart.</p>
+
+    <div class="warn">
+      <strong>Operational config vs. infrastructure config:</strong> Thresholds and limits live in <code>runtime_settings</code> (changeable at runtime). Hosts, ports, and credentials live in <code>.env</code> (requires server restart). Never mix the two.
+    </div>
+
+    <hr>
+
+    <h2>Component Health</h2>
+    <p>Every background component (SnapshotService, AlertEngine, DiskHealthService, SseManager) periodically updates a heartbeat in the <code>services_health</code> SQLite table:</p>
+    <table>
+      <tr><th>Component</th><th>Heartbeat TTL</th></tr>
+      <tr><td>SnapshotService</td><td>120s</td></tr>
+      <tr><td>AlertEngine</td><td>120s</td></tr>
+      <tr><td>DiskHealthService</td><td>300s</td></tr>
+      <tr><td>SseManager</td><td>120s</td></tr>
+    </table>
+    <p>Check component health via <code>GET /api/health</code> — returns status for all services with their last heartbeat timestamp.</p>
+  </main>
+</div>
+
+</body>
+</html>

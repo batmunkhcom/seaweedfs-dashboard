@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Architecture — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+    <a href="../getting-started.html">Getting Started</a>
+    <a href="../dashboard.html">Dashboard</a>
+    <a href="../cluster.html">Cluster</a>
+    <a href="../volumes.html">Volumes</a>
+    <a href="../s3.html">S3</a>
+    <a href="../backup.html">Backup</a>
+    <a href="../workers.html">Workers</a>
+    <a href="../disk-health.html">Disk Health</a>
+    <a href="../api-keys.html">API Keys</a>
+    <a href="../users.html">Users</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html" class="active">System Architecture</a>
+    <a href="auth-flow.html">Authentication Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>System Architecture</h1>
+    <p>The SeaweedFS Dashboard is a web-based management interface for the <strong>dc03 SeaweedFS cluster</strong> at mBm TECHNOLOGY. It provides a unified UI for cluster monitoring, volume management, filer browsing, S3 bucket administration, backups, worker management, and disk health monitoring.</p>
+
+    <div class="note">
+      All value references below are sourced from a single configuration chain: <code>.env</code> &rarr; <code>config.py</code> (via pydantic-settings) &rarr; runtime. No values are hardcoded anywhere in the system.
+    </div>
+
+    <h2>Architecture Diagram</h2>
+    <pre class="mermaid">
+graph TB
+    subgraph Internet["Internet"]
+        User["👤 User Browser"]
+    end
+
+    subgraph Cloudflared["Cloudflared Tunnel"]
+        Tunnel["🔒 Cloudflared Tunnel<br/>seaweed.mbm.mn → s3.mbm.mn"]
+    end
+
+    subgraph Gateway["Gateway Server (10.10.0.80)"]
+        Nginx["🌐 Nginx<br/>:8081"]
+    end
+
+    subgraph Backend["Backend Server (runs on 10.10.0.80)"]
+        Static["📁 Vite Static Files<br/>frontend/dist"]
+        Uvicorn["🐍 Uvicorn + FastAPI<br/>:8000 (127.0.0.1)"]
+        SQLite[("🗄️ SQLite<br/>data/data.db")]
+        Redis[("⚡ Redis<br/>(optional)")]
+        Axios["📡 Axios Instance<br/>CSRF Interceptor"]
+    end
+
+    subgraph Cluster["dc03 SeaweedFS Cluster"]
+        subgraph Masters["Master Nodes"]
+            M101["Master .101</br>:9333 (HTTP)</br>:19333 (Raft gRPC)"]
+            M103["Master .103</br>:9333 (HTTP)</br>:19333 (Raft gRPC)"]
+            M105["Master .105 ★ Leader</br>:9333 (HTTP)</br>:19333 (Raft gRPC)"]
+        end
+
+        subgraph Filers["Filer Nodes (ha group)"]
+            F102["Filer .102</br>:8888 (HTTP)</br>:18888 (Peer gRPC)</br>:8111 (IAM)"]
+            F104["Filer .104</br>:8888 (HTTP)</br>:18888 (Peer gRPC)</br>:8111 (IAM)"]
+        end
+
+        subgraph S3GW["S3 Gateways"]
+            S3102["S3 GW .102 :8333"]
+            S3104["S3 GW .104 :8333"]
+            S3106["S3 GW .106 :8333"]
+            S3107["S3 GW .107 :8333"]
+        end
+
+        subgraph Volumes["Volume Servers (All 7 Nodes)"]
+            V101["Volume .101 :8080"]
+            V102["Volume .102 :8080"]
+            V103["Volume .103 :8080"]
+            V104["Volume .104 :8080"]
+            V105["Volume .105 :8080"]
+            V106["Volume .106 :8080"]
+            V107["Volume .107 :8080"]
+        end
+    end
+
+    User -->|"HTTPS"| Tunnel
+    Tunnel -->|"HTTPS"| Nginx
+    Nginx -->|"Static files"| Static
+    Nginx -->|"/api/* proxy"| Uvicorn
+
+    Uvicorn <--> Axios
+    Uvicorn -->|"aiosqlite"| SQLite
+    Uvicorn -.->|"Redis (if REDIS_URL set)"| Redis
+    Uvicorn -->|"GET /api/info<br/>runtime config"| Static
+
+    Uvicorn -->|"HTTP :9333<br/>Multi-master failover"| Masters
+    Uvicorn -->|"HTTP :8888<br/>Filer failover"| Filers
+    Uvicorn -->|"HTTP :8333"| S3GW
+    Uvicorn -->|"HTTP :8080"| Volumes
+
+    Uvicorn -->|"SSH (paramiko)<br/>Disk Health: smartctl, lsblk"| Volumes
+
+    Masters -->|"Raft consensus<br/>:19333 gRPC"| Masters
+    Filers -->|"Peer sync<br/>:18888 gRPC"| Filers
+    </pre>
+
+    <h2>Step-by-Step: Component Descriptions</h2>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>User Browser &rarr; Cloudflared Tunnel</strong>
+        <span>External access flows through Cloudflared, which proxies <code>seaweed.mbm.mn</code> to the internal gateway at <code>10.10.0.80:8081</code>. The tunnel provides SSL termination and DDoS protection. All traffic is HTTPS-encrypted between the browser and Cloudflared's edge.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Nginx (Gateway — 10.10.0.80:8081)</strong>
+        <span>Nginx serves a dual role on port <code>8081</code>: static files from <code>frontend/dist/</code> for the root path, and reverse proxy to <code>127.0.0.1:8000</code> for <code>/api/*</code> paths. <code>proxy_buffering off</code> and <code>proxy_read_timeout 3600s</code> for SSE streams.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Nginx Routing</h3>
+      <table>
+        <tr><th>Path Pattern</th><th>Handler</th><th>Description</th></tr>
+        <tr><td><code>/</code> (root)</td><td>Static files from <code>frontend/dist/</code></td><td>Vite-built React SPA. <code>try_files</code> falls back to <code>index.html</code> for client-side routing.</td></tr>
+        <tr><td><code>/api/*</code></td><td>Reverse proxy &rarr; <code>127.0.0.1:8000</code></td><td>All API requests proxied to the FastAPI backend.</td></tr>
+      </table>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Frontend (React 19 + TypeScript + Ant Design 5)</strong>
+        <span>The SPA is built with Vite. The Axios instance uses <code>baseURL: '/api'</code> with two interceptors: request (attaches <code>X-API-Key</code> and <code>X-CSRF-Token</code> headers) and response (on <code>401</code>, triggers logout and redirects to <code>/login</code>). Auth store (Zustand) persists <code>user</code> and <code>csrfToken</code> in localStorage.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Backend (FastAPI + Uvicorn — 127.0.0.1:8000)</strong>
+        <span>The BFF (Backend-For-Frontend) layer. Middleware stack (in order): <code>SlowAPIMiddleware</code> (rate limiting), <code>CORSMiddleware</code> (cross-origin), <code>CsrfMiddleware</code> (state-changing validation), <code>AuthMiddleware</code> (API key or session), <code>SessionMiddleware</code> (Starlette server-side sessions with HttpOnly cookies).</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Core Services</h3>
+      <table>
+        <tr><th>Service</th><th>Responsibility</th></tr>
+        <tr><td><code>SeaweedClient</code></td><td>httpx async HTTP client with multi-master failover loop. Index-based round-robin across <code>[.101, .103, .105]</code> on failure.</td></tr>
+        <tr><td><code>SnapshotService</code></td><td>Periodic polling of cluster state &rarr; SQLite for trend charts.</td></tr>
+        <tr><td><code>AlertEngine</code></td><td>Threshold evaluation (disk &gt; 90%, node offline, garbage &gt; 0.5, readonly &gt; N).</td></tr>
+        <tr><td><code>backup_service</code></td><td>SSH/SFTP backup and restore of filer LevelDB via paramiko.</td></tr>
+        <tr><td><code>api_key_service</code></td><td>API key generation (<code>bkp_</code> prefix + <code>secrets.token_hex(32)</code>), validation, usage recording, revocation.</td></tr>
+        <tr><td><code>disk_health</code></td><td>S.M.A.R.T. monitoring via paramiko SSH (<code>smartctl --json</code>, <code>lsblk --json</code>).</td></tr>
+        <tr><td><code>settings_service</code></td><td>Cached reads from <code>runtime_settings</code> SQLite table — single source of truth for all operational config.</td></tr>
+      </table>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>SQLite Database</strong>
+        <span>Stored at <code>data/data.db</code> using aiosqlite with WAL mode and foreign keys enabled. Holds tables: <code>users</code>, <code>api_keys</code>, <code>backup_snapshots</code>, <code>alerts</code>/<code>alert_config</code>, <code>runtime_settings</code>, <code>services_health</code>, <code>dashboard_snapshots</code>. Schema migrations in <code>backend/migrations/</code> are applied automatically on startup.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>Redis (Optional)</strong>
+        <span>When <code>REDIS_URL</code> is set in <code>.env</code>, Redis is used for session store, rate limiting counter storage, and SSE pub/sub across processes. When unset, falls back to in-memory storage.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">7</div>
+      <div class="flow-body">
+        <strong>SeaweedFS Master API (:9333)</strong>
+        <span>Three master nodes form a Raft consensus group (<code>.101</code>, <code>.103</code>, <code>.105</code>). <code>.105</code> is the currently elected leader. The failover loop in <code>SeaweedClient.get_master()</code> iterates through masters in round-robin fashion, probing each. On first successful <code>GET /cluster/status</code> (200), that master is used. If it fails, the next is tried. If all fail, <code>RuntimeError("No reachable master")</code> is raised.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">8</div>
+      <div class="flow-body">
+        <strong>SeaweedFS Filer API (:8888)</strong>
+        <span>Two filer nodes in an HA group (<code>ha</code>, <code>filerGroup=ha</code>) at <code>.102</code> and <code>.104</code>. Used for directory listing, file upload/download/delete, and directory CRUD. Peer sync runs on <code>:18888</code> (gRPC), and embedded IAM on <code>:8111</code>. Filer failover mirrors the master failover pattern.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">9</div>
+      <div class="flow-body">
+        <strong>S3 Gateway (:8333)</strong>
+        <span>Four S3 gateway nodes (<code>.102</code>, <code>.104</code>, <code>.106</code>, <code>.107</code>) expose an S3-compatible API. The dashboard proxies S3 admin operations: bucket CRUD, user (access/secret key) management, IAM policy CRUD, and IAM sync trigger.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">10</div>
+      <div class="flow-body">
+        <strong>Volume Servers (:8080)</strong>
+        <span>All seven nodes run volume servers exposing HTTP/gRPC on port 8080. The dashboard queries individual volume servers for volume status (<code>/stats/disk</code>) and per-volume detail (<code>/volume/status?volume=&lt;id&gt;</code>).</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">11</div>
+      <div class="flow-body">
+        <strong>Disk Health via SSH (paramiko)</strong>
+        <span>When <code>DISK_HEALTH_ENABLED=true</code>, the backend establishes SSH connections to all nodes using paramiko (key-based auth). It runs <code>smartctl --json /dev/sda</code> and <code>lsblk --json</code>. Results are stored in SQLite and exposed via <code>GET /api/disk-health/*</code>. Scheduled scans run at configurable intervals (default 24h).</span>
+      </div>
+    </div>
+
+    <h2>Data Flow Summary</h2>
+    <pre><code>Browser HTTPS → Cloudflared → Nginx :8081
+  ├── / (static) → SPA loads → Axios /api/* requests
+  └── /api/* → Uvicorn :8000
+                ├── Auth (session / API key) → RBAC check
+                ├── CSRF validation (state-changing only)
+                ├── SeaweedClient → Master :9333 (failover) / Filer :8888 (failover)
+                ├── SQLite (read/write operational data)
+                ├── Redis (optional cache/sessions/SSE pub-sub)
+                └── SSH (paramiko) → Volume nodes :22 (disk health)</code></pre>
+
+    <h2>Protocol Summary</h2>
+    <div class="card">
+      <table>
+        <tr><th>Source</th><th>Target</th><th>Protocol</th><th>Port</th></tr>
+        <tr><td>Browser</td><td>Cloudflared</td><td>HTTPS (TLS)</td><td>443</td></tr>
+        <tr><td>Cloudflared</td><td>Nginx</td><td>HTTP</td><td>8081</td></tr>
+        <tr><td>Nginx</td><td>Uvicorn</td><td>HTTP (reverse proxy)</td><td>8000</td></tr>
+        <tr><td>Frontend (Axios)</td><td>Backend</td><td>HTTP (JSON)</td><td>/api/*</td></tr>
+        <tr><td>Backend</td><td>Master nodes</td><td>HTTP</td><td>9333</td></tr>
+        <tr><td>Backend</td><td>Filer nodes</td><td>HTTP</td><td>8888</td></tr>
+        <tr><td>Backend</td><td>S3 Gateway nodes</td><td>HTTP</td><td>8333</td></tr>
+        <tr><td>Backend</td><td>Volume nodes</td><td>HTTP</td><td>8080</td></tr>
+        <tr><td>Backend</td><td>All nodes</td><td>SSH (paramiko)</td><td>22</td></tr>
+        <tr><td>Master ↔ Master</td><td></td><td>gRPC (Raft)</td><td>19333</td></tr>
+        <tr><td>Filer ↔ Filer</td><td></td><td>gRPC (peer sync)</td><td>18888</td></tr>
+        <tr><td>Backend</td><td>SQLite</td><td>Local file I/O</td><td>&mdash;</td></tr>
+        <tr><td>Backend</td><td>Redis</td><td>TCP (RESP)</td><td>6379</td></tr>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#a855f7',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#a855f7',
+      textColor: '#e2e8f0',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>

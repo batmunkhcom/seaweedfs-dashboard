@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>S3 IAM Sync Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#a855f7',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#a855f7',
+        textColor: '#e2e8f0',
+        fontSize: '14px'
+      }
+    });
+  </script>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+
+    <h2>Getting Started</h2>
+    <a href="../getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="../dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="../cluster.html">Topology View</a>
+
+    <h2>Volume Management</h2>
+    <a href="../volumes.html">Volume List</a>
+
+    <h2>S3 Management</h2>
+    <a href="../s3.html">Buckets &amp; Endpoints</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="../backup.html">Status &amp; Sync</a>
+
+    <h2>Workers</h2>
+    <a href="../workers.html">Job History</a>
+
+    <h2>Disk Health</h2>
+    <a href="../disk-health.html">SMART Monitoring</a>
+
+    <h2>API Keys</h2>
+    <a href="../api-keys.html">Key Management</a>
+
+    <h2>User Management</h2>
+    <a href="../users.html">Admin &amp; Read-Only</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Auth Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html" class="active">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>S3 IAM Sync Flow</h1>
+    <p>S3 Identity and Access Management propagation from the Dashboard to all S3 Gateway nodes and the embedded Filer IAM service.</p>
+
+    <h2>Architecture Overview</h2>
+    <pre><code>Dashboard (Admin UI)
+    &#x2502;
+    &#x25BC;
+Backend BFF (FastAPI :8000)
+    &#x2502;  reads/writes
+    &#x25BC;
+SQLite (users table: s3_access_key, s3_secret_key, s3_permission)
+    &#x2502;  generates
+    &#x25BC;
+/etc/seaweedfs/s3.json  &#x2500;&#x2500;&#x2500; SSH push via paramiko &#x2500;&#x25B6;  .102:8333
+                                                    &#x25B6;  .104:8333
+                                                    &#x25B6;  .106:8333
+                                                    &#x25B6;  .107:8333
+                                              (S3 Gateway ports)
+
+                                                    &#x25B6;  .102:8111
+                                                    &#x25B6;  .104:8111
+                                              (Filer IAM embedded)</code></pre>
+
+    <div class="card">
+      <h3>S3 Gateway Nodes</h3>
+      <table>
+        <tr><th>Node</th><th>S3 Port</th><th>Filer IAM Port</th><th>Role</th></tr>
+        <tr><td><code>10.10.95.102</code></td><td><code>8333</code></td><td><code>8111</code></td><td>Filer + S3 GW</td></tr>
+        <tr><td><code>10.10.95.104</code></td><td><code>8333</code></td><td><code>8111</code></td><td>Filer + S3 GW</td></tr>
+        <tr><td><code>10.10.95.106</code></td><td><code>8333</code></td><td>&mdash;</td><td>Volume + S3 GW</td></tr>
+        <tr><td><code>10.10.95.107</code></td><td><code>8333</code></td><td>&mdash;</td><td>Volume + S3 GW</td></tr>
+      </table>
+    </div>
+
+    <p>Filer HA group: <span class="tag tag-purple">ha</span> (<code>.102</code> and <code>.104</code> are peers).</p>
+
+    <h2>Full Sync Flow</h2>
+
+    <pre class="mermaid">
+sequenceDiagram
+    actor Admin as Admin User
+    participant UI as S3 Management Page
+    participant API as Backend BFF (:8000)
+    participant DB as SQLite (users table)
+    participant SSH as paramiko SSH
+    participant GW102 as S3 GW .102 (:8333)
+    participant GW104 as S3 GW .104 (:8333)
+    participant GW106 as S3 GW .106 (:8333)
+    participant GW107 as S3 GW .107 (:8333)
+    participant IAM102 as Filer IAM .102 (:8111)
+    participant IAM104 as Filer IAM .104 (:8111)
+
+    rect rgb(240, 248, 255)
+        Note over Admin,DB: 1. User & Bucket Management
+        Admin->>UI: Create Bucket (POST /api/s3/buckets)
+        UI->>API: POST { name: "my-bucket" }
+        API->>GW102: POST /buckets/my-bucket/?op=mkdir (via filer HA)
+        GW102-->>API: OK
+
+        Admin->>UI: Create User + Generate Key
+        UI->>API: POST { username, email, permission }
+        API->>API: Generate AK{random}, secret_key{random}
+        API->>DB: INSERT/UPDATE users (s3_access_key, s3_secret_key, s3_permission)
+        API-->>UI: { access_key, secret_key }
+
+        Admin->>UI: Upload Policy (PUT /api/s3/policies/{name})
+        UI->>API: PUT { permission: "readonly"|"readwrite" }
+        API->>DB: UPDATE users SET s3_permission=?
+        API-->>UI: { ok: true }
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Admin,IAM104: 2. Trigger IAM Sync
+        Admin->>UI: Click "Sync IAM to Gateways"
+        UI->>API: POST /api/s3/sync-iam
+        API->>DB: SELECT s3_access_key, s3_secret_key, s3_permission FROM users WHERE enabled=1
+
+        API->>API: Build s3.json
+        Note right of API: Identities array: name, credentials (AK/SK), actions
+
+        par Push to all gateways
+            API->>SSH: SSH to 10.10.95.102
+            SSH->>GW102: Write /etc/seaweedfs/s3.json
+            Note over GW102: S3 GW reloads config on change
+            SSH-->>API: OK
+        and
+            API->>SSH: SSH to 10.10.95.104
+            SSH->>GW104: Write /etc/seaweedfs/s3.json
+            SSH-->>API: OK
+        and
+            API->>SSH: SSH to 10.10.95.106
+            SSH->>GW106: Write /etc/seaweedfs/s3.json
+            SSH-->>API: OK
+        and
+            API->>SSH: SSH to 10.10.95.107
+            SSH->>GW107: Write /etc/seaweedfs/s3.json
+            SSH-->>API: OK
+        end
+
+        Note over IAM102,IAM104: Filer IAM syncs from s3.json automatically
+        API->>DB: UPDATE runtime_settings SET s3_last_sync = now()
+        API-->>UI: { ok: true, results: {...}, last_sync: "..." }
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Admin,IAM104: 3. Verify Sync Status
+        Admin->>UI: Check sync status
+        UI->>API: GET /api/s3/sync-status
+        API->>DB: SELECT s3_last_sync FROM runtime_settings
+        API-->>UI: { last_sync, gateways: [...], now }
+    end
+    </pre>
+
+    <h2>Step-by-Step Workflow</h2>
+
+    <h3>1. Create Bucket (<code>POST /api/s3/buckets</code>)</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Create via Filer API</strong>
+        <span>The dashboard creates buckets via the Filer API (not direct S3), because SeaweedFS S3 buckets are simply directories on the filer. Request: <code>POST /buckets/{name}/?op=mkdir</code></span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Failover across filers</strong>
+        <span>The request is sent to whichever filer is reachable (failover across <code>.102</code>, <code>.104</code>). Both filers share the same underlying volume storage, so the bucket is immediately available on all S3 gateways.</span>
+      </div>
+    </div>
+
+    <h3>2. Generate Key (<code>POST /api/s3/generate-key</code>)</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Generate credentials</strong>
+        <span>Access key: <code>AK</code> + 20 hex chars (via <code>secrets.token_hex(10)</code>). Secret key: 40 hex chars (via <code>secrets.token_hex(20)</code>).</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Store in SQLite</strong>
+        <span>If the username doesn't exist in <code>users</code> table, a new user row is created. If the user exists, only the S3 fields are updated.</span>
+      </div>
+    </div>
+
+    <h3>3. Upload Policy (<code>PUT /api/s3/policies/{name}</code>)</h3>
+    <p>Each user has a single permission level stored in <code>users.s3_permission</code>:</p>
+
+    <table>
+      <tr><th>Permission</th><th>S3 Actions</th></tr>
+      <tr><td><span class="tag tag-blue">readonly</span></td><td><code>Read</code>, <code>List</code></td></tr>
+      <tr><td><span class="tag tag-green">readwrite</span></td><td><code>Read</code>, <code>Write</code>, <code>List</code>, <code>Tagging</code>, <code>Admin</code></td></tr>
+    </table>
+
+    <p>The policy name follows the convention <code>user-{username}</code>. Policies are stored in the <code>users</code> table (no separate policy table) and are materialized into <code>s3.json</code> only at sync time.</p>
+
+    <h3>4. Sync IAM to Gateways (<code>POST /api/s3/sync-iam</code>)</h3>
+    <p>This is the critical propagation step. The backend:</p>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Gather users</strong>
+        <span>Reads all enabled users with S3 keys from <code>users</code> table.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Build s3.json</strong>
+        <span>Constructs a complete <code>s3.json</code> document with identities array, credentials, and actions.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>SSH-push to all 4 gateways</strong>
+        <span>Pushes the file via paramiko to <code>/etc/seaweedfs/s3.json</code> on <code>.102</code>, <code>.104</code>, <code>.106</code>, <code>.107</code>.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Record sync time</strong>
+        <span>Writes the sync timestamp to <code>runtime_settings</code> table (key <code>s3_last_sync</code>).</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Precondition:</strong> The sync requires <code>DISK_HEALTH_ENABLED=true</code> in <code>.env</code>, because the SSH key path and user credentials are shared with the disk health scan infrastructure. If disabled, the sync returns <code>{ skipped: true }</code>.
+    </div>
+
+    <h3>5. Check Sync Status (<code>GET /api/s3/sync-status</code>)</h3>
+    <p>Returns <code>last_sync</code> (ISO timestamp of most recent successful sync), <code>gateways</code> (list of all target gateway IPs), and <code>now</code> (current server time for drift comparison). Status reflects the last <strong>push attempt</strong> &mdash; no read-back verification is performed.</p>
+
+    <h3>6. Filer HA Coordination</h3>
+    <p>The Filer IAM embedded service (port <code>8111</code> on <code>.102</code> and <code>.104</code>) reads the same <code>/etc/seaweedfs/s3.json</code>. Both filers belong to the <code>ha</code> filer group, meaning:</p>
+    <ul>
+      <li>S3 auth requests from any gateway are routed to whichever filer is active.</li>
+      <li>If <code>.102</code> is the active filer, S3 auth is served by its IAM service.</li>
+      <li>On failover to <code>.104</code>, the IAM service on <code>.104</code> takes over using the same <code>s3.json</code>.</li>
+      <li>This is why pushing to <strong>all</strong> gateways (not just the active one) is important.</li>
+    </ul>
+
+    <h2>S3 API Usage Examples</h2>
+    <pre><code># List buckets (any gateway)
+aws s3 ls --endpoint-url=http://10.10.95.102:8333
+
+# Create a bucket
+aws s3api create-bucket \
+  --bucket my-data \
+  --endpoint-url=http://10.10.95.102:8333
+
+# Upload a file
+aws s3 cp report.pdf s3://my-data/reports/ \
+  --endpoint-url=http://10.10.95.102:8333
+
+# List with credentials from dashboard
+export AWS_ACCESS_KEY_ID=AKabc123def456...
+export AWS_SECRET_ACCESS_KEY=abc123def456...</code></pre>
+
+    <h2>API Reference</h2>
+    <table>
+      <tr><th>Endpoint</th><th>Method</th><th>Permission</th><th>Description</th></tr>
+      <tr><td><code>/api/s3/buckets</code></td><td>GET</td><td>&mdash;</td><td>List all S3 buckets</td></tr>
+      <tr><td><code>/api/s3/buckets</code></td><td>POST</td><td><code>s3:write</code></td><td>Create a new bucket</td></tr>
+      <tr><td><code>/api/s3/buckets/{name}</code></td><td>DELETE</td><td><code>s3:write</code></td><td>Delete a bucket (recursive)</td></tr>
+      <tr><td><code>/api/s3/buckets/{name}/quota</code></td><td>PUT</td><td><code>s3:write</code></td><td>Set hard quota (bytes)</td></tr>
+      <tr><td><code>/api/s3/users</code></td><td>GET</td><td>&mdash;</td><td>List users with S3 credentials</td></tr>
+      <tr><td><code>/api/s3/users/{id}/credentials</code></td><td>POST</td><td><code>s3:write</code></td><td>Regenerate access/secret key</td></tr>
+      <tr><td><code>/api/s3/users/{id}/reveal-secret</code></td><td>POST</td><td>admin</td><td>Reveal secret key (requires admin password)</td></tr>
+      <tr><td><code>/api/s3/generate-key</code></td><td>POST</td><td><code>s3:write</code></td><td>Create user + generate S3 key pair</td></tr>
+      <tr><td><code>/api/s3/policies</code></td><td>GET</td><td>&mdash;</td><td>List user policies</td></tr>
+      <tr><td><code>/api/s3/policies/{name}</code></td><td>PUT</td><td><code>s3:write</code></td><td>Update user permission</td></tr>
+      <tr><td><code>/api/s3/sync-iam</code></td><td>POST</td><td><code>s3:write</code></td><td>Push s3.json to all gateways</td></tr>
+      <tr><td><code>/api/s3/sync-status</code></td><td>GET</td><td>&mdash;</td><td>Get last sync timestamp</td></tr>
+    </table>
+
+    <h2>Troubleshooting</h2>
+    <table>
+      <tr><th>Symptom</th><th>Likely Cause</th><th>Fix</th></tr>
+      <tr><td>Sync returns <code>{ skipped: true }</code></td><td><code>DISK_HEALTH_ENABLED=false</code></td><td>Set <code>DISK_HEALTH_ENABLED=true</code> in <code>.env</code> and restart backend</td></tr>
+      <tr><td>Sync returns <code>{ results: { "10.10.95.106": false } }</code></td><td>SSH key not authorized on that node</td><td>Verify <code>~/.ssh/id_rsa</code> is in <code>authorized_keys</code> on the node</td></tr>
+      <tr><td>Keys work on one gateway but not another</td><td><code>s3.json</code> out of sync on that node</td><td>Trigger sync again (<code>POST /api/s3/sync-iam</code>)</td></tr>
+      <tr><td>S3 operations return 403 after sync</td><td>S3 GW didn't reload config</td><td>Restart <code>seaweed-s3</code> service on affected node</td></tr>
+      <tr><td>Bucket creation fails</td><td>Filer unreachable</td><td>Check <code>SEAWEEDFS_FILER_HOST</code> in <code>.env</code>, verify filer HA status</td></tr>
+    </table>
+  </main>
+</div>
+
+</body>
+</html>

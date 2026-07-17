@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSE Real-Time Data Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#a855f7',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#a855f7',
+        textColor: '#e2e8f0',
+        fontSize: '14px'
+      }
+    });
+  </script>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+
+    <h2>Getting Started</h2>
+    <a href="../getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="../dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="../cluster.html">Topology View</a>
+
+    <h2>Volume Management</h2>
+    <a href="../volumes.html">Volume List</a>
+
+    <h2>S3 Management</h2>
+    <a href="../s3.html">Buckets &amp; Endpoints</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="../backup.html">Status &amp; Sync</a>
+
+    <h2>Workers</h2>
+    <a href="../workers.html">Job History</a>
+
+    <h2>Disk Health</h2>
+    <a href="../disk-health.html">SMART Monitoring</a>
+
+    <h2>API Keys</h2>
+    <a href="../api-keys.html">Key Management</a>
+
+    <h2>User Management</h2>
+    <a href="../users.html">Admin &amp; Read-Only</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Auth Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html" class="active">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>SSE Real-Time Data Flow</h1>
+    <p>Server-Sent Events (SSE) architecture for pushing live cluster data to all connected dashboard clients.</p>
+
+    <h2>Architecture Overview</h2>
+    <pre><code>&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;                   Backend (FastAPI)               &#x2502;
+&#x2502;                                                   &#x2502;
+&#x2502;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;     &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;  &#x2502;
+&#x2502;  &#x2502; SnapshotService  &#x2502;     &#x2502;    AlertEngine       &#x2502;  &#x2502;
+&#x2502;  &#x2502; (polls /60s)     &#x2502;     &#x2502; (evaluates thresholds)&#x2502;  &#x2502;
+&#x2502;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;     &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;  &#x2502;
+&#x2502;           &#x2502;                         &#x2502;              &#x2502;
+&#x2502;           &#x25BC;                         &#x25BC;              &#x2502;
+&#x2502;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;  &#x2502;
+&#x2502;  &#x2502;            SseManager (broadcast)            &#x2502;  &#x2502;
+&#x2502;  &#x2502;                                              &#x2502;  &#x2502;
+&#x2502;  &#x2502;  _subscribers: [Queue, Queue, Queue, ...]   &#x2502;  &#x2502;
+&#x2502;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;  &#x2502;
+&#x2502;                       &#x2502;                            &#x2502;
+&#x2502;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;               &#x2502;
+&#x2502;  &#x2502;Client 1&#x2502;  &#x2502;Client 2&#x2502;  &#x2502;Client 3&#x2502;  ...           &#x2502;
+&#x2502;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;               &#x2502;
+&#x2502;    SSE         SSE         SSE                     &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</code></pre>
+
+    <div class="card">
+      <h3>Components</h3>
+      <table>
+        <tr><th>Component</th><th>Interval</th><th>Role</th></tr>
+        <tr><td><code>SseManager</code></td><td>On-demand</td><td>Registers clients, broadcasts events</td></tr>
+        <tr><td><code>SnapshotService</code></td><td>Every 60s</td><td>Polls cluster, stores to SQLite, triggers <code>publish_stats</code></td></tr>
+        <tr><td><code>AlertEngine</code></td><td>Every 60s</td><td>Evaluates thresholds, sends <code>alert_new</code> / <code>alert_acknowledged</code> / <code>alert_resolved</code></td></tr>
+        <tr><td><code>Dashboard stats endpoint</code></td><td>On GET</td><td>Immediately publishes latest stats via SSE</td></tr>
+      </table>
+    </div>
+
+    <h2>Full Sequence</h2>
+
+    <pre class="mermaid">
+sequenceDiagram
+    participant UI1 as Dashboard Client 1
+    participant UI2 as Dashboard Client 2
+    participant SSE as /api/dashboard/sse
+    participant Manager as SseManager (in-memory queues)
+    participant Poller as SnapshotService (60s loop)
+    participant DB as SQLite (snapshots table)
+    participant AlertE as AlertEngine
+    participant Cluster as SeaweedFS Cluster
+
+    rect rgb(240, 248, 255)
+        Note over UI1,Manager: 1. Connection Phase
+        UI1->>SSE: GET /api/dashboard/sse (EventSource)
+        SSE->>Manager: register_subscriber() → new Queue(maxsize=64)
+        SSE-->>UI1: HTTP 200, Content-Type: text/event-stream
+        Note over SSE,UI1: Connection stays open indefinitely
+
+        UI2->>SSE: GET /api/dashboard/sse (EventSource)
+        SSE->>Manager: register_subscriber() → new Queue(maxsize=64)
+        SSE-->>UI2: HTTP 200, Content-Type: text/event-stream
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Poller,Cluster: 2. Data Polling (every 60s)
+        Poller->>Cluster: GET /dir/status, GET /cluster/status
+        Cluster-->>Poller: Topology, master info, volume stats
+        Poller->>DB: INSERT INTO snapshots
+        Poller->>Manager: publish_stats(data)
+
+        AlertE->>Cluster: Evaluate disk usage, garbage, readonly counts
+        AlertE->>AlertE: Compare against thresholds
+        alt Threshold exceeded (new alert)
+            AlertE->>DB: INSERT INTO alerts
+            AlertE->>Manager: publish_alert({ type: "alert_new" })
+        else Threshold cleared (resolve)
+            AlertE->>DB: UPDATE alerts SET status='resolved'
+            AlertE->>Manager: broadcast("alert_resolved")
+        end
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Manager,UI2: 3. Broadcast & Delivery
+        Manager->>Manager: Iterate _subscribers list
+
+        par To Client 1
+            Manager->>SSE: q.put_nowait({ event: "stats_update" })
+            SSE-->>UI1: event: stats_update\n
+        and To Client 2
+            Manager->>SSE: q.put_nowait({ event: "stats_update" })
+            SSE-->>UI2: event: stats_update\n
+        end
+
+        Note over Manager,SSE: Dead clients (QueueFull) → pruned
+
+        Manager->>SSE: q.put_nowait({ event: "alert_new" })
+        SSE-->>UI1: event: alert_new\n
+        SSE-->>UI2: event: alert_new\n
+
+        UI1-->>UI1: React: update KPI cards, charts, alert panel
+        UI2-->>UI2: React: update KPI cards, charts, alert panel
+    end
+
+    rect rgb(248, 248, 248)
+        Note over SSE,UI2: 4. Keepalive
+        SSE->>SSE: 15s timeout with no events
+        SSE-->>UI1: : keepalive (comment line)
+        SSE-->>UI2: : keepalive (comment line)
+        Note over UI1,UI2: Browser ignores, connection stays alive
+    end
+
+    rect rgb(255, 240, 240)
+        Note over UI2,SSE: 5. Disconnect & Reconnect
+        UI2--XSSE: Network drop / browser tab closed
+        SSE->>Manager: unregister_subscriber(q)
+        Manager->>Manager: Remove queue from _subscribers
+
+        Note over UI2: After reconnect (exponential backoff)
+        UI2->>SSE: GET /api/dashboard/sse (reconnect)
+        SSE->>Manager: register_subscriber() → new queue
+        SSE-->>UI2: HTTP 200, Content-Type: text/event-stream
+    end
+    </pre>
+
+    <h2>Step-by-Step Explanation</h2>
+
+    <h3>1. Client Connection</h3>
+    <p>The frontend initializes an <code>EventSource</code> pointed at <code>/api/dashboard/sse</code>:</p>
+    <pre><code>const source = new EventSource('/api/dashboard/sse', { withCredentials: true });</code></pre>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Register subscriber</strong>
+        <span>The backend creates a per-client <code>asyncio.Queue</code> (max 64 messages) and registers it in the global <code>_subscribers</code> list.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Streaming response</strong>
+        <span>The response is an <code>EventSourceResponse</code> from the <code>sse-starlette</code> library &mdash; a streaming HTTP response with <code>Content-Type: text/event-stream</code>.</span>
+      </div>
+    </div>
+
+    <h3>2. Data Polling &amp; Publishing</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>SnapshotService polling</strong>
+        <span>Polls the master API (<code>/dir/status</code>, <code>/cluster/status</code>) every 60 seconds (configurable via <code>SNAPSHOT_INTERVAL_SECONDS</code>). Stores stats into <code>snapshots</code> SQLite table and calls <code>publish_stats(data)</code>.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Dashboard stats endpoint</strong>
+        <span><code>GET /api/dashboard/stats</code> also calls <code>publish_stats(stats)</code>, so even manual page loads push fresh data to SSE subscribers.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>AlertEngine evaluation</strong>
+        <span>Evaluates cluster health against thresholds, creates/resolves alerts, and broadcasts event types accordingly.</span>
+      </div>
+    </div>
+
+    <h3>3. Broadcast Mechanism</h3>
+    <p>The <code>broadcast(event_type, data)</code> function:</p>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Construct payload</strong>
+        <span>Builds <code>{ "event": event_type, "data": json.dumps(data) }</code></span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Iterate subscribers</strong>
+        <span>Iterates the <code>_subscribers</code> list, calls <code>q.put_nowait(payload)</code> for each queue.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Prune dead clients</strong>
+        <span>If <code>asyncio.QueueFull</code> is raised (client too slow), the queue is pruned from the subscriber list.</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>No Redis required:</strong> The current implementation uses in-memory broadcasting only. If <code>REDIS_URL</code> is set in the future, broadcast can fan out via Redis pub/sub for multi-worker deployments.
+    </div>
+
+    <h3>4. Keepalive</h3>
+    <p>The <code>event_generator</code> coroutine uses <code>asyncio.wait_for(q.get(), timeout=15.0)</code>. If no data arrives within 15 seconds, it yields a <strong>comment line</strong> (<code>: keepalive</code>). Comments in SSE are ignored by browsers but prevent proxies (nginx, Cloudflare) from closing idle connections.</p>
+
+    <h3>5. Client Disconnect &amp; Reconnect</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Disconnect</strong>
+        <span>When the <code>EventSource</code> is closed, <code>await request.is_disconnected()</code> triggers. The generator's <code>finally</code> block calls <code>unregister_subscriber(q)</code>.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Reconnect</strong>
+        <span>The browser's native <code>EventSource</code> automatically reconnects with exponential backoff: 1s &rarr; 2s &rarr; 4s &rarr; 8s &rarr; &hellip; &rarr; max 30s.</span>
+      </div>
+    </div>
+
+    <h3>SSE Event Types</h3>
+    <table>
+      <tr><th>Event Type</th><th>Payload</th><th>Trigger</th></tr>
+      <tr><td><code>stats_update</code></td><td>Full dashboard stats JSON</td><td>SnapshotService poll, dashboard stats API call</td></tr>
+      <tr><td><code>alert_new</code></td><td>Alert object (type, severity, title, description, node)</td><td>AlertEngine threshold exceeded</td></tr>
+      <tr><td><code>alert_acknowledged</code></td><td>Alert ID + timestamp</td><td>Admin acknowledges alert via UI</td></tr>
+      <tr><td><code>alert_resolved</code></td><td>Alert ID + timestamp</td><td>Condition clears, alert auto-resolved</td></tr>
+      <tr><td><code>cluster_health</code></td><td>Health status (healthy/degraded/critical)</td><td>Master status check, node count change</td></tr>
+    </table>
+
+    <h3>Frontend Integration</h3>
+    <pre><code>const source = new EventSource('/api/dashboard/sse');
+
+source.addEventListener('stats_update', (e) => {
+  const data = JSON.parse(e.data);
+  store.updateStats(data);  // Update Zustand store → re-render KPI cards, charts
+});
+
+source.addEventListener('alert_new', (e) => {
+  const alert = JSON.parse(e.data);
+  store.addAlert(alert);    // Add to alert panel, show toast notification
+});</code></pre>
+
+    <h2>API Reference</h2>
+    <table>
+      <tr><th>Endpoint</th><th>Method</th><th>Auth</th><th>Description</th></tr>
+      <tr><td><code>/api/dashboard/sse</code></td><td>GET</td><td>Session (cookie)</td><td>Open SSE stream</td></tr>
+      <tr><td><code>/api/dashboard/stats</code></td><td>GET</td><td>Session</td><td>Get current stats (also publishes to SSE)</td></tr>
+      <tr><td><code>/api/dashboard/history?hours=24</code></td><td>GET</td><td>Session</td><td>Get historical snapshots</td></tr>
+      <tr><td><code>/api/dashboard/alerts</code></td><td>GET</td><td>Session</td><td>Get active alerts</td></tr>
+      <tr><td><code>/api/dashboard/alerts/{id}/acknowledge</code></td><td>PUT</td><td>Admin</td><td>Acknowledge an alert</td></tr>
+      <tr><td><code>/api/dashboard/alerts/config</code></td><td>GET</td><td>Session</td><td>Get alert thresholds</td></tr>
+      <tr><td><code>/api/dashboard/alerts/config</code></td><td>PUT</td><td>Admin</td><td>Update alert thresholds</td></tr>
+    </table>
+
+    <h2>Deployment Notes</h2>
+    <ul>
+      <li><strong>Nginx proxy</strong> must have <code>proxy_buffering off;</code> and <code>proxy_read_timeout 3600s;</code> for SSE passthrough.</li>
+      <li><strong>Cloudflared tunnel</strong> passes SSE cleanly (HTTP streaming is supported).</li>
+      <li><strong>Single-worker</strong> (uvicorn <code>--workers 1</code>): In-memory subscriber list is sufficient.</li>
+      <li><strong>Multi-worker</strong> (future): Requires Redis pub/sub for cross-worker broadcast.</li>
+    </ul>
+  </main>
+</div>
+
+</body>
+</html>

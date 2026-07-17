@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Input, Space, Tag, message, Row, Col, Typography, Alert, Progress, Tooltip } from 'antd'
+import { Card, Table, Button, Modal, Input, Space, Tag, message, Row, Col, Typography, Alert, Progress, Tooltip, Popconfirm } from 'antd'
 import {
   CloudUploadOutlined,
   CheckCircleFilled,
@@ -9,15 +9,19 @@ import {
   ReloadOutlined,
   WarningOutlined,
   ExclamationCircleOutlined,
-  DatabaseOutlined,
   HistoryOutlined,
+  KeyOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
 import { getBackupStatus, triggerBackupSync, listSnapshots, createSnapshot, deleteSnapshot, restoreBackup } from '../../services/api'
 import type { BackupStatus, Snapshot } from '../../types'
-import { useAuthStore } from '../../stores/authStore'
 
 const { Text } = Typography
+
+// API key localStorage functions
+function getApiKey(): string | null {
+  return localStorage.getItem('backup_api_key')
+}
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 B'
@@ -41,58 +45,100 @@ export default function BackupPage() {
   const [restoring, setRestoring] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [snapName, setSnapName] = useState('')
-  const role = useAuthStore((s) => s.user?.role)
-  const canWrite = role === 'admin' || role === 'operator'
+  const [apiKey, setApiKey] = useState('')
+  const [keySaved, setKeySaved] = useState(false)
+  const [, setShowApiConfig] = useState(false)
+
+  useEffect(() => {
+    const key = getApiKey()
+    if (key) {
+      setApiKey(key)
+    }
+  }, [])
 
   const fetch = () => {
     setLoading(true)
     Promise.all([getBackupStatus(), listSnapshots()])
-         .then(([s, snap]) => { setStatus(s); setBackups(Array.isArray(snap) ? snap : []); })
-         .catch(() => {})
-         .finally(() => setLoading(false))
-  }
+       .then(([s, snap]) => { setStatus(s); setBackups(Array.isArray(snap) ? snap : []); })
+       .catch(() => {})
+       .finally(() => setLoading(false))
+   }
 
   useEffect(() => { fetch() }, [])
 
   const doSync = async () => {
+    if (!apiKey.trim()) {
+      message.error('API key required. Enter key above.')
+      return
+     }
+    setApiKey(apiKey)
     setSyncing(true)
+    const hideMsg = message.loading('Syncing backup — connecting to filer nodes via SSH...', 0)
     try {
       const r = await triggerBackupSync()
-      if (r.ok) message.success(`Backup completed \u2014 ${formatBytes(r.bytesSynced || 0)} synced`)
+      hideMsg()
+      if (r.ok) message.success(`Backup completed — ${formatBytes(r.bytesSynced || 0)} synced`)
       else message.warning(r.error || 'Partial sync')
       fetch()
-       } catch { message.error('Sync failed') }
+        } catch {
+      hideMsg()
+      message.error('Sync failed — check backend logs') }
     setSyncing(false)
-   }
+    }
 
   const doCreate = async () => {
-    if (!snapName.trim()) return
-    setCreating(true)
-    try {
-      const r = await createSnapshot(snapName, '/')
-      if (r.ok) message.success(`Backup created: ${r.name}`)
-      else message.warning(r.error || 'Create failed')
-      fetch()
-       } catch (e: any) {
-      message.error(e.response?.data?.detail || 'Create failed')
-       }
-    setCreating(false)
+    if (!apiKey.trim()) {
+      message.error('API key required. Enter key above.')
+      return
+     }
+    setApiKey(apiKey)
     setCreateOpen(false)
+    setCreating(true)
+    const autoName = !snapName.trim()
+    const displayName = snapName.trim() || '(auto-named)'
+    const hideMsg = message.loading(`Creating backup: ${displayName}...`, 0)
+    try {
+      const r = await createSnapshot(snapName.trim() || '', '/')
+      hideMsg()
+      if (r.ok) {
+        const suffix = autoName ? ` (auto-named: ${r.name})` : ''
+        message.success(`Backup created: ${r.name}${suffix} — ${formatBytes(r.bytesSynced || 0)}`)
+      } else {
+        message.warning(r.error || 'Create failed')
+      }
+      fetch()
+    } catch (e: any) {
+      hideMsg()
+      message.error(e.response?.data?.detail || 'Create failed')
+    }
+    setCreating(false)
     setSnapName('')
-   }
+    }
 
   const doDelete = async (name: string) => {
+    if (!apiKey.trim()) {
+      message.error('API key required. Click "⚙️ Settings" to configure.')
+      setShowApiConfig(true)
+      return
+     }
+    setApiKey(apiKey) // save to localStorage
     try {
       await deleteSnapshot(name)
       message.success(`Backup deleted: ${name}`)
       fetch()
-       } catch { message.error('Delete failed') }
-   }
+        } catch { message.error('Delete failed') }
+    }
 
   const confirmRestore = (name: string) => { setRestoringName(name); setRestoreConfirmOpen(true) }
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
 
   const doRestore = async () => {
+    if (!apiKey.trim()) {
+      message.error('API key required. Click "⚙️ Settings" to configure.')
+      setShowApiConfig(true)
+      return
+     }
+    setApiKey(apiKey) // save to localStorage
     setRestoring(true)
     try {
       const r = await restoreBackup(restoringName)
@@ -100,13 +146,13 @@ export default function BackupPage() {
         message.success(`Restore initiated for: ${restoringName}`)
         message.warning('WARNING: Filer will be overwritten. Restart filer service after restore.')
         fetch()
-         } else {
+          } else {
         message.error(r.error || 'Restore failed')
-         }
+          }
       setRestoreConfirmOpen(false)
-       } catch (e: any) { message.error(e.response?.data?.detail || 'Restore failed') }
+        } catch (e: any) { message.error(e.response?.data?.detail || 'Restore failed') }
     setRestoring(false)
-   }
+    }
 
   const formatSize = (v: number | undefined) => v ? formatBytes(v) : '\u2014'
 
@@ -115,53 +161,106 @@ export default function BackupPage() {
   const issueCount = backups.filter(b => b.status !== 'uploaded').length
 
   const columns = [
-      { title: 'Name', dataIndex: 'name', key: 'name', render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
-      { title: 'Size', dataIndex: 'size', key: 'size', width: 100, render: (v: number) => formatSize(v) },
-      { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (s: string) => {
+       { title: 'Name', dataIndex: 'name', key: 'name', render: (v: string) => <code style={{ fontSize: 12 }}>{v}</code> },
+       { title: 'Size', dataIndex: 'size', key: 'size', width: 100, render: (v: number) => formatSize(v) },
+       { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (s: string) => {
         const colors: Record<string, string> = { uploaded: 'green', partial: 'orange', failed: 'red', running: 'blue', missing: 'red' }
         return <Tag color={colors[s] || 'default'}>{s}</Tag>
-       }},
-      { title: 'Created', dataIndex: 'created_at', key: 'created_at', width: 180, render: (v: string) => formatDate(v) },
-     ...(canWrite ? [{
-     title: '', key: 'actions', width: 120,
-     render: (_: any, r: Snapshot) => (
-          <Space>
-           <Tooltip title="Restore this backup">
-             <Button size="small" icon={<SyncOutlined />} onClick={() => confirmRestore(r.name)} />
-            </Tooltip>
-           <Tooltip title="Delete this backup">
-             <Button size="small" danger icon={<DeleteOutlined />} onClick={() => doDelete(r.name)} />
-            </Tooltip>
-          </Space>
-        ),
-      }] : []),
-    ]
+        }},
+       { title: 'Created', dataIndex: 'created_at', key: 'created_at', width: 180, render: (v: string) => formatDate(v) },
+       {
+       title: '', key: 'actions', width: 120,
+       render: (_: any, r: Snapshot) => (
+            <Space>
+             {r.status === 'uploaded' || r.status === 'partial' ? (
+              <Tooltip title="Restore this backup">
+               <Button size="small" icon={<SyncOutlined />} onClick={() => confirmRestore(r.name)} />
+              </Tooltip>
+             ) : (
+              <Tooltip title="Restore unavailable — backup file missing">
+               <Button size="small" icon={<SyncOutlined />} disabled />
+              </Tooltip>
+             )}
+             <Tooltip title="Delete this backup">
+              <Popconfirm
+                title="Delete this backup?"
+                onConfirm={() => doDelete(r.name)}
+                okText="Delete"
+                cancelText="Cancel"
+               >
+                <Button size="small" danger icon={<DeleteOutlined />} />
+               </Popconfirm>
+             </Tooltip>
+            </Space>
+          ),
+        },
+     ]
 
   const statusIcon = status?.running ? (
        <>
          <SyncOutlined spin />
          <Text strong style={{ color: '#6366f1' }}>Running</Text>
         </>
-      ) : status?.lastError ? (
-         <>
-           <WarningOutlined style={{ color: '#ef4444' }} />
-           <Text strong style={{ color: '#ef4444' }}>Error</Text>
-          </>
-        ) : status?.bytesSynced ? (
-            <>
-              <CheckCircleFilled style={{ color: '#22c55e' }} />
-              <Text strong style={{ color: '#22c55e' }}>Complete</Text>
-             </>
-           ) : (
-               <>
-                 <WarningOutlined style={{ color: '#f59e0b' }} />
-                 <Text strong style={{ color: '#64748b' }}>Never</Text>
-                </>
-              )
+       ) : status?.lastError ? (
+          <>
+            <WarningOutlined style={{ color: '#ef4444' }} />
+            <Text strong style={{ color: '#ef4444' }}>Error</Text>
+           </>
+         ) : status?.bytesSynced ? (
+             <>
+               <CheckCircleFilled style={{ color: '#22c55e' }} />
+               <Text strong style={{ color: '#22c55e' }}>Complete</Text>
+              </>
+            ) : (
+                <>
+                  <WarningOutlined style={{ color: '#f59e0b' }} />
+                  <Text strong style={{ color: '#64748b' }}>Never</Text>
+                 </>
+               )
 
   return (
-      <div>
-        {/* Status Summary */}
+        <div>
+          {/* API Key Input */}
+          <Card size="small" style={{ marginBottom: 16, background: 'rgba(99,102,241,0.1)', borderColor: 'rgba(99,102,241,0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <KeyOutlined style={{ fontSize: 18, color: '#6366f1' }} />
+              <div style={{ flex: 1 }}>
+                <Space align="center">
+                  <Text strong>API Key Required</Text>
+                  {keySaved && <Tag color="green" style={{ margin: 0 }}>Saved</Tag>}
+                </Space>
+                <Input.Password
+                  placeholder="Enter backup API key (starts with bkp_)"
+                  value={apiKey}
+                  onChange={(e) => { setApiKey(e.target.value); setKeySaved(false) }}
+                  onPressEnter={() => {
+                    if (apiKey.trim()) {
+                      localStorage.setItem('backup_api_key', apiKey.trim())
+                      setKeySaved(true)
+                      message.success('API key saved')
+                     }
+                    }}
+                  style={{ maxWidth: 400, marginTop: 6 }}
+                />
+              </div>
+              {apiKey && (
+                <Button 
+                  type={keySaved ? 'default' : 'primary'}
+                  size="small"
+                  onClick={() => {
+                    localStorage.setItem('backup_api_key', apiKey.trim())
+                    setKeySaved(true)
+                    message.success('API key saved')
+                   }}
+                >
+                  {keySaved ? 'Saved ✓' : 'Save Key'}
+                </Button>
+              )}
+            </div>
+          </Card>
+
+          {/* Status Summary */}
+
         <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
           <Col xs={24} sm={12} md={6}>
             <Card size="small" style={{ background: 'rgba(15,23,42,0.8)', border: status?.running ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(99,102,241,0.15)' }}>
@@ -222,25 +321,20 @@ export default function BackupPage() {
           <Alert type="error" showIcon message="Last Error" description={status.lastError} style={{ marginBottom: 16 }} />
         )}
 
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ fontWeight: 600, fontSize: 16 }}><HistoryOutlined style={{ marginRight: 8 }} />Backup Snapshots</span>
-          <Space>
-            {canWrite && (
-              <>
-                <Button icon={<PlusOutlined />} size="small" loading={creating} onClick={() => setCreateOpen(true)}>New Backup</Button>
-                <Button icon={<CloudUploadOutlined />} size="small" type="primary" loading={syncing} onClick={doSync}>Sync Now</Button>
-              </>
-            )}
-            <Button icon={<ReloadOutlined />} size="small" onClick={fetch}>Refresh</Button>
-          </Space>
-        </div>
+          {/* Actions */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontWeight: 600, fontSize: 16 }}><HistoryOutlined style={{ marginRight: 8 }} />Backup Snapshots</span>
+            <Space>
+              <Button icon={<PlusOutlined />} size="small" loading={creating} onClick={() => setCreateOpen(true)}>New Backup</Button>
+              <Button icon={<CloudUploadOutlined />} size="small" type="primary" loading={syncing} onClick={doSync}>Sync Now</Button>
+              <Button icon={<ReloadOutlined />} size="small" onClick={fetch}>Refresh</Button>
+            </Space>
+          </div>
 
-        {/* Snapshot Table */}
-        <Table dataSource={backups} columns={columns} rowKey="name" loading={loading} size="small" pagination={{ pageSize: 20 }} locale={{ emptyText: 'No backups yet. Click "New Backup" to create one.' }} />
+          {/* Snapshot Table */}
+          <Table dataSource={backups} columns={columns} rowKey="name" loading={loading} size="small" pagination={{ pageSize: 20 }} locale={{ emptyText: 'No backups yet. Click "New Backup" to create one.' }} />
 
-        {/* Info Card */}
-        {canWrite && (
+          {/* Info Card */}
           <Card size="small" style={{ marginTop: 16, background: 'rgba(30,41,59,0.3)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <SettingOutlined style={{ color: '#f59e0b' }} />
@@ -248,24 +342,29 @@ export default function BackupPage() {
             </div>
             <Space direction="vertical" size="small" style={{ width: '100%' }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-               Backups copy Filer LevelDB data from all filer nodes, compress and store to <code>/srv/seaweed-backups/</code>.
+              <strong>What is backed up:</strong> Filer LevelDB metadata — all file/directory names, paths, sizes, permissions, timestamps, and directory structure from <code>/data/dc03/filer/filerldb2</code>. File content is stored separately on volume servers and not included in filer backups.
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
-               Retention policy: backups older than <code>{backups.length > 0 ? '30 days' : 'N/A'}</code> are auto-deleted.
+              <strong>How it works:</strong> Connects to filer nodes via SSH <code>172.16.0.2, .104</code>, tars the LevelDB directory, and downloads via SFTP to <code>/srv/seaweed-backups/</code>.
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
-               Restoring overwrites the filer database \u2014 restart filer service on all nodes after restore.
+              <strong>Restore:</strong> Uploads the tar.gz back to the filer via SFTP and extracts into the LevelDB directory. After restore, restart filer service — it will reconnect to existing volumes and rebuild metadata-to-volume mappings automatically.
+              </Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+              <strong>Encryption:</strong> Compatible with SeaweedFS volume encryption. Backup captures filer LevelDB as-is — encryption at volume level is transparent to filer metadata. If filer store uses disk encryption (LUKS), encrypted data is backed up and restored identically.
+              </Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+              <strong>Retention:</strong> Backups older than <code>30 days</code> are auto-deleted. Each backup is a full snapshot, not incremental.
               </Text>
             </Space>
           </Card>
-        )}
 
         {/* Create Backup Modal */}
         <Modal open={createOpen} title="Create Backup" onOk={doCreate} onCancel={() => setCreateOpen(false)} okText="Create Backup">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Input addonBefore="Name (optional)" value={snapName} onChange={(e) => setSnapName(e.target.value)} placeholder="auto-generated if empty" />
             <Text type="secondary" style={{ fontSize: 12 }}>
-             Copies Filer LevelDB data from all filer nodes, compresses and stores to local disk. Includes all file metadata, collections, and directory structure.
+            Backs up Filer LevelDB metadata from all filer nodes (<code>/data/dc03/filer/filerldb2</code>) — file/directory names, paths, sizes, permissions. File content lives on volume servers and is not included.
             </Text>
           </div>
         </Modal>

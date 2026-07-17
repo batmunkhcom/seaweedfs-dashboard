@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cluster &amp; Topology — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="cluster.html" class="active">Topology View</a>
+    <a href="#topology">Topology Tree</a>
+    <a href="#servers">Server Tables</a>
+    <a href="#leader">Leader Election</a>
+    <a href="#limits">Node Limits</a>
+    <a href="#details">Server Details</a>
+
+    <h2>Volumes</h2>
+    <a href="volumes.html">Volume List</a>
+
+    <h2>More</h2>
+    <a href="index.html">&#x2190; Back to Home</a>
+  </aside>
+
+  <main class="content">
+    <h1>Cluster &amp; Topology</h1>
+    <p>The Cluster page provides a complete view of the SeaweedFS cluster infrastructure — from the high-level topology tree down to individual server details with health indicators, resource usage, and configuration.</p>
+
+    <h2 id="topology">Topology Tree</h2>
+    <p>The topology tree (Ant Design <code>Tree</code> component) displays the cluster hierarchy:</p>
+
+    <pre><code>dc03
+  &#x251C;&#x2500;&#x2500; rack2
+  &#x2502;   &#x251C;&#x2500;&#x2500; 10.10.95.101  (Master + Volume)
+  &#x2502;   &#x251C;&#x2500;&#x2500; 10.10.95.102  (Volume + Filer + S3 GW)
+  &#x2502;   &#x251C;&#x2500;&#x2500; 10.10.95.103  (Master + Volume)
+  &#x2502;   &#x251C;&#x2500;&#x2500; 10.10.95.104  (Volume + Filer + S3 GW)
+  &#x2502;   &#x251C;&#x2500;&#x2500; 10.10.95.105  (Master [Leader] + Volume)
+  &#x2502;   &#x251C;&#x2500;&#x2500; 10.10.95.106  (Volume + S3 GW)
+  &#x2502;   &#x2514;&#x2500;&#x2500; 10.10.95.107  (Volume + S3 GW)</code></pre>
+
+    <p>Each node shows its roles with colored tags and a health indicator. Expand/collapse any branch to drill down. Click a node to see its detail panel.</p>
+
+    <div class="card">
+      <h3>Topology Structure</h3>
+      <table>
+        <tr><th>Level</th><th>Label</th><th>Example</th></tr>
+        <tr><td>Datacenter</td><td>Physical location</td><td><code>dc03</code></td></tr>
+        <tr><td>Rack</td><td>Rack identifier</td><td><code>rack2</code></td></tr>
+        <tr><td>Node</td><td>Server IP with roles</td><td><code>10.10.95.101</code> <span class="tag tag-purple">Master</span> <span class="tag tag-green">Volume</span></td></tr>
+      </table>
+    </div>
+
+    <h3>API Endpoint</h3>
+    <pre><code>GET /api/cluster/topology</code></pre>
+
+    <h2 id="servers">Server Tables</h2>
+    <p>Below the topology tree, three tabbed tables list all servers by role:</p>
+
+    <h3>Master Servers</h3>
+    <table>
+      <tr><th>IP</th><th>Hostname</th><th>Status</th><th>Leader</th><th>Response Time</th></tr>
+      <tr>
+        <td><code>10.10.95.101</code></td>
+        <td>st95101</td>
+        <td><span class="tag tag-green">Online</span></td>
+        <td>&mdash;</td>
+        <td>3ms</td>
+      </tr>
+      <tr>
+        <td><code>10.10.95.103</code></td>
+        <td>st395103</td>
+        <td><span class="tag tag-green">Online</span></td>
+        <td>&mdash;</td>
+        <td>2ms</td>
+      </tr>
+      <tr>
+        <td><code>10.10.95.105</code></td>
+        <td>st395105</td>
+        <td><span class="tag tag-green">Online</span></td>
+        <td><span class="tag tag-yellow">Leader</span></td>
+        <td>1ms</td>
+      </tr>
+    </table>
+
+    <h3>Volume Servers</h3>
+    <table>
+      <tr><th>IP</th><th>Hostname</th><th>Disk</th><th>FS</th><th>Volumes</th><th>Free</th></tr>
+      <tr><td><code>10.10.95.101</code></td><td>st95101</td><td>1.8T</td><td>XFS</td><td>8</td><td>1.4 TB</td></tr>
+      <tr><td><code>10.10.95.102</code></td><td>st95102</td><td>1.8T</td><td>XFS</td><td>6</td><td>1.5 TB</td></tr>
+      <tr><td><code>10.10.95.103</code></td><td>st395103</td><td>1.8T</td><td>XFS</td><td>9</td><td>1.4 TB</td></tr>
+      <tr><td><code>10.10.95.104</code></td><td>st395104</td><td>1.8T</td><td>XFS</td><td>5</td><td>1.5 TB</td></tr>
+      <tr><td><code>10.10.95.105</code></td><td>st395105</td><td>1.8T</td><td>XFS</td><td>7</td><td>1.4 TB</td></tr>
+      <tr><td><code>10.10.95.106</code></td><td>st395106</td><td>1.8T</td><td>XFS</td><td>4</td><td>1.6 TB</td></tr>
+      <tr><td><code>10.10.95.107</code></td><td>st395107</td><td>1.8T</td><td>XFS</td><td>3</td><td>1.6 TB</td></tr>
+    </table>
+
+    <h3>Filer Servers</h3>
+    <table>
+      <tr><th>IP</th><th>Hostname</th><th>Status</th><th>HA Group</th></tr>
+      <tr><td><code>10.10.95.102</code></td><td>st95102</td><td><span class="tag tag-green">Online</span></td><td>ha</td></tr>
+      <tr><td><code>10.10.95.104</code></td><td>st395104</td><td><span class="tag tag-green">Online</span></td><td>ha</td></tr>
+    </table>
+
+    <div class="note">
+      <strong>Search, filter, and sort:</strong> All tables support full-text search across IP/hostname, column sorting (click headers), and role-based filtering. Use the search bar above each table to quickly find a specific node.
+    </div>
+
+    <h2 id="leader">Leader Election</h2>
+    <p>SeaweedFS uses the <strong>Raft consensus algorithm</strong> to elect a master leader. The leader handles all write operations and coordinates cluster state changes.</p>
+
+    <div class="card">
+      <h3>dc03 Master Nodes</h3>
+      <table>
+        <tr><th>Node</th><th>IP</th><th>Port</th><th>Raft Port</th><th>Role</th></tr>
+        <tr>
+          <td>Master 1</td>
+          <td><code>10.10.95.101</code></td>
+          <td>9333</td>
+          <td>19333</td>
+          <td><span class="tag tag-blue">Follower</span></td>
+        </tr>
+        <tr>
+          <td>Master 2</td>
+          <td><code>10.10.95.103</code></td>
+          <td>9333</td>
+          <td>19333</td>
+          <td><span class="tag tag-blue">Follower</span></td>
+        </tr>
+        <tr>
+          <td>Master 3</td>
+          <td><code>10.10.95.105</code></td>
+          <td>9333</td>
+          <td>19333</td>
+          <td><span class="tag tag-yellow">Leader</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <p>The dashboard's SeaweedFS client (<code>seaweed_client.py</code>) is multi-master aware. It detects the current leader and automatically routes requests there. If the leader becomes unavailable, it cycles through the master hosts list to find the new leader — logging every failover action with full context.</p>
+
+    <h3>Failover Behavior</h3>
+    <pre><code># All master hosts are tried in order on failure:
+SEAWEEDFS_MASTER_HOSTS=10.10.95.101:9333,10.10.95.103:9333,10.10.95.105:9333
+
+# Client logic:
+# 1. Try current leader (cached)
+# 2. On failure, try next host
+# 3. Continue until one responds or all exhausted
+# 4. Log every failover attempt with traceback</code></pre>
+
+    <h2 id="limits">Node Limits Management</h2>
+    <p>Each volume server has a configurable maximum volume count. This is critical for capacity planning — with 1.8 TB disks and 30 GB volumes, each node can hold approximately 60 volumes.</p>
+
+    <div class="card">
+      <h3>Capacity Calculation</h3>
+      <pre><code>Disk size:    1800 GB
+Volume size:    30 GB
+Approx. max:    ~60 volumes per node
+
+Set limits conservatively:
+  - 50-55 for standard operation
+  - 60 for maximum utilization</code></pre>
+    </div>
+
+    <p>Volume limits are displayed on each node's card in the cluster view. Click the limit value to edit it inline — no page reload needed. When a node reaches its configured limit, that node's card shows a warning and new volume grow operations are blocked for that specific node.</p>
+
+    <div class="warn">
+      <strong>Growth enforcement:</strong> The dashboard automatically blocks volume grow on nodes that have reached their limit. You must either increase the limit or free up space before growing volumes on that node.
+    </div>
+
+    <h2 id="details">Server Details</h2>
+    <p>Clicking any server in the topology tree or table opens a detail panel with:</p>
+
+    <div class="card">
+      <h3>Server Detail Fields</h3>
+      <table>
+        <tr><th>Field</th><th>Example</th><th>Source</th></tr>
+        <tr><td>IP Address</td><td><code>10.10.95.101</code></td><td>Master API /dir/status</td></tr>
+        <tr><td>Hostname</td><td><code>st95101.mbm.mn</code></td><td>Master API</td></tr>
+        <tr><td>Roles</td><td><span class="tag tag-purple">Master</span> <span class="tag tag-green">Volume</span></td><td>Cluster config</td></tr>
+        <tr><td>Hardware</td><td>Intel N150 2-core, 3.9 GB RAM</td><td>Cluster config</td></tr>
+        <tr><td>Disk</td><td>1.8 TB XFS</td><td>Cluster config</td></tr>
+        <tr><td>Mount Path</td><td><code>/data/dc03</code></td><td>Cluster config</td></tr>
+        <tr><td>Volume Count</td><td>8 / 60 (13%)</td><td>Master API</td></tr>
+        <tr><td>Volume Limit</td><td>60 (configurable)</td><td>Runtime settings</td></tr>
+        <tr><td>Disk Usage</td><td>240 GB / 1.8 TB (13%)</td><td>Volume API</td></tr>
+        <tr><td>SeaweedFS Version</td><td><code>30GB 4.39</code></td><td>Master API</td></tr>
+        <tr><td>S.M.A.R.T. Health</td><td><span class="tag tag-green">PASSED</span> (if enabled)</td><td>SSH / smartctl</td></tr>
+      </table>
+    </div>
+
+    <h3>API Endpoints</h3>
+    <pre><code>GET /api/cluster/status          # Overall cluster status
+GET /api/cluster/health          # Health summary (node up/down counts)
+GET /api/cluster/topology        # Full topology tree</code></pre>
+
+    <hr>
+
+    <h2>Key Ports Reference</h2>
+    <table>
+      <tr><th>Port</th><th>Service</th></tr>
+      <tr><td>9333</td><td>Master API (HTTP)</td></tr>
+      <tr><td>19333</td><td>Master Raft (gRPC)</td></tr>
+      <tr><td>8080</td><td>Volume API (HTTP/gRPC)</td></tr>
+      <tr><td>8888</td><td>Filer API (HTTP)</td></tr>
+      <tr><td>18888</td><td>Filer Peer Sync (gRPC)</td></tr>
+      <tr><td>8111</td><td>Filer IAM (embedded)</td></tr>
+      <tr><td>8333</td><td>S3 Gateway API</td></tr>
+      <tr><td>9000</td><td>LB (Nginx TCP stream, planned)</td></tr>
+    </table>
+  </main>
+</div>
+
+</body>
+</html>

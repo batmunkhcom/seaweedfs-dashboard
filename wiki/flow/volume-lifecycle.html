@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Volume Lifecycle — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#a855f7',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#a855f7',
+        textColor: '#e2e8f0',
+        fontSize: '14px'
+      }
+    });
+  </script>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+
+    <h2>Getting Started</h2>
+    <a href="../getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="../dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="../cluster.html">Topology View</a>
+
+    <h2>Volume Management</h2>
+    <a href="../volumes.html">Volume List</a>
+
+    <h2>S3 Management</h2>
+    <a href="../s3.html">Buckets &amp; Endpoints</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="../backup.html">Status &amp; Sync</a>
+
+    <h2>Workers</h2>
+    <a href="../workers.html">Job History</a>
+
+    <h2>Disk Health</h2>
+    <a href="../disk-health.html">SMART Monitoring</a>
+
+    <h2>API Keys</h2>
+    <a href="../api-keys.html">Key Management</a>
+
+    <h2>User Management</h2>
+    <a href="../users.html">Admin &amp; Read-Only</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Auth Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html" class="active">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>Volume Lifecycle</h1>
+    <p>SeaweedFS volume state machine and management operations for the dc03 cluster.</p>
+
+    <div class="card">
+      <h3>Cluster Context</h3>
+      <table>
+        <tr><th>Parameter</th><th>Value</th></tr>
+        <tr><td>Replication</td><td><span class="tag tag-purple">001</span> (primary + 1 replica &rarr; 2 copies total)</td></tr>
+        <tr><td>Volume size</td><td>30 GB (configurable via <code>volume_size_mb</code> runtime setting)</td></tr>
+        <tr><td>Disk capacity per node</td><td>1.8 TB XFS at <code>/data/dc03</code></td></tr>
+        <tr><td>Max volumes per node</td><td>Native limit from <code>weed volume</code> plus optional <code>node_volume_limits</code> override</td></tr>
+        <tr><td>Node count</td><td>7 volume servers (<code>.101</code>&ndash;<code>.107</code>)</td></tr>
+      </table>
+    </div>
+
+    <h2>State Diagram</h2>
+
+    <pre class="mermaid">
+stateDiagram-v2
+    [*] --> Created : POST /api/volumes/grow
+
+    Created --> Active : allocated to volume server
+    Active --> ReadOnly : disk full OR manual freeze
+    Active --> Compacting : garbage collection triggered
+    Active --> Deleted : collection delete OR TTL expiry
+    Active --> Vacuumed : space reclaimed after compaction
+
+    ReadOnly --> Deleted : collection delete OR TTL expiry
+    ReadOnly --> Active : disk space freed (rare)
+
+    Compacting --> Vacuumed : compaction complete
+    Vacuumed --> Active : clean, available for writes
+    </pre>
+
+    <h2>Step-by-Step Lifecycle</h2>
+
+    <h3>1. Volume Creation (Grow)</h3>
+    <p>The <strong>grow</strong> operation allocates new volume slots across the cluster.</p>
+
+    <pre class="mermaid">
+sequenceDiagram
+    actor User as Admin User
+    participant UI as Dashboard UI
+    participant API as POST /api/volumes/grow
+    participant Master as Master API (:9333)
+
+    User->>UI: Fill grow form (count, replication, collection)
+    UI->>API: POST { count, replication, dc, rack, collection }
+    API->>API: Check node volume limits (native max + configured override)
+    alt limit reached on all nodes
+        API-->>UI: { error: "Volume limit reached on <url>" }
+    else space available
+        API->>Master: GET /vol/grow?count=N&replication=001&dataCenter=dc03&rack=rack2&collection=
+        Master->>Master: Select volume servers with free slots
+        Master->>Master: Assign volume IDs and commit to Raft log
+        Master->>Master: Distribute to volume servers
+        Master-->>API: { count: N }
+        API-->>UI: { ok: true, count: N }
+        UI-->>User: New volumes appear in volume list
+    end
+    </pre>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Read topology</strong>
+        <span>Read topology from <code>GET /dir/status</code> to discover each node's <code>Max</code> (native) and current volume count.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Load configured limits</strong>
+        <span>Load <code>node_volume_limits</code> from runtime settings (JSON map of <code>url &rarr; limit</code>).</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Compute effective max</strong>
+        <span>Compute <code>effective_max = min(native_max, configured_limit)</code> for each node.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Check limits</strong>
+        <span>If <strong>any</strong> node is at or above its effective max, the grow request is rejected.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Forward to master</strong>
+        <span>Otherwise, forward <code>GET /vol/grow?count=&hellip;&amp;replication=&hellip;</code> to the master.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>Master assignment</strong>
+        <span>The master assigns volumes round-robin across eligible nodes and replicates them per <code>001</code>.</span>
+      </div>
+    </div>
+
+    <h3>2. Active State</h3>
+    <p>Volumes in <strong>Active</strong> state accept reads and writes. The volume server:</p>
+    <ul>
+      <li>Stores files in 32 MB needle chunks within the <code>.idx</code> / <code>.dat</code> file pair.</li>
+      <li>Accumulates garbage (deleted or overwritten chunks) over time.</li>
+      <li>Reports status to the master every heartbeat (default ~5s).</li>
+    </ul>
+
+    <h3>3. Compaction (Garbage Collection)</h3>
+    <p>When garbage ratio exceeds a threshold, the master triggers <strong>vacuum</strong>.</p>
+
+    <pre class="mermaid">
+sequenceDiagram
+    actor User as Admin User
+    participant API as POST /api/volumes/vacuum
+    participant Master as Master API (:9333)
+    participant Volume as Volume Server (:8080)
+
+    User->>API: POST { garbageThreshold: 0.3 }
+    API->>Master: GET /vol/vacuum?garbageThreshold=0.3
+    Master->>Master: Iterate all volumes, compute garbage ratio
+    loop For each volume with garbage > threshold
+        Master->>Volume: Trigger compaction
+        Volume->>Volume: Rewrite live needles into new .dat file
+        Volume->>Volume: Delete old .dat / .idx files
+        Volume-->>Master: Compaction complete
+    end
+    Master-->>API: { ok: true }
+    API-->>User: Vacuum triggered
+    </pre>
+
+    <div class="note">
+      <strong>Notes:</strong>
+      <ul>
+        <li><code>garbageThreshold</code> is a float (e.g. <code>0.3</code> = 30% garbage).</li>
+        <li>Vacuum is <strong>non-blocking</strong> &mdash; volumes remain available for reads during compaction.</li>
+        <li>Compacted volumes return to the <strong>Vacuumed</strong> state then immediately become <strong>Active</strong> again (space reclaimed).</li>
+      </ul>
+    </div>
+
+    <h3>4. Read-Only State</h3>
+    <p>A volume transitions to <strong>ReadOnly</strong> when:</p>
+    <ul>
+      <li>The underlying disk reaches its native filesystem full threshold.</li>
+      <li>The <code>weed volume</code> process hits its configured <code>-max</code> volume count.</li>
+      <li>An admin manually marks it read-only.</li>
+    </ul>
+    <p>ReadOnly volumes still serve reads (lookups) but reject all write attempts. They can be deleted. If disk space is freed, the master may re-enable writes.</p>
+
+    <h3>5. Deletion (Collection Delete or TTL)</h3>
+    <p>Volumes are deleted when an entire <strong>collection</strong> is dropped, a <strong>TTL</strong> expires, or via explicit admin action.</p>
+
+    <pre class="mermaid">
+sequenceDiagram
+    actor User as Admin User
+    participant API as DELETE /api/collections/{name}
+    participant Master as Master API (:9333)
+    participant Volume as Volume Servers
+
+    User->>API: DELETE /api/collections/mydata
+    API->>Master: Forward delete collection request
+    Master->>Master: Look up all volumes in collection "mydata"
+    loop For each volume in collection
+        Master->>Volume: Send delete command
+        Volume->>Volume: Mark volume as deleted
+        Volume->>Volume: Remove .idx and .dat files from disk
+        Volume-->>Master: Confirm deletion
+    end
+    Master-->>API: { ok: true }
+    API-->>User: Collection deleted, volumes removed
+    </pre>
+
+    <div class="warn">
+      <strong>Warning:</strong> Deletion is <strong>irreversible</strong> &mdash; files are permanently removed from disk.
+    </div>
+
+    <h3>6. Vacuumed (Transient)</h3>
+    <p>Immediately after compaction, the volume enters the <strong>Vacuumed</strong> state briefly. The volume server reports the updated (lower) used space to the master, which marks it <code>Active</code> again. This state is only observable during a narrow window between compaction finish and the next master heartbeat cycle.</p>
+
+    <h2>API Reference</h2>
+    <table>
+      <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
+      <tr><td><code>/api/volumes</code></td><td>GET</td><td>List all volumes across all nodes</td></tr>
+      <tr><td><code>/api/volumes/{id}</code></td><td>GET</td><td>Get single volume details</td></tr>
+      <tr><td><code>/api/volumes/grow</code></td><td>POST</td><td>Grow new volumes (admin)</td></tr>
+      <tr><td><code>/api/volumes/vacuum</code></td><td>POST</td><td>Trigger garbage collection (admin)</td></tr>
+      <tr><td><code>/api/collections</code></td><td>GET</td><td>List all collections</td></tr>
+      <tr><td><code>/api/collections/{name}</code></td><td>DELETE</td><td>Delete entire collection (admin)</td></tr>
+    </table>
+
+    <h2>Alerting</h2>
+    <p>The alert engine monitors:</p>
+    <ul>
+      <li><strong>Garbage ratio</strong> &mdash; triggers alert when any node has average garbage &gt; <code>ALERT_GARBAGE_RATIO</code> (default 0.5).</li>
+      <li><strong>Read-only count</strong> &mdash; triggers alert when read-only volumes exceed <code>ALERT_MAX_READONLY_VOLUMES</code> (default 3).</li>
+    </ul>
+    <p>Thresholds are configurable in the Settings UI and stored in <code>runtime_settings</code>.</p>
+  </main>
+</div>
+
+</body>
+</html>

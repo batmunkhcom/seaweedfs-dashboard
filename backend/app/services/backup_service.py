@@ -44,6 +44,66 @@ async def _ssh_exec(host: str, cmd: str, timeout: int = 120) -> tuple[str, str, 
     return result["stdout"], result["stderr"], result["exit_code"]
 
 
+async def _sftp_push(host: str, local_path: Path, remote_path: str) -> bool:
+    import paramiko
+
+    key_path = Path(settings.disk_health_ssh_key_path).expanduser()
+    loop = asyncio.get_event_loop()
+    result = {"ok": False, "error": ""}
+
+    def _run():
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                hostname=host,
+                username=settings.disk_health_ssh_user,
+                key_filename=str(key_path),
+                timeout=10,
+            )
+            sftp = client.open_sftp()
+            sftp.put(str(local_path), remote_path)
+            sftp.close()
+            result["ok"] = True
+        except Exception as e:
+            result["error"] = str(e)[:200]
+        finally:
+            client.close()
+
+    await loop.run_in_executor(None, _run)
+    return result["ok"]
+
+
+async def _sftp_fetch(host: str, remote_path: str, local_path: Path) -> bool:
+    import paramiko
+
+    key_path = Path(settings.disk_health_ssh_key_path).expanduser()
+    loop = asyncio.get_event_loop()
+    result = {"ok": False, "error": ""}
+
+    def _run():
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                hostname=host,
+                username=settings.disk_health_ssh_user,
+                key_filename=str(key_path),
+                timeout=10,
+            )
+            sftp = client.open_sftp()
+            sftp.get(remote_path, str(local_path))
+            sftp.close()
+            result["ok"] = True
+        except Exception as e:
+            result["error"] = str(e)[:200]
+        finally:
+            client.close()
+
+    await loop.run_in_executor(None, _run)
+    return result["ok"]
+
+
 async def create_backup(name: str | None = None) -> dict:
     enabled = await get_setting("backup_enabled", "true")
     if enabled.lower() != "true":
@@ -60,7 +120,7 @@ async def create_backup(name: str | None = None) -> dict:
     backup_name = name or f"backup-{ts}"
     backup_file = Path("/srv/seaweed-backups") / f"{backup_name}.tar.gz"
 
-    await backup_file.parent.mkdir(parents=True, exist_ok=True)
+    backup_file.parent.mkdir(parents=True, exist_ok=True)
 
     db = await get_db()
     started_at = now.isoformat()
@@ -91,20 +151,18 @@ async def create_backup(name: str | None = None) -> dict:
         try:
             tmp_remote = f"/tmp/filer-backup-{ts}.tar.gz"
             await _ssh_exec(host, f"tar czf {tmp_remote} -C {db_path} .")
-            _, stderr2, exit_code2 = await _ssh_exec(
-                host, f"scp {tmp_remote} root@172.16.0.10:{backup_file}"
-            )
-            if exit_code2 != 0:
-                raise RuntimeError(f"SCP failed: {stderr2[:200]}")
+            sftp_ok = await _sftp_fetch(host, tmp_remote, backup_file)
             await _ssh_exec(host, f"rm -f {tmp_remote}")
-            results[host] = "scp_ok"
+            if not sftp_ok:
+                raise RuntimeError("SFTP download failed")
+            results[host] = "ok"
         except Exception as e:
             results[host] = str(e)[:200]
             error_msg = f"{error_msg or ''} {host}: {e}"
             logger.error("backup_filer_failed", host=host, exc_info=True)
 
     finished_at = datetime.now(timezone.utc).isoformat()
-    ok = all(v == "scp_ok" for v in results.values()) and bool(total_bytes)
+    ok = all(v == "ok" for v in results.values()) and bool(total_bytes)
     status = "uploaded" if ok else ("failed" if error_msg else "partial")
 
     await db.execute(
@@ -197,12 +255,9 @@ async def restore_backup(name: str) -> dict:
     for host in filer_hosts[:1]:
         try:
             tmp_remote = f"/tmp/filer-restore-{name}.tar.gz"
-            _, stderr1, exit_code1 = await _ssh_exec(
-                host, f"scp root@172.16.0.10:{backup_file} {tmp_remote}"
-            )
-            if exit_code1 != 0:
-                raise RuntimeError(f"SCP failed: {stderr1[:200]}")
-
+            sftp_ok = await _sftp_push(host, backup_file, tmp_remote)
+            if not sftp_ok:
+                raise RuntimeError("SFTP upload failed")
             _, stderr2, exit_code2 = await _ssh_exec(
                 host, f"tar xzf {tmp_remote} -C {db_path}/.. && rm -f {tmp_remote}"
             )
@@ -237,7 +292,7 @@ async def get_backup_status() -> dict:
     return {
         "running": status_val == "running",
         "lastSyncAt": row["created_at"],
-        "lastError": None if status_val in ("uploaded", "partial") else row.get("status"),
+        "lastError": None if status_val in ("uploaded", "partial") else row["status"],
         "bytesSynced": row["size_bytes"] or 0,
     }
 

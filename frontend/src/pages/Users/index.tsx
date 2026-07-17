@@ -5,6 +5,7 @@ import { listUsers, createUser, updateUser, deleteUser } from '../../services/ap
 import { useAuthStore } from '../../stores/authStore'
 
 export default function UsersPage() {
+  const roleColor: Record<string, string> = { admin: 'pink', operator: 'purple', viewer: 'blue', user: 'cyan' }
   const [users, setUsers] = useState<any[]>([])
   const [roles, setRoles] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
@@ -15,7 +16,7 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<any>({})
   const [newUser, setNewUser] = useState({
     username: '', password: '', firstname: '', lastname: '', email: '', phone: '',
-    role: 'viewer', create_bucket: false, s3_permission: 'readwrite',
+    role: '', create_bucket: false, s3_permission: 'readwrite',
   })
   const role = useAuthStore((s) => s.user?.role)
 
@@ -103,7 +104,7 @@ export default function UsersPage() {
       title: 'Role', dataIndex: 'role', key: 'role',
       render: (r: string, record: any) => role === 'admin' ? (
         <Select value={r} size="small" style={{ width: 130 }} options={roleOptions} onChange={(v) => doChangeRole(record.id, v)} />
-      ) : <Tag color={r === 'admin' ? 'pink' : r === 'operator' ? 'purple' : 'blue'}>{r}</Tag>,
+      ) : <Tag color={roleColor[r] || 'blue'}>{r}</Tag>,
     },
     {
       title: 'Enabled', dataIndex: 'enabled', key: 'enabled',

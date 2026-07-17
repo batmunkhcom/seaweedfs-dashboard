@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Master Failover Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#a855f7',
+        primaryTextColor: '#e2e8f0',
+        lineColor: '#a855f7',
+        textColor: '#e2e8f0',
+        fontSize: '14px'
+      }
+    });
+  </script>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+
+    <h2>Getting Started</h2>
+    <a href="../getting-started.html">Installation &amp; Setup</a>
+
+    <h2>Dashboard</h2>
+    <a href="../dashboard.html">Overview &amp; KPIs</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="../cluster.html">Topology View</a>
+
+    <h2>Volume Management</h2>
+    <a href="../volumes.html">Volume List</a>
+
+    <h2>S3 Management</h2>
+    <a href="../s3.html">Buckets &amp; Endpoints</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="../backup.html">Status &amp; Sync</a>
+
+    <h2>Workers</h2>
+    <a href="../workers.html">Job History</a>
+
+    <h2>Disk Health</h2>
+    <a href="../disk-health.html">SMART Monitoring</a>
+
+    <h2>API Keys</h2>
+    <a href="../api-keys.html">Key Management</a>
+
+    <h2>User Management</h2>
+    <a href="../users.html">Admin &amp; Read-Only</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Auth Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html" class="active">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>Master Failover Flow</h1>
+    <p>Automatic multi-master failover with Raft consensus. The dashboard backend loops through all master nodes on connection failure, ensuring uninterrupted API access.</p>
+
+    <h2>Master Topology</h2>
+    <pre><code>&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;                  SeaweedFS dc03 Cluster                   &#x2502;
+&#x2502;                                                          &#x2502;
+&#x2502;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;                                 &#x2502;
+&#x2502;  &#x2502; 10.10.95.105:9333   &#x2502; &#x25C0;&#x2500;&#x2500; Raft Leader (elected)       &#x2502;
+&#x2502;  &#x2502; st395105.mbm.mn     &#x2502;      All writes forwarded here   &#x2502;
+&#x2502;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;                                 &#x2502;
+&#x2502;            &#x2502; (gRPC :19333)                               &#x2502;
+&#x2502;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;                                 &#x2502;
+&#x2502;  &#x2502;         &#x2502;           &#x2502;                                 &#x2502;
+&#x2502;  &#x25BC;         &#x25BC;           &#x25BC;                                 &#x2502;
+&#x2502;  &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500; &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;                             &#x2502;
+&#x2502;  &#x2502; .101:9333 &#x2502; &#x2502; .103:9333 &#x2502;   Raft Followers            &#x2502;
+&#x2502;  &#x2502; Follower  &#x2502; &#x2502; Follower  &#x2502;   (can serve reads)         &#x2502;
+&#x2502;  &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500; &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;                             &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</code></pre>
+
+    <div class="card">
+      <h3>Master Nodes</h3>
+      <table>
+        <tr><th>Master</th><th>IP:Port</th><th>Hostname</th><th>Raft Role</th></tr>
+        <tr><td>Master 0</td><td><code>10.10.95.101:9333</code></td><td>st95101</td><td><span class="tag tag-blue">Follower</span></td></tr>
+        <tr><td>Master 1</td><td><code>10.10.95.103:9333</code></td><td>st395103</td><td><span class="tag tag-blue">Follower</span></td></tr>
+        <tr><td>Master 2</td><td><code>10.10.95.105:9333</code></td><td>st395105</td><td><span class="tag tag-green">Leader</span> (elected)</td></tr>
+      </table>
+    </div>
+
+    <p><strong>Config</strong>: <code>SEAWEEDFS_MASTER_HOSTS=10.10.95.101:9333,10.10.95.103:9333,10.10.95.105:9333</code> in <code>.env</code> &rarr; parsed by <code>config.py</code> &rarr; <code>settings.master_list</code>.</p>
+
+    <h2>Failover Sequence</h2>
+
+    <pre class="mermaid">
+sequenceDiagram
+    participant Route as API Route Handler
+    participant Client as SeaweedClient
+    participant M0 as Master 0 (.101:9333) Follower
+    participant M1 as Master 1 (.103:9333) Follower
+    participant M2 as Master 2 (.105:9333) Leader
+    participant Log as structlog (JSON)
+
+    Route->>Client: async def master_get("/path")
+
+    Client->>Client: get_master()
+    Note over Client: _master_index = 0 (last known working)
+
+    rect rgb(240, 248, 255)
+        Note over Client,M0: Attempt 1: Try Master 0 (idx=0)
+        Client->>M0: GET http://10.10.95.101:9333/cluster/status
+        M0--XClient: Connection timeout (30s)
+        Client->>Log: logger.warning("master_unreachable")
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Client,M1: Attempt 2: Try Master 1 (idx=1)
+        Client->>M1: GET http://10.10.95.103:9333/cluster/status
+        M1--XClient: Connection refused
+        Client->>Log: logger.warning("master_unreachable")
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Client,M2: Attempt 3: Try Master 2 (idx=2)
+        Client->>M2: GET http://10.10.95.105:9333/cluster/status
+        M2-->>Client: HTTP 200 { "Leader": "10.10.95.105:9333" }
+        Client->>Client: _master_index = 2 (remember)
+        Client-->>Route: Return host "10.10.95.105:9333"
+    end
+
+    rect rgb(255, 255, 255)
+        Route->>Client: client.request("GET", "/vol/status", master=True)
+        Client->>M2: GET http://10.10.95.105:9333/vol/status
+        M2-->>Client: HTTP 200 OK
+        Client-->>Route: Response
+        Route-->>Route: Process and return to caller
+    end
+
+    Note over Client: Subsequent requests: try _master_index=2 first
+
+    rect rgb(255, 240, 240)
+        Note over M2: Scenario: Leader .105 crashes
+        M2--XClient: Connection refused
+
+        Note over Client,M0: _master_index=2 fails → probing resumes
+        Client->>M0: GET http://10.10.95.101:9333/cluster/status
+        alt .101 becomes new leader
+            M0-->>Client: HTTP 200 { "Leader": "10.10.95.101:9333" }
+            Client->>Client: _master_index = 0
+        else .103 becomes new leader
+            M0--XClient: Still offline
+            Client->>M1: GET http://10.10.95.103:9333/cluster/status
+            M1-->>Client: HTTP 200 { "Leader": "10.10.95.103:9333" }
+            Client->>Client: _master_index = 1
+        end
+    end
+    </pre>
+
+    <h2>Step-by-Step Explanation</h2>
+
+    <h3>1. Master List Configuration</h3>
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Read from environment</strong>
+        <span><code>SEAWEEDFS_MASTER_HOSTS</code> is a comma-separated CSV string parsed by <code>config.py</code>, producing <code>["10.10.95.101:9333", "10.10.95.103:9333", "10.10.95.105:9333"]</code>.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Single source of truth</strong>
+        <span>The CSV only lives in <code>.env</code>. The backend and frontend both derive master hosts from this single value. The frontend reads cluster info via <code>/api/info</code> endpoint.</span>
+      </div>
+    </div>
+
+    <h3>2. SeaweedClient.get_master()</h3>
+    <p>Every API call to a master endpoint goes through <code>get_master()</code> first:</p>
+    <pre><code>async def get_master(self) -> str:
+    masters = settings.master_list
+    for attempt in range(len(masters)):
+        idx = (self._master_index + attempt) % len(masters)
+        host = masters[idx]
+        try:
+            resp = await self.client.get(f"http://{host}/cluster/status")
+            if resp.status_code == 200:
+                self._master_index = idx   # ← remember for next time
+                return host
+        except Exception:
+            self.logger.warning("master_unreachable", host=host, exc_info=True)
+
+    self.logger.error("all_masters_failed", masters=masters)
+    raise RuntimeError("No reachable master")</code></pre>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Round-robin probing</strong>
+        <span>Starting from <code>_master_index</code> (the last known working master), each successive master is tried. The modulo ensures it wraps around.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Optimization</strong>
+        <span>On success, <code>_master_index</code> is updated so the next request tries that master first &mdash; reducing latency under normal conditions.</span>
+      </div>
+    </div>
+
+    <h3>3. All-Masters-Failed Scenario</h3>
+    <p>If <code>get_master()</code> exhausts all hosts without a 200 response:</p>
+    <ul>
+      <li>A structlog <code>ERROR</code> is emitted with all master hosts for debugging.</li>
+      <li>A <code>RuntimeError("No reachable master")</code> is raised.</li>
+      <li>The calling route handler catches this and returns an error to the client (typically HTTP 502).</li>
+    </ul>
+    <p>The dashboard frontend displays a "Cluster Unreachable" banner when all masters are down.</p>
+
+    <h3>4. Request Routing (<code>client.request()</code>)</h3>
+    <p>All master API calls use the shared <code>request()</code> method:</p>
+    <pre><code>async def request(self, method, path, *, master=True, **kwargs) -> httpx.Response:
+    base = await self.get_master() if master else await self.get_filer()
+    url = f"http://{base}{path}"
+    resp = await self.client.request(method, url, **kwargs)
+    resp.raise_for_status()
+    return resp</code></pre>
+
+    <table>
+      <tr><th>Flag</th><th>Behavior</th></tr>
+      <tr><td><code>master=True</code></td><td>Calls <code>get_master()</code> &rarr; returns whichever master is reachable</td></tr>
+      <tr><td><code>master=False</code></td><td>Calls <code>get_filer()</code> (identical failover pattern for filer hosts)</td></tr>
+    </table>
+
+    <h3>5. Read vs Write Routing</h3>
+    <table>
+      <tr><th>Operation</th><th>Role</th><th>Explanation</th></tr>
+      <tr><td><code>GET /dir/status</code></td><td>Any master</td><td>Read operations are stateless &mdash; any follower can serve</td></tr>
+      <tr><td><code>GET /vol/status</code></td><td>Any master</td><td>Follower returns cached state from last heartbeat</td></tr>
+      <tr><td><code>POST /vol/grow</code></td><td><span class="tag tag-green">Leader only</span></td><td>Write operations mutate state &rarr; Raft forwards to leader</td></tr>
+      <tr><td><code>POST /vol/vacuum</code></td><td><span class="tag tag-green">Leader only</span></td><td>Vacuum trigger is a state change</td></tr>
+    </table>
+
+    <div class="note">
+      <strong>Transparent forwarding:</strong> SeaweedFS Raft handles the read/write split automatically. If a follower receives a write, it internally <strong>forwards to the leader</strong> via gRPC (port <code>19333</code>) &mdash; transparent to the client. The dashboard backend does <strong>not</strong> need to know which node is the leader; it can send any request to any reachable master.
+    </div>
+
+    <h3>6. Retry &amp; Backoff Strategy</h3>
+    <p>The current implementation uses <strong>linear probing</strong> (one attempt per master, in sequence) with httpx's configurable timeout (<code>SEAWEEDFS_REQUEST_TIMEOUT</code>, default 30s).</p>
+    <p>No exponential backoff in the client itself &mdash; each <code>get_master()</code> call probes all masters linearly. However, repeated calls from different route handlers benefit from <code>_master_index</code> remembering the last working master.</p>
+
+    <h3>7. Logging &amp; Observability</h3>
+    <p>Every failover event is logged with full context:</p>
+    <pre><code>{
+  "event": "master_unreachable",
+  "level": "warning",
+  "host": "10.10.95.101:9333",
+  "exception": "ConnectionRefusedError: ..."
+}</code></pre>
+    <p>If all masters fail:</p>
+    <pre><code>{
+  "event": "all_masters_failed",
+  "level": "error",
+  "masters": ["10.10.95.101:9333", "10.10.95.103:9333", "10.10.95.105:9333"]
+}</code></pre>
+
+    <h3>8. Raft Re-Election (Who Triggers)</h3>
+    <p>Raft leader election is handled <strong>entirely by SeaweedFS</strong>, not the dashboard:</p>
+    <ul>
+      <li>Masters communicate on port <code>19333</code> (gRPC).</li>
+      <li>If the leader becomes unreachable, followers hold an election.</li>
+      <li>The new leader sends a heartbeat to announce itself.</li>
+      <li>During the election window (~1-2 seconds), API requests may fail transiently.</li>
+      <li>The dashboard's <code>get_master()</code> linear probing naturally tolerates this &mdash; it tries the next master.</li>
+    </ul>
+
+    <h3>9. Circuit Breaker (Future Enhancement)</h3>
+    <p>The design spec calls for a circuit breaker after 3 consecutive failures with 30s cooldown. This is <strong>not yet implemented</strong>. The current approach relies on:</p>
+    <ul>
+      <li><code>_master_index</code> optimization to avoid repeatedly hitting a dead master.</li>
+      <li>Full master-list retry on each call (no persistent state tracking "dead" masters).</li>
+      <li>Per-request timeout (30s) from httpx to bound latency.</li>
+    </ul>
+
+    <h2>Filer Failover (Same Pattern)</h2>
+    <p>The <code>get_filer()</code> method follows the identical pattern for filer hosts:</p>
+    <pre><code>SEAWEEDFS_FILER_HOST=10.10.95.102:8888,10.10.95.104:8888</code></pre>
+    <p>Filers in the <code>ha</code> group share the same underlying volume storage &mdash; either can serve reads and writes. The dashboard probes both, remembers the last working one via <code>_filer_index</code>, and fails over identically.</p>
+
+    <h2>API Resilience Summary</h2>
+    <table>
+      <tr><th>Failure Scenario</th><th>Behavior</th><th>Dashboard Impact</th></tr>
+      <tr><td>1 master down</td><td>Probe next master (&le; 1 timeout)</td><td>Brief delay, request succeeds</td></tr>
+      <tr><td>2 masters down</td><td>Probe last master (&le; 2 timeouts)</td><td>Longer delay, request succeeds</td></tr>
+      <tr><td>All 3 masters down</td><td><code>RuntimeError("No reachable master")</code></td><td>Dashboard shows "Cluster Unreachable"</td></tr>
+      <tr><td>Leader crash + election</td><td>Probe followers, Raft forwards internally</td><td>Transparent &mdash; may see brief delay during election</td></tr>
+      <tr><td>Network partition</td><td>Probe each master, all time out</td><td>Total fail &mdash; all-masters-failed error</td></tr>
+    </table>
+
+    <h2>Verification Commands</h2>
+    <pre><code># Check which master is the Raft leader
+curl -s http://10.10.95.105:9333/cluster/status | python3 -m json.tool
+
+# Check topology from any master
+curl -s http://10.10.95.101:9333/dir/status?pretty=y | python3 -m json.tool
+
+# Dashboard health endpoint (reports master connectivity)
+curl -s http://10.10.0.80:8081/api/health | python3 -m json.tool</code></pre>
+  </main>
+</div>
+
+</body>
+</html>

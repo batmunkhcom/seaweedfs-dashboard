@@ -108,30 +108,42 @@ export interface Snapshot {
   createdAt: string
 }
 
-export interface BucketStatus {
-  ok: boolean
-  bucket?: string
-  exists?: boolean
-  error?: string
+export interface WorkerDiskInfo {
+  dir: string
+  total_bytes: number
+  used_bytes: number
+  free_bytes: number
+  percent_free: number
+  percent_used: number
 }
 
-export interface WorkerStatus {
+export interface WorkerNode {
   name: string
+  address: string
   capabilities: string[]
-  lastSeen: string
   healthy: boolean
-  address?: string
-  volumes?: number
-  ecShards?: number
-  maxVolumes?: number
+  version: string
+  volumes: number
+  volume_ids: number[]
+  ec_shards: number
+  max_volumes: number
+  disk?: WorkerDiskInfo
+  last_seen: string
+}
+
+export interface WorkerStatusResponse {
+  total: number
+  healthy: number
+  nodes: WorkerNode[]
 }
 
 export interface WorkerJob {
   id: string
   type: string
-  status: 'pending' | 'running' | 'success' | 'failed'
+  status: 'pending' | 'running' | 'success' | 'failed' | 'missing'
   durationMs: number | null
   error: string | null
+  result?: string
   createdAt: string
   node?: string
 }
@@ -230,7 +242,7 @@ export interface User {
   lastname?: string
   email?: string
   phone?: string
-  role: 'admin' | 'operator' | 'viewer'
+  role: 'admin' | 'operator' | 'viewer' | 'user'
   enabled?: boolean
   s3_access_key?: string
   s3_secret_key?: string
@@ -257,4 +269,29 @@ export interface PaginatedResponse<T> {
   total: number
   page: number
   pageSize: number
+}
+
+export interface ApiKey {
+  id: number
+  key: string
+  name: string
+  permissions: string
+  created_at: string
+  last_used_at: string | null
+  is_active: number
+  usage_count?: number
+  last_used_endpoint?: string | null
+  created_by?: string
+}
+
+export interface ApiKeyDetail {
+  id: number
+  name: string
+  permissions: string[]
+  created_by: string
+  created_at: string
+  last_used_at: string | null
+  usage_count: number
+  last_used_endpoint: string | null
+  is_active: boolean
 }

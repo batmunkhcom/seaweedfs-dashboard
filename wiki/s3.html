@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S3 Object Store — SeaweedFS Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Getting Started</h2>
+    <a href="getting-started.html">Installation &amp; Setup</a>
+    <a href="getting-started.html#configuration">Configuration</a>
+    <a href="getting-started.html#deployment">Deployment</a>
+
+    <h2>Dashboard</h2>
+    <a href="dashboard.html">Overview &amp; KPIs</a>
+    <a href="dashboard.html#real-time">Real-time SSE</a>
+    <a href="dashboard.html#history">Historical Charts</a>
+    <a href="dashboard.html#alerts">Alert Panel</a>
+
+    <h2>Cluster &amp; Topology</h2>
+    <a href="cluster.html">Topology View</a>
+    <a href="cluster.html#servers">Server Tables</a>
+    <a href="cluster.html#leader">Leader Election</a>
+    <a href="cluster.html#limits">Node Limits</a>
+
+    <h2>Volume Management</h2>
+    <a href="volumes.html">Volume List</a>
+    <a href="volumes.html#grow">Volume Grow</a>
+    <a href="volumes.html#vacuum">Vacuum Trigger</a>
+    <a href="volumes.html#collections">Collections</a>
+
+    <h2>Filer Browser</h2>
+    <a href="#">Navigation &amp; Upload</a>
+    <a href="#">Metadata</a>
+
+    <h2>S3 Management</h2>
+    <a href="s3.html" class="active">Buckets &amp; Endpoints</a>
+    <a href="s3.html#s3-users--secrets">Users &amp; Keys</a>
+    <a href="s3.html#s3-policies">Policies</a>
+    <a href="s3.html#iam-sync">IAM Sync</a>
+
+    <h2>Backup &amp; Restore</h2>
+    <a href="backup.html">Status &amp; Sync</a>
+    <a href="backup.html#restore-process">Snapshots &amp; Restore</a>
+
+    <h2>Workers</h2>
+    <a href="workers.html">Job History</a>
+    <a href="workers.html#triggering-jobs">Detect &amp; Execute</a>
+
+    <h2>Disk Health</h2>
+    <a href="disk-health.html">SMART Monitoring</a>
+    <a href="disk-health.html">Lifespan Estimation</a>
+
+    <h2>API Keys</h2>
+    <a href="api-keys.html">Key Management</a>
+
+    <h2>Settings</h2>
+    <a href="#">Runtime Configuration</a>
+
+    <h2>API Reference</h2>
+    <a href="#">Endpoints</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="#">Architecture Flows</a>
+  </aside>
+
+  <main class="content">
+    <h1>S3 Object Store</h1>
+    <p>
+      The SeaweedFS S3 Gateway provides an S3-compatible API across four cluster nodes.
+      This page documents bucket management, user/secret generation, IAM policy editing,
+      and gateway endpoint details.
+    </p>
+
+    <!-- ── S3 Gateway Endpoints ── -->
+    <h2>S3 Gateway Endpoints</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Node</th>
+          <th>Endpoint</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>st95102</td>
+          <td><code>10.10.95.102:8333</code></td>
+          <td><span class="tag tag-green">online</span></td>
+        </tr>
+        <tr>
+          <td>st395104</td>
+          <td><code>10.10.95.104:8333</code></td>
+          <td><span class="tag tag-green">online</span></td>
+        </tr>
+        <tr>
+          <td>st395106</td>
+          <td><code>10.10.95.106:8333</code></td>
+          <td><span class="tag tag-green">online</span></td>
+        </tr>
+        <tr>
+          <td>st395107</td>
+          <td><code>10.10.95.107:8333</code></td>
+          <td><span class="tag tag-green">online</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>S3-compatible clients</strong> — Use any of the four gateways.
+      The dashboard selects the first available endpoint when proxying requests
+      via the backend API at <code>/api/s3/</code>.
+    </div>
+
+    <p>Example listing buckets with the AWS CLI:</p>
+    <pre><code>aws s3 ls --endpoint-url=http://10.10.95.102:8333</code></pre>
+
+    <!-- ── S3 Buckets ── -->
+    <h2>S3 Buckets — CRUD</h2>
+    <p>
+      Buckets are listed, created, and deleted through the S3 management UI
+      under <strong>S3 &rarr; Buckets</strong>. All operations proxy through
+      the dashboard backend to the S3 Gateway.
+    </p>
+
+    <div class="card">
+      <h3>List Buckets</h3>
+      <p>Shows all existing buckets with name, creation date, and approximate object count.</p>
+      <pre><code>GET /api/s3/buckets</code></pre>
+      <p><strong>Response:</strong> Array of bucket objects with <code>Name</code>, <code>CreationDate</code>.</p>
+    </div>
+
+    <div class="card">
+      <h3>Create Bucket</h3>
+      <p>Creates a new S3 bucket. Bucket names must be DNS-compliant and unique across the cluster.</p>
+      <pre><code>POST /api/s3/buckets
+Content-Type: application/json
+
+{ "name": "my-bucket" }</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+    </div>
+
+    <div class="card">
+      <h3>Delete Bucket</h3>
+      <p>Permanently deletes a bucket. The bucket must be empty before deletion.</p>
+      <pre><code>DELETE /api/s3/buckets/{name}</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+      <div class="warn">
+        <strong>Warning:</strong> Deleting a non-empty bucket will fail. Empty all objects
+        via the filer browser or S3 client before attempting deletion.
+      </div>
+    </div>
+
+    <!-- ── S3 Users & Secrets ── -->
+    <h2>S3 Users &amp; Secrets</h2>
+    <p>
+      S3 users represent IAM identities for programmatic access. Each user
+      receives a unique <strong>Access Key</strong> and <strong>Secret Key</strong>
+      pair generated by the Filer IAM service (embedded on each filer at port <code>8111</code>).
+    </p>
+
+    <div class="card">
+      <h3>List Users</h3>
+      <pre><code>GET /api/s3/users</code></pre>
+      <p>Returns all registered S3 users with their access keys and creation timestamps.</p>
+    </div>
+
+    <div class="card">
+      <h3>Create User</h3>
+      <pre><code>POST /api/s3/users
+Content-Type: application/json
+
+{ "name": "service-account-1" }</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+      <p>
+        On creation the server generates a <code>access_key</code> (20 chars) and
+        <code>secret_key</code> (40 chars). The secret is displayed once —
+        <strong>copy it immediately</strong> as it cannot be retrieved later.
+      </p>
+      <div class="note">
+        <strong>Key Format:</strong> Access keys follow the pattern <code>AKIA...</code>
+        (AWS-compatible). Secret keys are hex-encoded random bytes.
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Delete User</h3>
+      <pre><code>DELETE /api/s3/users/{accessKey}</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+      <p>Removes the user and revokes all associated permissions. Existing signed URLs or active sessions using this identity will fail immediately.</p>
+    </div>
+
+    <div class="warn">
+      <strong>Secret Key Security:</strong> Secrets are stored hashed in the Filer LevelDB.
+      The dashboard never logs or caches secret keys. If a key is lost, you must create
+      a new user — secrets cannot be recovered.
+    </div>
+
+    <!-- ── S3 Policies ── -->
+    <h2>S3 Policies</h2>
+    <p>
+      Policies control access permissions for S3 users. Edit policies through the
+      built-in JSON editor with real-time validation.
+    </p>
+
+    <div class="card">
+      <h3>List Policies</h3>
+      <pre><code>GET /api/s3/policies</code></pre>
+    </div>
+
+    <div class="card">
+      <h3>Create / Update Policy</h3>
+      <pre><code>PUT /api/s3/policies/{policyName}
+Content-Type: application/json
+
+{
+  "policy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["s3:GetObject", "s3:ListBucket"],
+        "Resource": ["arn:aws:s3:::my-bucket/*"]
+      }
+    ]
+  }
+}</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+    </div>
+
+    <div class="card">
+      <h3>Policy Validation</h3>
+      <p>The JSON editor validates against the AWS IAM policy schema before saving:</p>
+      <ul>
+        <li><code>Version</code> must be a valid date string (e.g., <code>2012-10-17</code>)</li>
+        <li>Each <code>Statement</code> must have <code>Effect</code> (<code>Allow</code> or <code>Deny</code>)</li>
+        <li><code>Action</code> and <code>Resource</code> arrays are required</li>
+      </ul>
+    </div>
+
+    <p>Example policy granting read-only access to a single bucket:</p>
+    <pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::reports/*"]
+    }
+  ]
+}</code></pre>
+
+    <!-- ── IAM Sync ── -->
+    <h2>IAM Sync</h2>
+    <p>
+      The Filer IAM store is embedded in each filer at port <code>8111</code>.
+      When users or policies change on one filer, the IAM store must be synced
+      to the peer filer in the HA group.
+    </p>
+
+    <div class="card">
+      <h3>Trigger IAM Sync</h3>
+      <p>
+        Clicking <strong>Sync IAM</strong> triggers the filer to broadcast its
+        IAM state to peers via the <code>/iam/sync</code> endpoint.
+      </p>
+      <pre><code>POST /api/s3/iam/sync</code></pre>
+      <p><span class="tag tag-purple">admin only</span></p>
+    </div>
+
+    <div class="card">
+      <h3>IAM Sync Status</h3>
+      <p>Possible status values and their meaning:</p>
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag tag-green">synced</span></td>
+            <td>IAM stores on all filer peers are identical</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-yellow">syncing</span></td>
+            <td>Sync in progress — changes propagating to peer filer</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-red">mismatch</span></td>
+            <td>Filer peers disagree on IAM state — manual sync required</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <strong>HA Group:</strong> Filer HA group <code>ha</code> runs on nodes
+      <code>10.10.95.102</code> and <code>10.10.95.104</code>. IAM sync is
+      bidirectional between these two filers.
+    </div>
+
+    <hr>
+
+    <h2>Testing S3 Access</h2>
+    <p>Quick validation using <code>awscli</code> on any machine with network access:</p>
+    <pre><code># Configure credentials (from S3 Users page)
+aws configure set aws_access_key_id AKIAxxxxxxxxxxxx
+aws configure set aws_secret_access_key xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Test against any gateway
+aws s3 ls --endpoint-url=http://10.10.95.102:8333
+aws s3 mb s3://test-bucket --endpoint-url=http://10.10.95.104:8333
+aws s3 cp file.txt s3://test-bucket/ --endpoint-url=http://10.10.95.106:8333</code></pre>
+
+    <p>
+      For programmatic access, configure your SDK with a custom endpoint and
+      <strong>path-style addressing</strong> (SeaweedFS does not use virtual-hosted-style buckets).
+    </p>
+  </main>
+</div>
+
+</body>
+</html>

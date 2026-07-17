@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authentication Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+    <a href="../getting-started.html">Getting Started</a>
+    <a href="../dashboard.html">Dashboard</a>
+    <a href="../cluster.html">Cluster</a>
+    <a href="../volumes.html">Volumes</a>
+    <a href="../s3.html">S3</a>
+    <a href="../backup.html">Backup</a>
+    <a href="../workers.html">Workers</a>
+    <a href="../disk-health.html">Disk Health</a>
+    <a href="../api-keys.html">API Keys</a>
+    <a href="../users.html">Users</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html" class="active">Authentication Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>Authentication Flow</h1>
+    <p>The SeaweedFS Dashboard uses a dual authentication strategy: <strong>session-based auth</strong> for browser users (with cookies and CSRF tokens) and <strong>API key auth</strong> for programmatic/service access via the <code>X-API-Key</code> header. Both paths hit the same <code>AuthMiddleware</code>, which resolves identity and performs RBAC checks.</p>
+
+    <h2>Session-Based Auth Flow</h2>
+    <pre class="mermaid">
+sequenceDiagram
+    actor U as 👤 User
+    participant LP as Login Page (React)
+    participant AX as Axios Instance
+    participant CS as CSRF Middleware
+    participant AM as Auth Middleware
+    participant BE as FastAPI Backend
+    participant DB as SQLite (users)
+
+    %% LOGIN
+    U->>LP: Enters username + password
+    LP->>AX: POST /api/auth/login<br/>{username, password}
+    AX->>BE: POST /api/auth/login<br/>Rate limited: 20 req / 5 min
+    BE->>DB: SELECT username, password_hash, role, enabled<br/>FROM users WHERE username = ?
+    DB-->>BE: row (or None)
+
+    alt User not found or disabled
+        BE-->>AX: 401 "Invalid credentials"
+        AX-->>LP: Error shown
+    else Password wrong
+        BE->>BE: bcrypt.checkpw(password, row.password_hash)
+        BE-->>AX: 401 "Invalid credentials"
+        AX-->>LP: Error shown
+    else Password correct
+        BE->>BE: csrf_token = secrets.token_hex(32)
+        BE->>BE: request.session["user"] = username
+        BE->>BE: request.session["role"] = row.role
+        BE->>BE: request.session["csrf_token"] = csrf_token
+        BE-->>AX: 200 {user: {username, role}, csrfToken}
+        AX->>AX: setCsrfToken(data.csrfToken)
+        AX-->>LP: Login success
+        LP->>LP: saveSession(user, csrfToken) → localStorage
+        LP->>LP: Redirect to /dashboard
+    end
+
+    %% AUTHENTICATED REQUEST (READ)
+    U->>LP: Navigate to Dashboard
+    LP->>AX: GET /api/dashboard/stats<br/>(session cookie auto-sent)
+    AX->>AM: Request intercepted
+    AM->>AM: Check: path in PUBLIC_PATHS? → No
+    AM->>AM: Check: X-API-Key header? → No
+    AM->>AM: Check: request.session["user"]?
+    alt Session valid
+        AM->>AM: request.state.user = session["user"]
+        AM->>AM: request.state.role = session["role"]
+        AM-->>BE: Forward request
+        BE-->>AX: 200 {stats data}
+    else Session expired/missing
+        AM-->>AX: 401 "Not authenticated"
+        AX->>AX: Response interceptor: status 401
+        AX->>AX: useAuthStore.logout()
+        AX-->>LP: Redirect to /login
+    end
+
+    %% AUTHENTICATED REQUEST (WRITE) — CSRF
+    U->>LP: Creates a new S3 bucket
+    LP->>AX: POST /api/s3/buckets<br/>X-CSRF-Token: storedToken
+    AX->>CS: Request intercepted (method=POST, not /api/auth)
+    CS->>CS: Get X-CSRF-Token from header
+    CS->>CS: Get csrf_token from session
+    alt Token matches
+        CS-->>AM: Forward to Auth middleware
+        AM-->>BE: Forward request
+        BE-->>AX: 200 {bucket created}
+    else Token missing or mismatched
+        CS-->>AX: 403 "Invalid CSRF token"
+    end
+
+    %% SESSION EXPIRY
+    Note over U,DB: Session expires after server-defined timeout
+    U->>LP: Makes a request after session expiry
+    AX->>AM: Session check fails
+    AM-->>AX: 401
+    AX->>AX: Interceptor: logout() → clear localStorage
+    AX-->>LP: Redirect to /login
+
+    %% LOGOUT
+    U->>LP: Clicks Logout
+    LP->>AX: POST /api/auth/logout
+    AX->>BE: POST /api/auth/logout
+    BE->>BE: request.session.clear()
+    BE-->>AX: 200 {message: "logged out"}
+    AX->>AX: setCsrfToken('')
+    AX-->>LP: Logout success
+    LP->>LP: saveSession(null, '') → clear localStorage
+    LP->>LP: Redirect to /login
+    </pre>
+
+    <h2>API Key Auth Flow</h2>
+    <pre class="mermaid">
+sequenceDiagram
+    actor S as 🤖 Service/CLI
+    participant AM as Auth Middleware
+    participant KS as API Key Service
+    participant DB as SQLite (api_keys)
+    participant BE as Route Handler
+
+    S->>AM: GET /api/backup/status<br/>X-API-Key: bkp_abc123...
+    AM->>AM: Check: path in PUBLIC_PATHS? → No
+    AM->>AM: Check: X-API-Key header present? → Yes
+    AM->>KS: validate_api_key("bkp_abc123...")
+    KS->>KS: Check: starts with "bkp_"? → Yes
+    KS->>DB: SELECT * FROM api_keys<br/>WHERE key = ? AND is_active = 1
+    DB-->>KS: row (or None)
+
+    alt Key valid
+        KS-->>AM: {id, name, permissions: "backup:read,backup:write", ...}
+        AM->>AM: request.state.user = "api_key"
+        AM->>AM: request.state.role = "backup_admin"
+        AM->>AM: request.state.permissions = ["backup:read", "backup:write"]
+        AM->>AM: request.state.api_key_id = key_data["id"]
+        AM->>KS: record_usage(key_id, "/api/backup/status")
+        KS->>DB: UPDATE api_keys<br/>SET usage_count++, last_used_at=now, last_used_endpoint=?
+        AM->>BE: Forward request
+
+        Note over BE: Route has require_permission("backup:read")
+        BE->>BE: Check: role == "backup_admin"?
+        BE->>BE: Check: "backup:read" in request.state.permissions?
+        alt Permission granted
+            BE-->>S: 200 {backup status}
+        else Missing permission
+            BE-->>S: 403 "Missing permission: backup:read"
+        end
+    else Key invalid/revoked
+        KS-->>AM: None
+        AM->>AM: Fallback: check session? → None
+        AM-->>S: 401 "Not authenticated"
+    end
+    </pre>
+
+    <h2>Auth Resolution Priority</h2>
+    <p>The <code>AuthMiddleware</code> resolves identity in this order:</p>
+
+    <div class="card">
+      <table>
+        <tr><th>Priority</th><th>Method</th><th>Role Assigned</th><th>Permissions Source</th></tr>
+        <tr><td>1</td><td>Public paths</td><td>None (bypass)</td><td>N/A</td></tr>
+        <tr><td>2</td><td><code>X-API-Key</code> header (starts with <code>bkp_</code>)</td><td><code>backup_admin</code></td><td><code>api_keys.permissions</code> field (comma-separated)</td></tr>
+        <tr><td>3</td><td>Session cookie (<code>request.session["user"]</code>)</td><td>From session (<code>admin</code> / <code>readonly</code>)</td><td><code>rbac.json</code> role-to-permissions mapping</td></tr>
+      </table>
+    </div>
+
+    <div class="note">
+      <strong>Public paths</strong> (<code>backend/app/middleware/auth_middleware.py</code>):<br>
+      <code>/api/health, /api/info, /api/auth/login, /api/auth/csrf-token, /docs, /openapi.json</code>
+    </div>
+
+    <h2>CSRF Protection</h2>
+    <p>The <code>CsrfMiddleware</code> applies to all state-changing requests:</p>
+
+    <div class="card">
+      <table>
+        <tr><th>Aspect</th><th>Detail</th></tr>
+        <tr><td><strong>Safe methods</strong> (bypassed)</td><td><code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code></td></tr>
+        <tr><td><strong>Also bypassed</strong></td><td><code>/api/auth/*</code> paths (login/logout need no prior session)</td></tr>
+        <tr><td><strong>Checked methods</strong></td><td><code>POST</code>, <code>PUT</code>, <code>DELETE</code>, <code>PATCH</code></td></tr>
+        <tr><td><strong>Header checked</strong></td><td><code>X-CSRF-Token</code></td></tr>
+        <tr><td><strong>Expected value</strong></td><td><code>request.session["csrf_token"]</code> (set at login)</td></tr>
+        <tr><td><strong>On mismatch</strong></td><td>HTTP <code>403</code> — "Invalid CSRF token"</td></tr>
+      </table>
+    </div>
+
+    <p>The CSRF token is a hex string generated via <code>secrets.token_hex(32)</code> (64 hex chars). It is:</p>
+    <ol>
+      <li>Created at login and stored in the server session</li>
+      <li>Returned in the login response body</li>
+      <li>Stored in the frontend's <code>localStorage</code> (via Zustand <code>authStore</code>)</li>
+      <li>Attached by Axios request interceptor to all non-GET/HEAD/OPTIONS requests</li>
+    </ol>
+
+    <h2>Session Lifecycle</h2>
+    <div class="card">
+      <table>
+        <tr><th>Event</th><th>Action</th></tr>
+        <tr><td><strong>Login</strong></td><td>Session created server-side with <code>user</code>, <code>role</code>, <code>csrf_token</code>. Cookie sent to browser.</td></tr>
+        <tr><td><strong>Page refresh</strong></td><td>Frontend calls <code>GET /api/auth/me</code> + <code>GET /api/auth/csrf-token</code> to rehydrate session.</td></tr>
+        <tr><td><strong>401 response</strong></td><td>Axios interceptor calls <code>useAuthStore.getState().logout()</code> — clears localStorage, redirects.</td></tr>
+        <tr><td><strong>Logout</strong></td><td><code>POST /api/auth/logout</code> &rarr; <code>request.session.clear()</code>. Frontend clears localStorage.</td></tr>
+        <tr><td><strong>Expiry</strong></td><td>Starlette <code>SessionMiddleware</code> default cookie lifetime (browser-session). Server-side invalidation on expiry.</td></tr>
+      </table>
+    </div>
+
+    <h2>RBAC Permissions</h2>
+    <p>Role-based access control is defined in <code>backend/rbac.json</code>. Session users get permissions mapped from their role:</p>
+
+    <div class="card">
+      <table>
+        <tr><th>Role</th><th>Typical Permissions</th></tr>
+        <tr><td><span class="tag tag-purple">admin</span></td><td><code>cluster:*</code>, <code>volumes:*</code>, <code>filer:*</code>, <code>s3:*</code>, <code>backup:*</code>, <code>workers:*</code>, <code>settings:*</code>, <code>users:*</code>, <code>disk_health:read</code></td></tr>
+        <tr><td><span class="tag tag-blue">readonly</span></td><td>Read-only variants of all the above</td></tr>
+        <tr><td><span class="tag tag-green">backup_admin</span> (API key)</td><td>Determined by the API key's <code>permissions</code> field, not RBAC</td></tr>
+      </table>
+    </div>
+
+    <p>Permission checks in routes use <code>Depends(require_permission("resource:action"))</code> which internally:</p>
+    <ol>
+      <li>For <code>backup_admin</code> role: checks the permission string against <code>request.state.permissions</code> list</li>
+      <li>For session roles: delegates to <code>rbac.has_permission(role, permission)</code></li>
+    </ol>
+
+    <h2>Rate Limiting</h2>
+    <p>Applied via slowapi. The login endpoint is protected with <code>@limiter.limit("20/5minute")</code>, allowing 20 attempts per 5-minute window per client IP. Exceeding this returns HTTP <code>429 Too Many Requests</code>.</p>
+
+    <h2>Step-by-Step: Session Login</h2>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>User submits credentials</strong>
+        <span>Login form (React) sends <code>POST /api/auth/login</code> with username and password. Rate limited to 20 requests per 5 minutes per IP.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Backend validates password</strong>
+        <span>Queries <code>users</code> table for username. Uses <code>bcrypt.checkpw()</code> to verify. Returns 401 on any failure (deliberately vague to avoid user enumeration).</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Session created</strong>
+        <span>On success: generates <code>csrf_token = secrets.token_hex(32)</code>, stores <code>user</code>, <code>role</code>, <code>csrf_token</code> in server session. Returns user info + CSRF token to frontend.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Frontend stores session</strong>
+        <span>Stores <code>user</code> and <code>csrfToken</code> in <code>localStorage</code> via Zustand. Redirects to <code>/dashboard</code>.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Read requests</strong>
+        <span>Session cookie auto-sent by browser. <code>AuthMiddleware</code> checks <code>request.session["user"]</code>. If valid, sets <code>request.state.user</code> and <code>request.state.role</code>.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>Write requests (CSRF)</strong>
+        <span>For <code>POST/PUT/DELETE/PATCH</code>: <code>CsrfMiddleware</code> compares <code>X-CSRF-Token</code> header against <code>session["csrf_token"]</code>. Returns 403 on mismatch.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">7</div>
+      <div class="flow-body">
+        <strong>Session expiry or logout</strong>
+        <span>On <code>401</code> response, Axios interceptor auto-logouts: clears localStorage, redirects to <code>/login</code>. Manual logout calls <code>POST /api/auth/logout</code> which clears the server session.</span>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#a855f7',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#a855f7',
+      textColor: '#e2e8f0',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>

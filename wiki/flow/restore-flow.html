@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restore Flow — SeaweedFS Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Wiki</h2>
+    <a href="../index.html">Wiki Home</a>
+    <a href="../getting-started.html">Getting Started</a>
+    <a href="../dashboard.html">Dashboard</a>
+    <a href="../cluster.html">Cluster</a>
+    <a href="../volumes.html">Volumes</a>
+    <a href="../s3.html">S3</a>
+    <a href="../backup.html">Backup</a>
+    <a href="../workers.html">Workers</a>
+    <a href="../disk-health.html">Disk Health</a>
+    <a href="../api-keys.html">API Keys</a>
+    <a href="../users.html">Users</a>
+
+    <h2>Flow Diagrams</h2>
+    <a href="system-architecture.html">System Architecture</a>
+    <a href="auth-flow.html">Authentication Flow</a>
+    <a href="backup-flow.html">Backup Flow</a>
+    <a href="restore-flow.html" class="active">Restore Flow</a>
+    <a href="api-key-auth-flow.html">API Key Auth Flow</a>
+    <a href="volume-lifecycle.html">Volume Lifecycle</a>
+    <a href="s3-iam-sync.html">S3 IAM Sync</a>
+    <a href="disk-health-scan.html">Disk Health Scan</a>
+    <a href="sse-real-time.html">SSE Real-Time</a>
+    <a href="master-failover.html">Master Failover</a>
+  </aside>
+
+  <main class="content">
+    <h1>Restore Flow</h1>
+    <p>The restore operation takes a previously created backup (a <code>.tar.gz</code> archive of the filer's LevelDB metadata) and pushes it back to the filer nodes, overwriting the current filer database. This is a <strong>destructive operation</strong> — the current filer metadata is fully replaced. After restore, the filer service must be manually restarted for changes to take effect.</p>
+
+    <div class="note">
+      The filer LevelDB contains only metadata (file names, paths, sizes, permissions, directory structure). File content resides on volume servers and is not affected by this operation. After a restore and filer restart, the filer reconnects to existing volumes and rebuilds its metadata-to-volume mappings.
+    </div>
+
+    <h2>Restore Sequence</h2>
+    <pre class="mermaid">
+sequenceDiagram
+    actor U as 👤 Admin User
+    participant FP as Frontend (Backup Page)
+    participant AX as Axios (+ X-API-Key)
+    participant AM as Auth Middleware
+    participant BR as Backup Route
+    participant BS as Backup Service
+    participant SS as Settings Service
+    participant FS as Local FS (/srv/seaweed-backups/)
+    participant SSH as SSH (paramiko)
+    participant F102 as Filer Node .102
+    participant F104 as Filer Node .104
+
+    Note over U,F104: === INITIATE RESTORE ===
+
+    U->>FP: Clicks "Restore" on a backup snapshot
+    FP->>FP: Show confirmation modal
+    Note over FP: ⚠️ Warning: "This will overwrite the Filer database!"
+    Note over FP: "After restore, restart filer service manually."
+
+    U->>FP: Confirms restore
+    FP->>AX: POST /api/backup/restore/{name}<br/>Header: X-API-Key: bkp_...
+    AX->>AM: Request intercepted
+    AM->>AM: X-API-Key detected → validate_api_key()
+    AM->>AM: Set role=backup_admin, permissions=[...]
+    AM->>BR: Forward (check require_permission("backup:write"))
+    BR->>BS: restore_backup(name="backup-20260717_143052")
+
+    Note over BS,FS: === VALIDATION ===
+
+    BS->>SS: get_setting("backup_enabled", "true")
+    SS-->>BS: "true"
+
+    alt Backup disabled
+        BS-->>BR: {ok: false, error: "Backup is disabled"}
+        BR-->>FP: Error shown
+    end
+
+    BS->>BS: backup_file = Path("/srv/seaweed-backups/{name}.tar.gz")
+    BS->>FS: Check: does backup_file exist?
+
+    alt File not found
+        FS-->>BS: FileNotFoundError
+        BS-->>BR: 404 "Backup file not found: backup-20260717_143052"
+        BR-->>FP: Error: "Backup file not found"
+    end
+
+    Note over BS,F104: === CONFIG LOOKUP ===
+
+    BS->>SS: get_setting("seaweedfs_filer_host", "...")
+    SS-->>BS: "10.10.95.102:8888,10.10.95.104:8888"
+    BS->>BS: filer_hosts = ["10.10.95.102", "10.10.95.104"]
+
+    BS->>SS: get_setting("backup_filer_db_path", "/data/dc03/filer/filerldb2")
+    SS-->>BS: "/data/dc03/filer/filerldb2"
+
+    Note over BS,F104: === RESTORE TO PRIMARY FILER ONLY ===
+
+    Note over BS: Only first filer host (filer_hosts[:1]) is used.
+    Note over BS: Rest of loop iterates but only .102 is processed.
+
+    BS->>FS: Read backup file: /srv/seaweed-backups/backup-20260717_143052.tar.gz
+    FS-->>BS: File ready (512 MB)
+
+    BS->>SSH: _sftp_push(.102, local_file, "/tmp/filer-restore-backup-...tar.gz")
+    SSH->>F102: SFTP PUT (upload archive to filer)
+    F102-->>SSH: transfer complete
+
+    alt SFTP upload fails
+        SSH-->>BS: ok=False, error="Connection refused"
+        BS->>BS: results[".102"] = "Connection refused"
+        BS->>BS: error_msg accumulated
+    else SFTP upload succeeds
+        SSH-->>BS: ok=True
+
+        Note over BS,F102: Extract archive into LevelDB directory
+
+        BS->>SSH: _ssh_exec(.102, "tar xzf /tmp/filer-restore-...tar.gz -C /data/dc03/filer/filerldb2/.. && rm -f /tmp/filer-restore-...tar.gz")
+        SSH->>F102: Run tar extract command
+        Note over F102: tar xzf overwrites existing LevelDB files
+        F102-->>SSH: exit_code=0 (success)
+
+        alt Extract fails
+            SSH-->>BS: exit_code != 0, stderr: "tar: ... No space left on device"
+            BS->>BS: results[".102"] = "Extract failed: No space left..."
+            BS->>BS: error_msg accumulated
+        else Extract succeeds
+            BS->>BS: results[".102"] = "ok"
+          end
+    end
+
+    Note over BS,F104: === RESULT ===
+
+    alt All processed hosts succeeded
+        BS-->>BR: {ok: true, results: {".102": "ok"}, name: "backup-20260717_143052"}
+        BR-->>FP: 200 {ok: true, results: {...}}
+        FP->>U: Success toast + warning banner
+    else Host(s) failed
+        BS-->>BR: {ok: false, results: {...}, error_details}
+        BR-->>FP: 200 {ok: false, ...}
+        FP->>U: Error toast with details
+    end
+
+    Note over U,F104: === MANUAL STEP REQUIRED ===
+
+    FP->>U: ⚠️ "Restore complete. You MUST restart filer service on both nodes!"
+    Note over U: ssh root@10.10.95.102
+    Note over U: systemctl restart seaweed-filer
+    Note over U: ssh root@10.10.95.104
+    Note over U: systemctl restart seaweed-filer
+
+    Note over F102,F104: Filer restarts, reads restored LevelDB
+    Note over F102,F104: Filer reconnects to volume servers
+    Note over F102,F104: Metadata-to-volume mappings rebuilt automatically
+    </pre>
+
+    <h2>Restore Confirmation (Frontend)</h2>
+    <pre class="mermaid">
+sequenceDiagram
+    actor U as 👤 Admin
+    participant FP as Backup Page
+    participant M as Restore Modal
+
+    U->>FP: Clicks "Restore" on a backup row
+    FP->>M: Open confirmation modal
+
+    Note over M: Title: ⚠️ Restore Backup
+    Note over M: Alert (warning): "This will overwrite the Filer database!"
+    Note over M: Body: "Restoring backup 'backup-20260717_143052'"
+    Note over M: Body: "Current filer data will be replaced."
+    Note over M: Footer: "After restore, restart filer service on both nodes."
+
+    U->>M: Clicks "Restore Now" (danger button)
+    M->>FP: doRestore() called
+    FP->>FP: POST /api/backup/restore/{name}
+
+    alt Restore succeeds
+        FP->>U: ✅ "Restore initiated"
+        FP->>U: ⚠️ "WARNING: Filer will be overwritten. Restart filer service after restore."
+    else Restore fails
+        FP->>U: ❌ Error message from backend
+    end
+    </pre>
+
+    <h2>Step-by-Step Explanation</h2>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Initiate Restore</strong>
+        <span>User clicks "Restore" on a backup snapshot in the Backup page. A confirmation modal with a danger button is shown, warning that the filer database will be overwritten and that manual restart is required.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Validation</strong>
+        <span>Checks that <code>backup_enabled</code> is <code>"true"</code> (from runtime settings) and that the backup file exists at <code>/srv/seaweed-backups/{name}.tar.gz</code>. Returns <code>404</code> if the file is not found.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Configuration Lookup</strong>
+        <span>Fetches <code>seaweedfs_filer_host</code> and <code>backup_filer_db_path</code> from runtime settings.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Restore to Primary Filer Only</strong>
+        <span>Only the first filer host (<code>filer_hosts[:1]</code>) is used — <code>10.10.95.102</code>. The archive is uploaded via SFTP, then extracted with <code>tar xzf</code> directly into the LevelDB directory.</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Manual Filer Restart</strong>
+        <span><span class="tag tag-yellow">Critical</span> The user must manually SSH into both filer nodes and run <code>systemctl restart seaweed-filer</code>. The filer reads the restored LevelDB at startup, reconnects to volume servers, and rebuilds metadata-to-volume mappings automatically.</span>
+      </div>
+    </div>
+
+    <h2>Why Only the Primary Filer?</h2>
+    <p>The restore logic restores to <strong>only the first filer host</strong>. This is because:</p>
+    <ol>
+      <li>Both filer nodes (<code>10.10.95.102</code> and <code>10.10.95.104</code>) are in an HA group (<code>ha</code>, <code>filerGroup=ha</code>)</li>
+      <li>They synchronize metadata via gRPC peer sync on port <code>18888</code></li>
+      <li>After restoring one node and restarting both, the peer sync replicates the restored data to the other node</li>
+    </ol>
+
+    <h2>Why Filer Restart is Required</h2>
+    <p>The filer reads its LevelDB database at startup and keeps it in memory (with periodic flushes). Simply overwriting the LevelDB files on disk while the filer is running:</p>
+    <ol>
+      <li>Does not reload the in-memory data structures</li>
+      <li>May cause corruption if the filer writes to the database concurrently</li>
+      <li>Leaves stale in-memory state that contradicts the new on-disk state</li>
+    </ol>
+
+    <p>After a restart, the filer reads the restored LevelDB from disk, loads all metadata into memory, reconnects to volume servers, and resumes normal operation.</p>
+
+    <h2>Why Metadata-Only Restore Works</h2>
+    <div class="card">
+      <table>
+        <tr><th>Stored in LevelDB</th><th>NOT stored in LevelDB</th></tr>
+        <tr><td>File names and paths</td><td>File content (bytes)</td></tr>
+        <tr><td>File sizes</td><td>Chunk data</td></tr>
+        <tr><td>Permissions and owners</td><td>Volume-to-chunk mappings (built at runtime)</td></tr>
+        <tr><td>Timestamps (mtime, ctime)</td><td></td></tr>
+        <tr><td>Directory structure</td><td></td></tr>
+        <tr><td>Extended attributes</td><td></td></tr>
+      </table>
+    </div>
+
+    <p>When the filer restarts with restored metadata, it scans the volume servers, finds which volumes hold which file chunks, and rebuilds the in-memory mapping. File content stays on the volume servers — the restore only recovers the "index" (metadata).</p>
+
+    <h2>Error Handling</h2>
+    <div class="card">
+      <table>
+        <tr><th>Failure Point</th><th>Behavior</th></tr>
+        <tr><td>Backup file missing</td><td><code>FileNotFoundError</code> &rarr; HTTP <code>404</code> "Backup file not found: {name}"</td></tr>
+        <tr><td><code>backup_enabled</code> is false</td><td>Returns <code>{ok: false, error: "Backup is disabled"}</code></td></tr>
+        <tr><td>SFTP upload fails</td><td>Host marked as failed in results. Error message recorded.</td></tr>
+        <tr><td><code>tar xzf</code> fails (disk full, permissions)</td><td><code>RuntimeError("Extract failed: ...")</code> with stderr excerpt</td></tr>
+        <tr><td>SSH connection fails</td><td>Host marked as failed. Error message recorded.</td></tr>
+        <tr><td>All filers fail</td><td><code>ok: false</code> returned with aggregated error messages</td></tr>
+      </table>
+    </div>
+
+    <h2>Full Filer Restore Procedure (Operator Checklist)</h2>
+
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-body">
+        <strong>Pre-flight</strong>
+        <span>Verify backup file exists: <code>ls -lh /srv/seaweed-backups/{name}.tar.gz</code></span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-body">
+        <strong>Dashboard</strong>
+        <span>Navigate to Backup page, click Restore on desired snapshot</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-body">
+        <strong>Confirm</strong>
+        <span>Read warning, click "Restore Now"</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-body">
+        <strong>Wait</strong>
+        <span>SFTP upload + extract typically takes 1-5 minutes depending on DB size</span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-body">
+        <strong>Restart filers</strong>
+        <span>
+          <pre><code>ssh root@10.10.95.102 systemctl restart seaweed-filer
+ssh root@10.10.95.104 systemctl restart seaweed-filer</code></pre>
+        </span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-body">
+        <strong>Verify</strong>
+        <span>Check filer is responding: <code>curl -s http://10.10.95.102:8888/ | head</code></span>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-num">7</div>
+      <div class="flow-body">
+        <strong>Monitor</strong>
+        <span>Watch filer logs for peer sync and volume reconnection: <code>ssh root@10.10.95.102 journalctl -u seaweed-filer -f</code></span>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#a855f7',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#a855f7',
+      textColor: '#e2e8f0',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>

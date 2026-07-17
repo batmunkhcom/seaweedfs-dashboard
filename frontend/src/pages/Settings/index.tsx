@@ -1,45 +1,65 @@
-import { useState, useEffect } from 'react'
-import { Card, Typography, Input, Button, Space, message, Spin, Table, Tag, Tooltip, InputNumber } from 'antd'
-import { SaveOutlined, HddOutlined } from '@ant-design/icons'
-import { getSettings, updateSettings, getClusterHealth, getNodeLimits, updateNodeLimits } from '../../services/api'
+import { useState, useEffect, useMemo } from 'react'
+import { Card, Typography, InputNumber, Button, Space, message, Spin, Table, Tag, Tabs, Popconfirm, Badge, Select } from 'antd'
+import {
+  SaveOutlined,
+  HddOutlined,
+  BellOutlined,
+  CloudUploadOutlined,
+  ClockCircleOutlined,
+  MedicineBoxOutlined,
+  ClusterOutlined,
+  UndoOutlined,
+  SettingOutlined,
+  RobotOutlined,
+  ApiOutlined,
+} from '@ant-design/icons'
+import { getSettings, updateSettings, getClusterHealth, getNodeLimits, updateNodeLimits, testAiConnection } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
-
-interface SettingItem {
-  key: string
-  value: string
-  description: string
-}
+import {
+  SettingRow,
+  ALERT_SETTINGS,
+  UPLOAD_SETTINGS,
+  SNAPSHOT_SETTINGS,
+  DISK_HEALTH_SETTINGS,
+  CLUSTER_SETTINGS,
+  GENERAL_SETTINGS,
+  AI_SETTINGS,
+} from './constants'
+import type { SettingMeta } from './constants'
 
 export default function SettingsPage() {
-  const [categories, setCategories] = useState<Record<string, SettingItem[]>>({})
   const [values, setValues] = useState<Record<string, string>>({})
+  const [originalValues, setOriginalValues] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('general')
   const role = useAuthStore((s) => s.user?.role)
   const isAdmin = role === 'admin'
 
-  // Node volume limits state
   const [nodeLimits, setNodeLimits] = useState<Record<string, number>>({})
   const [nodeDetails, setNodeDetails] = useState<any[]>([])
   const [limitsLoading, setLimitsLoading] = useState(true)
+  const [limitsSaving, setLimitsSaving] = useState(false)
+  const [testingAi, setTestingAi] = useState(false)
+  const [aiModels, setAiModels] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     getSettings()
-       .then((data) => {
-         const cats = (data && data.categories) ? data.categories : {}
-         setCategories(cats)
-         const vals: Record<string, string> = {}
-         for (const items of Object.values(cats)) {
-           if (Array.isArray(items)) {
-             for (const item of items) {
-               vals[item.key] = item.value
-              }
+      .then((data) => {
+        const cats = (data && data.categories) ? data.categories : {}
+        const vals: Record<string, string> = {}
+        for (const items of Object.values(cats)) {
+          if (Array.isArray(items)) {
+            for (const item of items) {
+              vals[item.key] = item.value
             }
           }
-         setValues(vals)
-        })
-       .catch(() => {})
-       .finally(() => setLoading(false))
+        }
+        setValues(vals)
+        setOriginalValues({ ...vals })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -53,213 +73,309 @@ export default function SettingsPage() {
         if (typeof raw === 'object' && !Array.isArray(raw)) {
           Object.entries(raw).forEach(([k, v]) => {
             saved[k] = typeof v === 'number' ? v : parseInt(v as any, 10) || 9999
-           })
-          }
-        // Fill in defaults for nodes without limits
+          })
+        }
         details.forEach((n: any) => {
           const url = n.url || n.Url
-          if (!(url in saved)) {
-            saved[url] = n.max_native || 9999
-           }
-          })
+          if (!(url in saved)) saved[url] = n.max_native || 9999
+        })
         setNodeLimits(saved)
-       })
+      })
       .catch(() => {})
       .finally(() => setLimitsLoading(false))
-   }, [isAdmin])
+  }, [isAdmin])
 
-  const handleSave = async () => {
+  const modifiedCount = useMemo(() => {
+    return Object.keys(values).filter((k) => values[k] !== originalValues[k]).length
+  }, [values, originalValues])
+
+  const handleTestConnection = async () => {
+    setTestingAi(true)
+    try {
+      const provider = values['ai_provider'] || 'openai'
+      const apiBase = values['ai_api_base_url'] || 'https://api.openai.com/v1'
+      const apiKey = values['ai_api_key'] || ''
+      const res = await testAiConnection(provider, apiBase, apiKey)
+      if (res.ok && res.models.length > 0) {
+        setAiModels(res.models)
+        message.success(`Found ${res.models.length} models`)
+        if (res.models.length === 1) {
+          setValues((prev) => ({ ...prev, ai_model: res.models[0].id }))
+        }
+      } else {
+        message.error(res.error || 'Connection failed')
+        setAiModels([])
+      }
+    } catch {
+      message.error('Connection test failed')
+    }
+    setTestingAi(false)
+  }
+
+  const handleSave = async (keysToSave?: string[]) => {
     setSaving(true)
     try {
-      await updateSettings(values)
-      message.success('Settings saved')
-     } catch {
+      const payload: Record<string, string> = {}
+      const target = keysToSave || Object.keys(values)
+      target.forEach((k) => { payload[k] = values[k] })
+      await updateSettings(payload)
+      const newOriginals = { ...originalValues }
+      target.forEach((k) => { newOriginals[k] = values[k] })
+      setOriginalValues(newOriginals)
+      message.success(`${Object.keys(payload).length} settings saved`)
+    } catch {
       message.error('Failed to save settings')
-     }
-     setSaving(false)
     }
+    setSaving(false)
+  }
 
-  const handleSaveNodeLimits = async () => {
-    setSaving(true)
-    try {
-      await updateNodeLimits(nodeLimits)
-      message.success('Node volume limits saved')
-     } catch {
-      message.error('Failed to save node limits')
-     }
-     setSaving(false)
-    }
+  const handleReset = (settingKeys: string[], defaults: Record<string, string>) => {
+    const updated = { ...values }
+    settingKeys.forEach((k) => { updated[k] = defaults[k] })
+    setValues(updated)
+    message.info('Reset to defaults — click Save to apply')
+  }
+
+  const handleSettingChange = (key: string, val: string) => {
+    setValues((prev) => ({ ...prev, [key]: val }))
+  }
 
   const handleLimitChange = (nodeUrl: string, value: number | null) => {
     const num = value !== null && value > 0 ? value : 9999
     setNodeLimits((prev) => ({ ...prev, [nodeUrl]: num }))
-    }
+  }
 
-  const allNodesNativeMax = Math.min(...nodeDetails.map((n) => n.max_native || n.Max || 9999))
+  const handleSaveNodeLimits = async () => {
+    setLimitsSaving(true)
+    try {
+      await updateNodeLimits(nodeLimits)
+      message.success('Node volume limits saved')
+    } catch {
+      message.error('Failed to save node limits')
+    }
+    setLimitsSaving(false)
+  }
+
+  const allNodesNativeMax = nodeDetails.length > 0
+    ? Math.min(...nodeDetails.map((n) => n.max_native || n.Max || 9999))
+    : 9999
 
   const handleApplyAll = (value: number | null) => {
     if (value && value > 0) {
-      const updated: Record<string, number> = {}
+      const updated: Record<string, number> = { ...nodeLimits }
       nodeDetails.forEach((n) => {
         const url = n.url || n.Url
         updated[url] = Math.min(value, n.max_native || n.Max || 9999)
-        })
+      })
       setNodeLimits(updated)
-      message.success(`Applied to all ${nodeDetails.length} nodes`)
-      }
+      message.success(`Applied ${value} to all ${nodeDetails.length} nodes`)
     }
+  }
+
+  const settingsByCategory: Record<string, SettingMeta[]> = {
+    general: GENERAL_SETTINGS,
+    alerts: ALERT_SETTINGS,
+    uploads: UPLOAD_SETTINGS,
+    snapshot: SNAPSHOT_SETTINGS,
+    disk_health: DISK_HEALTH_SETTINGS,
+    cluster: CLUSTER_SETTINGS,
+    ai: AI_SETTINGS,
+  }
+
+  const defaultByCategory: Record<string, Record<string, string>> = {}
+  for (const [cat, metas] of Object.entries(settingsByCategory)) {
+    defaultByCategory[cat] = {}
+    metas.forEach((m) => { defaultByCategory[cat][m.key] = m.defaultVal })
+  }
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />
 
-  const categoryTitles: Record<string, string> = {
-    alerts: 'Alerts',
-    uploads: 'Upload Limits',
-    snapshot: 'Snapshot',
-    disk_health: 'Disk Health',
-    cluster: 'Cluster',
-    general: 'General',
-    timezone: 'Timezone',
-   }
-
   const nodeColumns = [
-     {
-       title: 'Node',
-       dataIndex: 'node',
-       key: 'node',
-       width: 200,
-       render: (text: string) => <Tooltip title={text}><span style={{ fontFamily: 'monospace', fontSize: 12 }}>{text}</span></Tooltip>,
+    {
+      title: 'Node', dataIndex: 'node', key: 'node', width: 200,
+      render: (text: string) => (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#e2e8f0' }}>{text}</span>
+      ),
+    },
+    {
+      title: 'Usage', key: 'usage', width: 140,
+      render: (_: any, record: any) => {
+        const limit = nodeLimits[record.node] || record.native_max
+        const pct = limit > 0 ? Math.round((record.used / limit) * 100) : 0
+        return (
+          <Space size={4}>
+            <Typography.Text style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>
+              {record.used}/{limit}
+            </Typography.Text>
+            <Tag color={pct > 80 ? 'red' : pct > 50 ? 'orange' : 'green'} style={{ fontSize: 10 }}>{pct}%</Tag>
+          </Space>
+        )
       },
-      {
-        title: 'Used',
-        dataIndex: 'used',
-        key: 'used',
-        width: 100,
-        render: (_: any, record: any) => `${record.used} / ${record.native_max}`,
-       },
-       {
-         title: 'Native Max',
-         dataIndex: 'native_max',
-         key: 'native_max',
-         width: 120,
-         render: (val: number, record: any) => (
-           <Tooltip title={`Disk capacity based (${record.physical_gb} GB)`}>
-             <Tag color="blue">{val}</Tag>
-            </Tooltip>
-           ),
-          },
-          {
-            title: 'Configured Limit',
-            dataIndex: 'limit',
-            key: 'limit',
-            width: 200,
-            render: (_: any, record: any) => (
-              <Input
-                type="number"
-                min={record.used}
-                max={record.native_max * 2}
-                value={nodeLimits[record.node] || record.native_max}
-                onChange={(e) => handleLimitChange(record.node, parseInt(e.target.value, 10))}
-                style={{ width: '100%' }}
-               />
-              ),
-             },
-             {
-               title: 'Free',
-               dataIndex: 'free',
-               key: 'free',
-               width: 120,
-               render: (_: any, record: any) => {
-                 const limit = nodeLimits[record.node] || record.native_max
-                 const free = Math.max(0, limit - record.used)
-                 const pct = Math.round((record.used / limit) * 100)
-                 const color = pct > 80 ? 'red' : pct > 50 ? 'orange' : 'green'
-                 return <Tag color={color}>{free} free</Tag>
-                },
-               },
-              ]
+    },
+    {
+      title: 'Native Max', dataIndex: 'native_max', key: 'native_max', width: 110,
+      render: (val: number) => <Tag color="blue">{val}</Tag>,
+    },
+    {
+      title: 'Configured Limit', key: 'limit', width: 170,
+      render: (_: any, record: any) => (
+        <InputNumber
+          min={record.used}
+          max={record.native_max * 2}
+          value={nodeLimits[record.node] || record.native_max}
+          onChange={(v) => handleLimitChange(record.node, v)}
+          style={{ width: 140 }}
+          size="small"
+          addonAfter="vols"
+        />
+      ),
+    },
+    {
+      title: 'Free', key: 'free', width: 80,
+      render: (_: any, record: any) => {
+        const limit = nodeLimits[record.node] || record.native_max
+        const free = Math.max(0, limit - record.used)
+        return <Tag color={free === 0 ? 'red' : free < 5 ? 'orange' : 'green'}>{free}</Tag>
+      },
+    },
+  ]
 
-  return (
-     <div>
-        <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
-          <Typography.Title level={4} style={{ margin: 0 }}>Settings</Typography.Title>
-          {isAdmin && (
-            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>
-              Save All Changes
-             </Button>
+  const tabItems = [
+    {
+      key: 'general', label: <span><SettingOutlined /> General</span>,
+      children: createTabContent(GENERAL_SETTINGS, defaultByCategory.general),
+    },
+    {
+      key: 'alerts', label: <span><BellOutlined /> Alerts</span>,
+      children: createTabContent(ALERT_SETTINGS, defaultByCategory.alerts),
+    },
+    {
+      key: 'uploads', label: <span><CloudUploadOutlined /> Uploads</span>,
+      children: createTabContent(UPLOAD_SETTINGS, defaultByCategory.uploads),
+    },
+    {
+      key: 'snapshot', label: <span><ClockCircleOutlined /> Snapshot</span>,
+      children: createTabContent(SNAPSHOT_SETTINGS, defaultByCategory.snapshot),
+    },
+    {
+      key: 'disk_health', label: <span><MedicineBoxOutlined /> Disk Health</span>,
+      children: createTabContent(DISK_HEALTH_SETTINGS, defaultByCategory.disk_health),
+    },
+    {
+      key: 'ai', label: <span><RobotOutlined /> AI</span>,
+      children: (
+        <Card
+          extra={
+            isAdmin && (
+              <Space>
+                <Button size="small" icon={<ApiOutlined />} onClick={handleTestConnection} loading={testingAi}>
+                  Test Connection
+                </Button>
+                <Button size="small" icon={<UndoOutlined />} onClick={() => handleReset(AI_SETTINGS.map((s) => s.key), defaultByCategory.ai)}>
+                  Reset
+                </Button>
+                <Button type="primary" size="small" icon={<SaveOutlined />} onClick={() => handleSave(AI_SETTINGS.map((s) => s.key))} loading={saving}>
+                  Save
+                </Button>
+              </Space>
             )
-           }
-        </Space>
-
-        {/* Node Volume Limits */}
-        {isAdmin && !limitsLoading && nodeDetails.length > 0 && (
-          <Card
-            title={
-               <span>
-                 <HddOutlined style={{ marginRight: 6, color: '#f59e0b' }} />
-                 Node Volume Limits
-                <Tag color="blue" style={{ marginLeft: 8 }}>{Object.keys(nodeLimits).length} nodes</Tag>
-              </span>
-            }
-            extra={
-               <Space>
-                 <Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleSaveNodeLimits} loading={saving}>
-                    Save Limits
-                  </Button>
-                </Space>
-              }
-            style={{ marginBottom: 16 }}
-           >
-              <Table
-                columns={nodeColumns}
-                dataSource={nodeDetails.map((n) => ({
-                  key: n.url || n.Url,
-                  node: (n.url || n.Url).replace(':8080', ''),
-                  used: n.volumes || n.Volumes || 0,
-                  native_max: n.max_native || n.Max || 9999,
-                }))}
-                pagination={false}
+          }
+        >
+          {aiModels.length > 0 && (
+            <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(34,197,94,0.06)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Tag color="green">Connected</Tag>
+              <Typography.Text style={{ fontSize: 13 }}>{aiModels.length} models available:</Typography.Text>
+              <Select
                 size="small"
+                value={values['ai_model']}
+                onChange={(v: string) => handleSettingChange('ai_model', v)}
+                style={{ minWidth: 200 }}
+                options={aiModels.map((m) => ({ value: m.id, label: m.name || m.id }))}
               />
-              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>Apply to all nodes:</Typography.Text>
-                <InputNumber
-                  min={1}
-                  max={allNodesNativeMax}
-                  size="small"
-                  style={{ width: 100 }}
-                  placeholder={`Max ${allNodesNativeMax}`}
-                  onChange={(val) => handleApplyAll(val)}
-                />
-              </div>
-             <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8' }}>
-                Set per-node volume limits. Each node has different disk capacity — the limit controls how many volumes each server can hold.
-               <br />
-                Limits are applied alongside SeaweedFS native max (whichever is lower).
-              </div>
+            </div>
+          )}
+          {AI_SETTINGS.map((meta) => (
+            <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+          ))}
+        </Card>
+      ),
+    },
+    {
+      key: 'cluster', label: <span><ClusterOutlined /> Cluster</span>,
+      children: (
+        <>
+          {createTabContent(CLUSTER_SETTINGS, defaultByCategory.cluster)}
+          {isAdmin && (
+            <Card
+              title={<Space><HddOutlined style={{ color: '#f59e0b' }} /><span>Node Volume Limits</span><Tag color="blue">{nodeDetails.length} nodes</Tag></Space>}
+              loading={limitsLoading}
+              extra={<Button type="primary" size="small" icon={<SaveOutlined />} onClick={handleSaveNodeLimits} loading={limitsSaving}>Save Limits</Button>}
+              style={{ marginTop: 16 }}
+            >
+              {!limitsLoading && nodeDetails.length > 0 && (
+                <>
+                  <Table
+                    columns={nodeColumns}
+                    dataSource={nodeDetails.map((n) => ({
+                      key: n.url || n.Url,
+                      node: (n.url || n.Url).replace(':8080', ''),
+                      used: n.volumes || n.Volumes || 0,
+                      native_max: n.max_native || n.Max || 9999,
+                    }))}
+                    pagination={false}
+                    size="small"
+                  />
+                  <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(59,130,246,0.06)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <Typography.Text style={{ fontSize: 12, whiteSpace: 'nowrap' }}>Quick set — apply to all nodes:</Typography.Text>
+                    <InputNumber min={1} max={allNodesNativeMax} size="small" style={{ width: 120 }} placeholder={`Max ${allNodesNativeMax}`} onChange={(v) => handleApplyAll(v)} addonAfter="vols" />
+                    <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 'auto' }}>Limits applied alongside SeaweedFS native max (whichever is lower)</Typography.Text>
+                  </div>
+                </>
+              )}
             </Card>
           )}
+        </>
+      ),
+    },
+  ]
 
-        {Object.entries(categories).map(([cat, items]) => (
-          <Card key={cat} title={categoryTitles[cat] || cat} style={{ marginBottom: 16 }}>
-            {items.map((item) => (
-              <div key={item.key} style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Typography.Text style={{ minWidth: 200 }}>{item.description}</Typography.Text>
-                <Typography.Text type="secondary" style={{ minWidth: 100 }}>
-                  {item.key}
-                </Typography.Text>
-                {isAdmin ? (
-                  <Input
-                    value={values[item.key] || ''}
-                    onChange={(e) => setValues({ ...values, [item.key]: e.target.value })}
-                    style={{ maxWidth: 160 }}
-                   />
-                  ) : (
-                    <Typography.Text strong>{values[item.key]}</Typography.Text>
-                   )}
-                </div>
-              ))}
-            </Card>
-          ))}
-      </div>
+  function createTabContent(metas: SettingMeta[], defaults: Record<string, string>) {
+    return (
+      <Card
+        extra={
+          isAdmin && (
+            <Space>
+              <Button size="small" icon={<UndoOutlined />} onClick={() => handleReset(metas.map((s) => s.key), defaults)}>Reset</Button>
+              <Button type="primary" size="small" icon={<SaveOutlined />} onClick={() => handleSave(metas.map((s) => s.key))} loading={saving}>Save</Button>
+            </Space>
+          )
+        }
+      >
+        {metas.map((meta) => (
+          <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+        ))}
+      </Card>
     )
- }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <Typography.Title level={4} style={{ margin: 0 }}>Settings</Typography.Title>
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            {isAdmin ? 'Configure system thresholds, limits, and cluster parameters' : 'View current system configuration (read-only)'}
+          </Typography.Text>
+        </div>
+        {isAdmin && modifiedCount > 0 && (
+          <Popconfirm title={`Save all ${modifiedCount} modified settings?`} onConfirm={() => handleSave()}>
+            <Badge count={modifiedCount} size="small" offset={[-4, 4]}>
+              <Button type="primary" icon={<SaveOutlined />} loading={saving}>Save All Changes</Button>
+            </Badge>
+          </Popconfirm>
+        )}
+      </div>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+    </div>
+  )
+}
