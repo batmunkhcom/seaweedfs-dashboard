@@ -77,6 +77,7 @@ from app.routes.users import router as users_router
 from app.routes.info import router as info_router
 from app.routes.api_keys import router as api_keys_router
 from app.routes.chatbot import router as chatbot_router
+from app.routes.tools import router as tools_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -94,6 +95,7 @@ app.include_router(users_router, prefix="/api")
 app.include_router(info_router, prefix="/api")
 app.include_router(api_keys_router, prefix="/api")
 app.include_router(chatbot_router, prefix="/api")
+app.include_router(tools_router, prefix="/api")
 
 
 @app.get("/api/health")

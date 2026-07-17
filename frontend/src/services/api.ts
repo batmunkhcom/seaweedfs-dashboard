@@ -449,3 +449,19 @@ export async function triggerEmbeddingIndex() {
   const { data } = await api.post('/chatbot/embedding/index')
   return data
 }
+
+export async function pingNodes(): Promise<{
+  ok: boolean; nodes: Array<{ host: string; services: Array<{ port: number; service: string; reachable: boolean }> }>;
+  total: number; reachable: number; elapsed_ms: number;
+}> {
+  const { data } = await api.get('/tools/ping')
+  return data
+}
+
+export async function serviceCheck(): Promise<{
+  ok: boolean; nodes: Array<{ host: string; checks: Array<{ port: number; service: string; path: string; reachable: boolean; status?: number; latency_ms?: number; error?: string }> }>;
+  total_checks: number; passed: number; failed: number; elapsed_ms: number;
+}> {
+  const { data } = await api.get('/tools/service-check')
+  return data
+}

@@ -81,6 +81,18 @@ async def ai_stats():
     }
 
 
+@router.post("/chat")
+async def chat(body: ChatRequest):
+    if not await is_ai_enabled():
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "AI features are disabled"}, status_code=403)
+    return StreamingResponse(
+        chat_stream(body.prompt, body.history),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/status")
 async def chatbot_status():
     return {"enabled": await is_ai_enabled()}

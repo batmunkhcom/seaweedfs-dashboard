@@ -8,7 +8,8 @@
         "s3:read", "s3:write", "backup:read", "backup:write",
         "workers:read", "workers:write", "settings:read", "settings:write",
         "users:read", "users:write", "alerts:read", "alerts:write",
-        "disk_health:read", "audit:read", "sse:read"
+        "disk_health:read", "audit:read", "sse:read",
+        "tools:read", "tools:write"
       ]
     },
     "operator": {
@@ -18,7 +19,8 @@
         "collections:read", "filer:read", "filer:write",
         "s3:read", "s3:write", "backup:read", "backup:write",
         "workers:read", "workers:write", "alerts:read", "alerts:write",
-        "disk_health:read", "sse:read"
+        "disk_health:read", "sse:read",
+        "tools:read", "tools:write"
       ]
     },
     "viewer": {
@@ -27,7 +29,8 @@
         "dashboard:read", "cluster:read", "volumes:read",
         "collections:read", "filer:read",
         "s3:read", "backup:read", "workers:read",
-        "alerts:read", "disk_health:read", "sse:read"
+        "alerts:read", "disk_health:read", "sse:read",
+        "tools:read"
       ]
     },
     "user": {
