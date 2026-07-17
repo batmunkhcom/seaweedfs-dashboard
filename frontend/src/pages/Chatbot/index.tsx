@@ -9,6 +9,7 @@ interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
+  citations?: Array<{ index: number; source: string; snippet: string }>
 }
 
 export default function ChatbotPage() {
@@ -68,6 +69,7 @@ export default function ChatbotPage() {
 
       const decoder = new TextDecoder()
       let fullContent = ''
+      let citations: Message['citations'] | undefined
 
       while (true) {
         const { done, value } = await reader.read()
@@ -90,6 +92,10 @@ export default function ChatbotPage() {
 
           try {
             const parsed = JSON.parse(data)
+            if (parsed.citations) {
+              citations = parsed.citations
+              continue
+            }
             if (parsed.content) {
               fullContent += parsed.content
               setCurrentStream(fullContent)
@@ -100,7 +106,7 @@ export default function ChatbotPage() {
         }
       }
 
-      const assistantMsg: Message = { role: 'assistant', content: fullContent, timestamp: Date.now() }
+      const assistantMsg: Message = { role: 'assistant', content: fullContent, timestamp: Date.now(), citations }
       setMessages((prev) => [...prev, assistantMsg])
       setCurrentStream('')
     } catch (e: any) {
@@ -182,6 +188,18 @@ export default function ChatbotPage() {
           {isUser ? msg.content : (
             <div className="chatbot-markdown">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+              {msg.citations && msg.citations.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(168,85,247,0.1)', fontSize: 11, color: '#94a3b8' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4, color: '#c4b5fd' }}>Sources</div>
+                  {msg.citations.map((c) => (
+                    <div key={c.index} style={{ marginBottom: 3, lineHeight: 1.5 }}>
+                      <span style={{ color: '#a855f7', fontWeight: 600, marginRight: 6 }}>[{c.index}]</span>
+                      <code style={{ background: 'rgba(168,85,247,0.06)', padding: '1px 6px', borderRadius: 3, fontSize: 10, color: '#c4b5fd' }}>{c.source}</code>
+                      {c.snippet && <span style={{ marginLeft: 8, opacity: 0.7 }}>{c.snippet}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

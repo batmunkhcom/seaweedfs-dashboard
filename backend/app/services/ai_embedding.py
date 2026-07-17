@@ -197,18 +197,19 @@ async def _cleanup_orphans(current_files: list[str]) -> int:
     return removed
 
 
-async def search_similar(query: str, top_k: int = 5) -> str:
+async def search_similar(query: str, top_k: int = 5) -> tuple[str, list[dict]]:
     store = await get_vector_store()
     rows = await store.fetch_all()
 
     if not rows:
-        return ""
+        return "", []
 
     query_embedding = await embed_text(query)
     if not query_embedding:
         chunks = [r["chunk_text"] for r in rows[:top_k]]
         sources = list(set(r["source"] for r in rows[:top_k] if r["source"]))
-        return "Relevant documentation:\n" + "\n---\n".join(chunks) + ("\n\nSources: " + ", ".join(sources) if sources else "")
+        citations = [{"source": s, "snippet": ""} for s in sources]
+        return "Relevant documentation:\n" + "\n---\n".join(chunks) + ("\n\nSources: " + ", ".join(sources) if sources else ""), citations
 
     scored = []
     for row in rows:
@@ -220,16 +221,19 @@ async def search_similar(query: str, top_k: int = 5) -> str:
 
     scored.sort(key=lambda x: x[0], reverse=True)
     results = []
-    sources = set()
-    for sim, chunk, src, snapshot in scored[:top_k]:
+    citations = []
+    seen_sources = set()
+    for i, (sim, chunk, src, snapshot) in enumerate(scored[:top_k]):
         results.append(chunk)
-        if src:
-            sources.add(src)
+        if src and src not in seen_sources:
+            citations.append({"index": i + 1, "source": src, "snippet": chunk[:120]})
+            seen_sources.add(src)
 
     context = "Relevant documentation:\n" + "\n---\n".join(results)
-    if sources:
-        context += "\n\nSources: " + ", ".join(list(sources)[:5])
-    return context
+    if citations:
+        src_list = [f"[{c['index']}] {c['source']}" for c in citations]
+        context += "\n\nSources: " + ", ".join(src_list)
+    return context, citations
 
 
 async def embedding_stats() -> dict:

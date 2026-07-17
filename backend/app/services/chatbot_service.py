@@ -36,7 +36,7 @@ async def is_ai_enabled() -> bool:
     return await _get_setting("ai_enabled", "false") == "true"
 
 
-async def _build_context() -> str:
+async def _build_context() -> tuple[str, list[dict]]:
     lines = ["Current SeaweedFS cluster state (dc03, rack2, replication=001, 2 copies per volume):"]
     client = get_seaweed_client()
     try:
@@ -111,7 +111,17 @@ async def _build_context() -> str:
     except Exception:
         pass
 
-    return "\n".join(lines)
+    citations = []
+    try:
+        from app.services.ai_embedding import search_similar
+        rag_context, citations = await search_similar(prompt)
+        if rag_context:
+            lines.append("\n--- Wiki Documentation (RAG) ---")
+            lines.append(rag_context)
+    except Exception:
+        logger.warning("rag_search_failed", exc_info=True)
+
+    return "\n".join(lines), citations
 
 
 async def chat_stream(prompt: str, history: list[dict]) -> AsyncGenerator[str, None]:
@@ -123,7 +133,7 @@ async def chat_stream(prompt: str, history: list[dict]) -> AsyncGenerator[str, N
     temperature = await _get_setting_float("ai_temperature", 0.7)
     system_prompt = await _get_setting("ai_system_prompt", "You are a helpful AI assistant for a SeaweedFS cluster.")
 
-    context = await _build_context()
+    context, citations = await _build_context()
     full_system = f"{system_prompt}\n\n{context}"
 
     messages = [{"role": "system", "content": full_system}]
@@ -166,6 +176,8 @@ async def chat_stream(prompt: str, history: list[dict]) -> AsyncGenerator[str, N
                         continue
                     data = line[6:]
                     if data == "[DONE]":
+                        if citations:
+                            yield f"data: {json.dumps({'citations': citations})}\n\n"
                         yield "data: [DONE]\n\n"
                         return
                     try:
