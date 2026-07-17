@@ -91,13 +91,13 @@ export function SettingRow({ meta, value, onChange, readonly }: SettingRowProps)
       value={val}
       onChange={(e) => onChange(e.target.value)}
       rows={meta.rows || 4}
-      style={{ width: 320, fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
+      style={{ width: 420, fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
     />
   ) : meta.type === 'password' ? (
     <Input.Password
       value={val}
       onChange={(e) => onChange(e.target.value)}
-      style={{ width: 240 }}
+      style={{ width: 260 }}
       placeholder="Enter API key..."
     />
   ) : meta.type === 'int' || meta.type === 'float' ? (
@@ -108,26 +108,16 @@ export function SettingRow({ meta, value, onChange, readonly }: SettingRowProps)
         min={meta.min}
         max={meta.max}
         step={meta.step || (meta.type === 'float' ? 0.05 : 1)}
-        style={{ width: 110 }}
+        style={{ width: 140 }}
         addonAfter={meta.unit}
       />
       {isModified && <Tag color="orange" style={{ marginLeft: 4 }}>modified</Tag>}
     </Space>
   ) : (
-    <input
-      type="text"
+    <Input
       value={val}
       onChange={(e) => onChange(e.target.value)}
-      style={{
-        width: '100%',
-        maxWidth: 300,
-        padding: '4px 11px',
-        border: '1px solid #424242',
-        borderRadius: 6,
-        background: '#141414',
-        color: '#e2e8f0',
-        fontSize: 13,
-      }}
+      style={{ width: 320, fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
       placeholder={meta.defaultVal}
     />
   )

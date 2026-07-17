@@ -43,6 +43,8 @@ export default function SettingsPage() {
   const [limitsSaving, setLimitsSaving] = useState(false)
   const [testingAi, setTestingAi] = useState(false)
   const [aiModels, setAiModels] = useState<{ id: string; name: string }[]>([])
+  const [testingEmbedding, setTestingEmbedding] = useState(false)
+  const [embeddingModels, setEmbeddingModels] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     getSettings()
@@ -111,6 +113,34 @@ export default function SettingsPage() {
       message.error('Connection test failed')
     }
     setTestingAi(false)
+  }
+
+  const handleTestEmbedding = async () => {
+    setTestingEmbedding(true)
+    try {
+      const embProvider = values['ai_embedding_provider'] || 'same'
+      const chatProvider = values['ai_provider'] || 'openai'
+      const provider = embProvider === 'same' ? chatProvider : embProvider
+      let apiBase = values['ai_embedding_api_base_url'] || ''
+      if (!apiBase) apiBase = values['ai_api_base_url'] || 'https://api.openai.com/v1'
+      let apiKey = values['ai_embedding_api_key'] || ''
+      if (!apiKey) apiKey = values['ai_api_key'] || ''
+
+      const res = await testAiConnection(provider, apiBase, apiKey)
+      if (res.ok && res.models.length > 0) {
+        setEmbeddingModels(res.models)
+        message.success(`Found ${res.models.length} embedding models`)
+        if (res.models.length === 1) {
+          setValues((prev) => ({ ...prev, ai_embedding_model: res.models[0].id }))
+        }
+      } else {
+        message.error(res.error || 'Connection failed')
+        setEmbeddingModels([])
+      }
+    } catch {
+      message.error('Embedding connection test failed')
+    }
+    setTestingEmbedding(false)
   }
 
   const handleSave = async (keysToSave?: string[]) => {
@@ -270,9 +300,6 @@ export default function SettingsPage() {
           extra={
             isAdmin && (
               <Space>
-                <Button size="small" icon={<ApiOutlined />} onClick={handleTestConnection} loading={testingAi}>
-                  Test Connection
-                </Button>
                 <Button size="small" icon={<UndoOutlined />} onClick={() => handleReset(AI_SETTINGS.map((s) => s.key), defaultByCategory.ai)}>
                   Reset
                 </Button>
@@ -283,22 +310,47 @@ export default function SettingsPage() {
             )
           }
         >
-          {aiModels.length > 0 && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(34,197,94,0.06)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Tag color="green">Connected</Tag>
-              <Typography.Text style={{ fontSize: 13 }}>{aiModels.length} models available:</Typography.Text>
-              <Select
-                size="small"
-                value={values['ai_model']}
-                onChange={(v: string) => handleSettingChange('ai_model', v)}
-                style={{ minWidth: 200 }}
-                options={aiModels.map((m) => ({ value: m.id, label: m.name || m.id }))}
-              />
-            </div>
-          )}
-          {AI_SETTINGS.map((meta) => (
-            <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
-          ))}
+          {AI_SETTINGS.map((meta) => {
+            if (meta.key === 'ai_api_key') {
+              return (
+                <div key={meta.key}>
+                  <SettingRow meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+                  {isAdmin && (
+                    <div style={{ padding: '0 0 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <Button size="small" icon={<ApiOutlined />} onClick={handleTestConnection} loading={testingAi}>
+                        Test Connection & Fetch Models
+                      </Button>
+                      {aiModels.length > 0 && (
+                        <Tag color="green">{aiModels.length} models found</Tag>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            if (meta.key === 'ai_model' && aiModels.length > 0) {
+              return isAdmin ? (
+                <div key={meta.key} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 0',
+                  borderBottom: '1px solid rgba(168,85,247,0.06)',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <Typography.Text strong style={{ fontSize: 14 }}>{meta.label}</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{meta.description}</Typography.Text>
+                  </div>
+                  <Select
+                    value={values[meta.key]}
+                    onChange={(v: string) => handleSettingChange(meta.key, v)}
+                    style={{ minWidth: 220 }}
+                    options={aiModels.map((m) => ({ value: m.id, label: m.name || m.id }))}
+                  />
+                </div>
+              ) : (
+                <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={true} />
+              )
+            }
+            return <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+          })}
         </Card>
         <Card
           title={<Typography.Text strong style={{ fontSize: 14 }}>Embedding (RAG)</Typography.Text>}
@@ -319,9 +371,47 @@ export default function SettingsPage() {
           <div style={{ marginBottom: 12, fontSize: 12, color: '#94a3b8', padding: '8px 12px', background: 'rgba(59,130,246,0.06)', borderRadius: 6 }}>
             Embedding provider can be different from chat provider. Use Ollama (nomic-embed-text) for free local embeddings while keeping OpenAI for chat.
           </div>
-          {AI_EMBEDDING_SETTINGS.map((meta) => (
-            <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
-          ))}
+          {AI_EMBEDDING_SETTINGS.map((meta) => {
+            if (meta.key === 'ai_embedding_api_key') {
+              return (
+                <div key={meta.key}>
+                  <SettingRow meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+                  {isAdmin && (
+                    <div style={{ padding: '0 0 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <Button size="small" icon={<ApiOutlined />} onClick={handleTestEmbedding} loading={testingEmbedding}>
+                        Test Connection & Fetch Models
+                      </Button>
+                      {embeddingModels.length > 0 && (
+                        <Tag color="green">{embeddingModels.length} models found</Tag>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            if (meta.key === 'ai_embedding_model' && embeddingModels.length > 0) {
+              return isAdmin ? (
+                <div key={meta.key} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 16, padding: '14px 0',
+                  borderBottom: '1px solid rgba(168,85,247,0.06)',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <Typography.Text strong style={{ fontSize: 14 }}>{meta.label}</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{meta.description}</Typography.Text>
+                  </div>
+                  <Select
+                    value={values[meta.key]}
+                    onChange={(v: string) => handleSettingChange(meta.key, v)}
+                    style={{ minWidth: 220 }}
+                    options={embeddingModels.map((m) => ({ value: m.id, label: m.name || m.id }))}
+                  />
+                </div>
+              ) : (
+                <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={true} />
+              )
+            }
+            return <SettingRow key={meta.key} meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
+          })}
         </Card>
         </>
       ),
