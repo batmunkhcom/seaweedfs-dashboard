@@ -11,7 +11,6 @@ import type {
   S3Policy,
   BackupStatus,
   Snapshot,
-  BucketStatus,
   WorkerStatus,
   WorkerJob,
   DashboardStats,
@@ -236,11 +235,6 @@ export async function getBackupStatus(): Promise<BackupStatus> {
 
 export async function triggerBackupSync() {
   const { data } = await api.post('/backup/sync')
-  return data
-}
-
-export async function ensureBackupBucket(): Promise<BucketStatus> {
-  const { data } = await api.post('/backup/ensure-bucket')
   return data
 }
 
