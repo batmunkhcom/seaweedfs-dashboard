@@ -1,5 +1,7 @@
 -- 018_pgvector_settings: Vector store configuration (sqlite|pgvector)
 
+ALTER TABLE runtime_settings ADD COLUMN input_type TEXT DEFAULT 'text';
+
 INSERT OR IGNORE INTO runtime_settings (key, value, category, description, input_type) VALUES
 ('ai_embedding_store', 'sqlite', 'ai',
  'Vector store backend: sqlite (local, no deps) or pgvector (PostgreSQL with vector extension)',

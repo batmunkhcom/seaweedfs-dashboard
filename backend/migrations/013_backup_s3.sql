@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS backup_snapshots (
     created_at TEXT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_backup_snapshots_status ON backup_snapshots(status);
+CREATE INDEX IF NOT EXISTS idx_backup_snapshots_created ON backup_snapshots(created_at);
+
 INSERT OR IGNORE INTO runtime_settings (key, value, description, category) VALUES
     ('backup_s3_bucket', 'seaweed-backups', 'S3 bucket name for backups', 'backup'),
     ('backup_retention_days', '30', 'Auto-delete backups older than N days', 'backup'),
