@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.config import settings
 from app.database import get_db
 from app.logging_config import get_logger
 from app.middleware.auth_middleware import require_permission
+from app.middleware.rate_limit import limiter
 
 router = APIRouter(prefix="/disk-health", tags=["disk-health"])
 logger = get_logger("disk_health")
@@ -32,7 +33,8 @@ else:
         return {"enabled": True, "devices": devices}
 
     @router.post("/scan")
-    async def trigger_scan(_: bool = Depends(require_permission("cluster:write"))):
+    @limiter.limit("2/minute")
+    async def trigger_scan(request: Request, _: bool = Depends(require_permission("cluster:write"))):
         from app.services.disk_health import get_disk_health
         service = get_disk_health()
         await service.scan()

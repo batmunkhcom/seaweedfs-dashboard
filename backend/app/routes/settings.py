@@ -4,6 +4,16 @@ from app.middleware.auth_middleware import require_admin
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
+SENSITIVE_KEYS = {"ai_api_key", "ai_embedding_api_key", "redis_url", "s3_secret_key"}
+
+
+def _mask_sensitive(key: str, value: str) -> str:
+    if key in SENSITIVE_KEYS and value:
+        if len(value) > 8:
+            return value[:4] + "***" + value[-4:]
+        return "***"
+    return value
+
 
 @router.get("")
 async def get_settings():
@@ -16,7 +26,7 @@ async def get_settings():
         cat = row["category"]
         if cat not in categories:
             categories[cat] = []
-        categories[cat].append({"key": row["key"], "value": row["value"], "description": row["description"]})
+        categories[cat].append({"key": row["key"], "value": _mask_sensitive(row["key"], row["value"]), "description": row["description"]})
 
     return {"categories": categories}
 

@@ -86,7 +86,8 @@ class DiskHealthService:
             try:
                 def _ssh_scan(h=host):
                     ssh = paramiko.SSHClient()
-                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    ssh.load_system_host_keys()
+                    ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
                     ssh.connect(h, username=settings.disk_health_ssh_user, key_filename=key_path, timeout=10)
                     try:
                         _, stdout, _ = ssh.exec_command("lsblk --json -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null")
@@ -113,7 +114,8 @@ class DiskHealthService:
                 if not results:
                     def _basic_scan(h=host):
                         ssh = paramiko.SSHClient()
-                        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                        ssh.load_system_host_keys()
+                        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
                         ssh.connect(h, username=settings.disk_health_ssh_user, key_filename=key_path, timeout=10)
                         try:
                             _, stdout, _ = ssh.exec_command("lsblk --json -b -o NAME,SIZE,TYPE,MOUNTPOINT 2>/dev/null")

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,7 +26,8 @@ async def _ssh_exec(host: str, cmd: str, timeout: int = 120) -> tuple[str, str, 
 
     def _run():
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
         try:
             client.connect(
                 hostname=host,
@@ -53,7 +55,8 @@ async def _sftp_push(host: str, local_path: Path, remote_path: str) -> bool:
 
     def _run():
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
         try:
             client.connect(
                 hostname=host,
@@ -83,7 +86,8 @@ async def _sftp_fetch(host: str, remote_path: str, local_path: Path) -> bool:
 
     def _run():
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
         try:
             client.connect(
                 hostname=host,
@@ -149,7 +153,7 @@ async def create_backup(name: str | None = None) -> dict:
 
     for host in filer_hosts:
         try:
-            tmp_remote = f"/tmp/filer-backup-{ts}.tar.gz"
+            tmp_remote = f"/tmp/filer-backup-{ts}-{secrets.token_hex(8)}.tar.gz"
             await _ssh_exec(host, f"tar czf {tmp_remote} -C {db_path} .")
             sftp_ok = await _sftp_fetch(host, tmp_remote, backup_file)
             await _ssh_exec(host, f"rm -f {tmp_remote}")
@@ -254,7 +258,7 @@ async def restore_backup(name: str) -> dict:
 
     for host in filer_hosts[:1]:
         try:
-            tmp_remote = f"/tmp/filer-restore-{name}.tar.gz"
+            tmp_remote = f"/tmp/filer-restore-{name}-{secrets.token_hex(8)}.tar.gz"
             sftp_ok = await _sftp_push(host, backup_file, tmp_remote)
             if not sftp_ok:
                 raise RuntimeError("SFTP upload failed")

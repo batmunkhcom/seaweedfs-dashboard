@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from datetime import datetime
 
 from app.services.seaweed_client import get_seaweed_client
 from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
+from app.middleware.rate_limit import limiter
 from app.database import get_db
 from app.logging_config import get_logger
 import bcrypt
@@ -187,7 +188,8 @@ async def get_sync_status():
 
 
 @router.post("/sync-iam")
-async def sync_iam_to_gateways(_: bool = Depends(require_permission("s3:write"))):
+@limiter.limit("5/minute")
+async def sync_iam_to_gateways(request: Request, _: bool = Depends(require_permission("s3:write"))):
     try:
         from app.services.s3_sync import sync_to_all_gateways
         results = await sync_to_all_gateways()

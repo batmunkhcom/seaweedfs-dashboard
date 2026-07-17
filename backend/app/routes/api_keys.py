@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.middleware.auth_middleware import get_current_user, require_admin
+from app.middleware.rate_limit import limiter
 from app.services.api_key_service import create_api_key, list_api_keys, revoke_api_key, get_api_key_detail, reveal_api_key
 from app.logging_config import get_logger
 
@@ -9,7 +10,8 @@ logger = get_logger("api_keys")
 
 
 @router.post("/create")
-async def api_key_create(body: dict, _: bool = Depends(require_admin), current_user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def api_key_create(request: Request, body: dict, _: bool = Depends(require_admin), current_user: dict = Depends(get_current_user)):
     name = body.get("name", "API Key")
     permissions = body.get("permissions", "backup:read,backup:write")
 
@@ -35,7 +37,8 @@ async def api_key_detail(key_id: int):
 
 
 @router.post("/reveal")
-async def api_key_reveal(body: dict, current_user: dict = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def api_key_reveal(request: Request, body: dict, current_user: dict = Depends(get_current_user)):
     key_id = body.get("key_id")
     admin_password = body.get("admin_password", "")
     if not key_id:

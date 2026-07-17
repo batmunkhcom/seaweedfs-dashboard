@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.middleware.auth_middleware import require_permission
+from app.middleware.rate_limit import limiter
 from app.services.backup_service import (
      get_backup_status,
     create_backup,
@@ -20,7 +21,8 @@ async def backup_status():
 
 
 @router.post("/sync")
-async def trigger_sync(_: bool = Depends(require_permission("backup:write"))):
+@limiter.limit("2/minute")
+async def trigger_sync(request: Request, _: bool = Depends(require_permission("backup:write"))):
     try:
         result = await create_backup()
         logger.info("backup_sync_result", ok=result["ok"], sync_id=result.get("syncId"), bytes_synced=result.get("bytesSynced", 0))

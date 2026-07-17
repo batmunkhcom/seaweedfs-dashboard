@@ -57,7 +57,7 @@
       The token body is generated via <code>secrets.token_hex(32)</code> producing a cryptographically
       random 64-character hex string. Example:
     </p>
-    <pre><code>bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2</code></pre>
+    <pre><code>bkp_<YOUR_API_KEY></code></pre>
 
     <!-- ───── Permission Model ───── -->
     <h2>Permission Model</h2>
@@ -141,7 +141,7 @@
 
     <p>Response:</p>
     <pre><code>{
-  "key": "bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "key": "bkp_<YOUR_API_KEY>",
   "name": "Nightly Backup Script",
   "permissions": "backup:read,backup:write"
 }</code></pre>
@@ -313,7 +313,7 @@
     <p>Include the key in the <code>X-API-Key</code> header of any request. No session cookie or CSRF token is needed:</p>
 
     <pre><code>curl -s http://localhost:8000/api/backup/status \
-  -H "X-API-Key: bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"</code></pre>
+  -H "X-API-Key: bkp_<YOUR_API_KEY>"</code></pre>
 
     <p>This works for any client that can set HTTP headers — shell scripts, Python <code>httpx</code>/<code>requests</code>, Go, etc.</p>
 

@@ -52,10 +52,10 @@ app.add_exception_handler(429, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|10\.10\.\d+\.\d+|seaweed\.mbm\.mn)(:\d+)?",
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https?://10\.10\.0\.80(:\d+)?|https://seaweed\.mbm\.mn",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "X-API-Key", "Accept", "X-Requested-With"],
 )
 app.add_middleware(CsrfMiddleware)
 app.add_middleware(AuthMiddleware)

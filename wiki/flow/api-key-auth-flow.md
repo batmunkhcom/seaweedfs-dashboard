@@ -29,7 +29,7 @@ sequenceDiagram
     AKS->>AKS: key = "bkp_" + secrets.token_hex(32)
     AKS->>DB: INSERT INTO api_keys<br/>(key, name, permissions, created_by)<br/>VALUES (?, ?, ?, ?)
     DB-->>AKS: committed
-    AKS-->>AKR: {key: "bkp_a1b2c3...", name, permissions}
+    AKS-->>AKR: {key: "<YOUR_API_KEY>", name, permissions}
     AKR-->>FP: Full key returned
     FP->>FP: Show key in modal: "This key will not be shown again!"
     A->>FP: Clicks "Copy Key" → copies to clipboard
@@ -38,11 +38,11 @@ sequenceDiagram
 
     Note over S,DB: === SERVICE USES KEY ===
 
-    S->>S: Set header: X-API-Key: bkp_a1b2c3d4e5f6...
-    S->>AKR: GET /api/backup/status<br/>X-API-Key: bkp_a1b2c3...
+    S->>S: Set header: X-API-Key: bkp_<YOUR_API_KEY>...
+    S->>AKR: GET /api/backup/status<br/>X-API-Key: <YOUR_API_KEY>
 
     Note over AKR: AuthMiddleware intercepts
-    AKR->>AKS: validate_api_key("bkp_a1b2c3...")
+    AKR->>AKS: validate_api_key("<YOUR_API_KEY>")
     AKS->>AKS: Check: starts with "bkp_"?
     AKS->>DB: SELECT * FROM api_keys<br/>WHERE key = ? AND is_active = 1
     DB-->>AKS: {id: 1, name: "Backup Script", permissions: "backup:read,backup:write", ...}
@@ -81,9 +81,9 @@ sequenceDiagram
 
     alt Password correct
         AKS->>DB: SELECT key FROM api_keys WHERE id = 1
-        DB-->>AKS: "bkp_a1b2c3..."
-        AKS-->>AKR: "bkp_a1b2c3..."
-        AKR-->>FP: {key: "bkp_a1b2c3..."}
+        DB-->>AKS: "<YOUR_API_KEY>"
+        AKS-->>AKR: "<YOUR_API_KEY>"
+        AKR-->>FP: {key: "<YOUR_API_KEY>"}
         FP->>FP: Show full key + copy button
     else Password wrong
         AKS-->>AKR: None
@@ -177,7 +177,7 @@ def generate_key() -> str:
 | **Prefix** | `bkp_` (used by `validate_api_key` to reject non-backup keys) |
 | **Random portion** | 64 hex characters (32 bytes of entropy via `secrets.token_hex(32)`) |
 | **Total length** | 68 characters |
-| **Example** | `bkp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2` |
+| **Example** | `bkp_<YOUR_API_KEY>` |
 
 ## Usage Tracking
 

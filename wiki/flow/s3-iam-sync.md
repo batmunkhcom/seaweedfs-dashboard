@@ -160,7 +160,7 @@ This is the critical propagation step. The backend:
     {
       "Name": "alice",
       "Credentials": [{ "AccessKey": "AKabc123...", "SecretKey": "def456..." }],
-      "Actions": ["Read", "Write", "List", "Tagging", "Admin"]
+      "Actions": ["<YOUR_PERMISSION>"]
     }
   ],
   "accounts": [],

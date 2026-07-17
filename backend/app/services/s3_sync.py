@@ -64,6 +64,7 @@ async def sync_to_all_gateways() -> dict[str, bool]:
 
 async def _ssh_push(host: str, content: str):
     import paramiko
+    from io import BytesIO
 
     key_path = settings.disk_health_ssh_key_path
     key_path_expanded = __import__("os").path.expanduser(key_path)
@@ -72,7 +73,8 @@ async def _ssh_push(host: str, content: str):
 
     def _run():
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
         try:
             client.connect(
                 hostname=host,
@@ -80,12 +82,9 @@ async def _ssh_push(host: str, content: str):
                 key_filename=key_path_expanded,
                 timeout=10,
             )
-            escaped = content.replace("'", "'\\''")
-            cmd = f"echo '{escaped}' > {S3_JSON_PATH}"
-            stdin, stdout, stderr = client.exec_command(cmd)
-            exit_code = stdout.channel.recv_exit_status()
-            if exit_code != 0:
-                raise RuntimeError(f"SSH command failed: {stderr.read().decode()}")
+            sftp = client.open_sftp()
+            sftp.putfo(BytesIO(content.encode()), S3_JSON_PATH)
+            sftp.close()
         finally:
             client.close()
 

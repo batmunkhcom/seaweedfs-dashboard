@@ -427,7 +427,8 @@ def _ssh_exec(host: str, cmd: str, timeout: int = 10) -> str:
         except Exception:
             key = None
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.WarningPolicy())
     try:
         client.connect(host, username=user, pkey=key, timeout=timeout, banner_timeout=5, auth_timeout=5)
         _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
