@@ -174,13 +174,15 @@ export default function ChatbotPage() {
           fontSize: 13,
           lineHeight: 1.7,
           color: '#e2e8f0',
-          whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
+          ...(isUser ? { whiteSpace: 'pre-wrap' } : {}),
         }}>
           {isStreaming && <LoadingOutlined style={{ marginRight: 8, color: '#3b82f6' }} />}
-          <div className="chatbot-markdown">
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
-          </div>
+          {isUser ? msg.content : (
+            <div className="chatbot-markdown">
+              <ReactMarkdown>{msg.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
       </div>
     )
