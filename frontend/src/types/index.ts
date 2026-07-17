@@ -295,3 +295,45 @@ export interface ApiKeyDetail {
   last_used_endpoint: string | null
   is_active: boolean
 }
+
+export interface MetricsOverview {
+  total_volumes: number
+  total_free_slots: number
+  total_max_slots: number
+  cluster_disk_usage_pct: number
+  nodes_total: number
+  nodes_healthy: number
+  last_updated: number
+}
+
+export interface NodeMetrics {
+  node: string
+  volumes: number
+  free_slots: number
+  max_slots: number
+  disk_usage_pct: number
+  ec_shards: number
+  alive: boolean
+  last_seen: number
+}
+
+export interface MetricsHistoryPoint {
+  timestamp: number
+  value: number
+}
+
+export interface NodeHealthInfo {
+  node: string
+  alive: boolean
+  latency_ms: number | null
+  error: string | null
+}
+
+export interface MetricsNodeInfo {
+  node: string
+  volumes: number
+  free_slots: number
+  max_slots: number
+  ec_shards: number
+  disk_usage_pct: number
+}

@@ -61,3 +61,7 @@ async def publish_stats(stats: dict):
 
 async def publish_alert(alert: dict):
     await broadcast("alert_new", alert)
+
+
+async def publish_metrics(metrics: dict):
+    await broadcast("metrics_update", metrics)

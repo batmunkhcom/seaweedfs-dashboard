@@ -23,6 +23,7 @@ import ApiDocPage from './pages/ApiDoc'
 import ApiKeysPage from './pages/ApiKeys'
 import ChatbotPage from './pages/Chatbot'
 import ToolsPage from './pages/Tools'
+import MetricsPage from './pages/Metrics'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -89,6 +90,7 @@ function App() {
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/chatbot" element={<ChatbotPage />} />
             <Route path="/tools" element={<ToolsPage />} />
+            <Route path="/metrics" element={<MetricsPage />} />
             </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

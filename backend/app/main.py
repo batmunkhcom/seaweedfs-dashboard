@@ -31,8 +31,12 @@ async def lifespan(app: FastAPI):
         logger.warning("index_scheduler_start_failed", exc_info=True)
     from app.services.disk_health import start_disk_health
     await start_disk_health()
+    from app.services.metrics_service import start_metrics_service
+    await start_metrics_service()
     yield
     logger.info("shutdown")
+    from app.services.metrics_service import stop_metrics_service
+    await stop_metrics_service()
     from app.services.disk_health import stop_disk_health
     await stop_disk_health()
     await shutdown_seaweed_client()

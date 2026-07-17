@@ -25,6 +25,7 @@ import {
   ApiOutlined,
   RobotOutlined,
   ThunderboltOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -53,6 +54,7 @@ const baseMenuItems = [
   { key: '/chatbot', icon: <RobotOutlined />, label: 'AI Chat' },
   { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/tools', icon: <ThunderboltOutlined />, label: 'Tools' },
+  { key: '/metrics', icon: <LineChartOutlined />, label: 'Metrics' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]

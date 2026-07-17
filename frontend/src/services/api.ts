@@ -19,6 +19,11 @@ import type {
   LoginRequest,
   LoginResponse,
   User,
+  MetricsOverview,
+  NodeMetrics,
+  MetricsHistoryPoint,
+  NodeHealthInfo,
+  MetricsNodeInfo,
 } from '../types'
 
 const api = axios.create({
@@ -464,4 +469,29 @@ export async function serviceCheck(): Promise<{
 }> {
   const { data } = await api.get('/tools/service-check')
   return data
+}
+
+export async function getMetricsOverview(): Promise<MetricsOverview> {
+  const { data } = await api.get('/metrics/overview')
+  return data
+}
+
+export async function getMetricsNode(ip: string): Promise<NodeMetrics> {
+  const { data } = await api.get(`/metrics/node/${encodeURIComponent(ip)}`)
+  return data
+}
+
+export async function getMetricsNodes(): Promise<MetricsNodeInfo[]> {
+  const { data } = await api.get('/metrics/nodes')
+  return Array.isArray(data) ? data : []
+}
+
+export async function getMetricsHistory(node?: string, metric?: string, hours?: number): Promise<MetricsHistoryPoint[]> {
+  const { data } = await api.get('/metrics/history', { params: { node, metric, hours } })
+  return Array.isArray(data) ? data : []
+}
+
+export async function getMetricsAlive(): Promise<NodeHealthInfo[]> {
+  const { data } = await api.get('/metrics/alive')
+  return Array.isArray(data) ? data : []
 }
