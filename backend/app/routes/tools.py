@@ -284,11 +284,12 @@ async def _traceroute_async(host: str) -> dict:
         out = stdout.decode(errors="replace")
 
         hop_count = len([l for l in out.split("\n") if l.strip() and l[0].isdigit()])
-        return {"ok": True, "host": host, "hops": hop_count, "output": out[:2000], "elapsed_ms": round(elapsed, 1)}
+        return {"ok": True, "host": host, "hops": hop_count, "output": out[:2000],
+                "elapsed_ms": round(elapsed, 1), "reachable": True, "latency_ms": round(elapsed, 1)}
     except asyncio.TimeoutError:
-        return {"ok": False, "host": host, "hops": 0, "output": "traceroute timed out", "elapsed_ms": 0}
+        return {"ok": False, "host": host, "hops": 0, "output": "traceroute timed out", "elapsed_ms": 0, "reachable": False, "latency_ms": 0}
     except Exception as e:
-        return {"ok": False, "host": host, "hops": 0, "output": str(e)[:300], "elapsed_ms": 0}
+        return {"ok": False, "host": host, "hops": 0, "output": str(e)[:300], "elapsed_ms": 0, "reachable": False, "latency_ms": 0}
 
 
 @router.post("/ping-host", dependencies=[Depends(require_permission("tools:write"))])

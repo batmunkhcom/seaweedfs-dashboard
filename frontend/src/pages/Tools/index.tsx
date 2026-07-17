@@ -462,7 +462,7 @@ export default function ToolsPage() {
             <div style={{ marginBottom: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
               <Text strong>{netResult.host}</Text>
               {netResult.reachable
-                ? <Tag color="success">{netResult.latency_ms}ms</Tag>
+                ? <Space size={4}><Tag color="success">{netResult.latency_ms}ms</Tag>{(netResult as any).hops > 0 && <Tag color="blue">{(netResult as any).hops} hops</Tag>}</Space>
                 : <Tag color="error">unreachable</Tag>}
             </div>
             {netResult.output && (
