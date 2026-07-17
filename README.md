@@ -37,6 +37,8 @@ SeaweedFS ships with a built-in web UI, but it's minimal. This project adds:
 - **Filer file browser** — upload, download, delete with validation
 - **Backup & restore** — filer metadata snapshots at your fingertips
 - **Disk health** — S.M.A.R.T. monitoring across all nodes
+- **AI-powered chatbot** — infrastructure analysis assistant with live cluster context (OpenAI + Ollama)
+- **Worker management** — detect nodes, execute vacuum/compact/rebalance jobs
 
 ---
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Card, Typography, InputNumber, Button, Space, message, Spin, Table, Tag, Tabs, Popconfirm, Badge, Select } from 'antd'
+import { Card, Typography, InputNumber, Button, Space, message, Spin, Table, Tag, Tabs, Popconfirm, Badge, Select, Alert } from 'antd'
 import {
   SaveOutlined,
   HddOutlined,
@@ -43,8 +43,10 @@ export default function SettingsPage() {
   const [limitsSaving, setLimitsSaving] = useState(false)
   const [testingAi, setTestingAi] = useState(false)
   const [aiModels, setAiModels] = useState<{ id: string; name: string }[]>([])
+  const [aiError, setAiError] = useState('')
   const [testingEmbedding, setTestingEmbedding] = useState(false)
   const [embeddingModels, setEmbeddingModels] = useState<{ id: string; name: string }[]>([])
+  const [embeddingError, setEmbeddingError] = useState('')
 
   useEffect(() => {
     getSettings()
@@ -94,6 +96,7 @@ export default function SettingsPage() {
 
   const handleTestConnection = async () => {
     setTestingAi(true)
+    setAiError('')
     try {
       const provider = values['ai_provider'] || 'openai'
       const apiBase = values['ai_api_base_url'] || 'https://api.openai.com/v1'
@@ -101,22 +104,28 @@ export default function SettingsPage() {
       const res = await testAiConnection(provider, apiBase, apiKey)
       if (res.ok && res.models.length > 0) {
         setAiModels(res.models)
+        setAiError('')
         message.success(`Found ${res.models.length} models`)
         if (res.models.length === 1) {
           setValues((prev) => ({ ...prev, ai_model: res.models[0].id }))
         }
       } else {
-        message.error(res.error || 'Connection failed')
         setAiModels([])
+        const err = res.error || 'Connection failed. Check API URL and key.'
+        setAiError(err)
+        message.error(err)
       }
     } catch {
-      message.error('Connection test failed')
+      const err = 'Network error — cannot reach API server'
+      setAiError(err)
+      message.error(err)
     }
     setTestingAi(false)
   }
 
   const handleTestEmbedding = async () => {
     setTestingEmbedding(true)
+    setEmbeddingError('')
     try {
       const embProvider = values['ai_embedding_provider'] || 'same'
       const chatProvider = values['ai_provider'] || 'openai'
@@ -129,16 +138,21 @@ export default function SettingsPage() {
       const res = await testAiConnection(provider, apiBase, apiKey)
       if (res.ok && res.models.length > 0) {
         setEmbeddingModels(res.models)
+        setEmbeddingError('')
         message.success(`Found ${res.models.length} embedding models`)
         if (res.models.length === 1) {
           setValues((prev) => ({ ...prev, ai_embedding_model: res.models[0].id }))
         }
       } else {
-        message.error(res.error || 'Connection failed')
         setEmbeddingModels([])
+        const err = res.error || 'Connection failed. Check API URL and key.'
+        setEmbeddingError(err)
+        message.error(err)
       }
     } catch {
-      message.error('Embedding connection test failed')
+      const err = 'Network error — cannot reach embedding API server'
+      setEmbeddingError(err)
+      message.error(err)
     }
     setTestingEmbedding(false)
   }
@@ -316,12 +330,30 @@ export default function SettingsPage() {
                 <div key={meta.key}>
                   <SettingRow meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
                   {isAdmin && (
-                    <div style={{ padding: '0 0 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <Button size="small" icon={<ApiOutlined />} onClick={handleTestConnection} loading={testingAi}>
-                        Test Connection & Fetch Models
-                      </Button>
-                      {aiModels.length > 0 && (
-                        <Tag color="green">{aiModels.length} models found</Tag>
+                    <div style={{ padding: '0 0 14px 0' }}>
+                      <Space>
+                        <Button
+                          icon={<ApiOutlined />}
+                          onClick={handleTestConnection}
+                          loading={testingAi}
+                          type="primary"
+                          ghost
+                        >
+                          Test Connection & Fetch Models
+                        </Button>
+                        {aiModels.length > 0 && <Tag color="success">Connected — {aiModels.length} models</Tag>}
+                        {aiError && <Tag color="error">{aiError}</Tag>}
+                      </Space>
+                      {aiError && (
+                        <Alert
+                          type="error"
+                          message="Connection Failed"
+                          description={aiError}
+                          showIcon
+                          closable
+                          onClose={() => setAiError('')}
+                          style={{ marginTop: 8 }}
+                        />
                       )}
                     </div>
                   )}
@@ -377,12 +409,30 @@ export default function SettingsPage() {
                 <div key={meta.key}>
                   <SettingRow meta={meta} value={values[meta.key]} onChange={(v) => handleSettingChange(meta.key, v)} readonly={!isAdmin} />
                   {isAdmin && (
-                    <div style={{ padding: '0 0 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <Button size="small" icon={<ApiOutlined />} onClick={handleTestEmbedding} loading={testingEmbedding}>
-                        Test Connection & Fetch Models
-                      </Button>
-                      {embeddingModels.length > 0 && (
-                        <Tag color="green">{embeddingModels.length} models found</Tag>
+                    <div style={{ padding: '0 0 14px 0' }}>
+                      <Space>
+                        <Button
+                          icon={<ApiOutlined />}
+                          onClick={handleTestEmbedding}
+                          loading={testingEmbedding}
+                          type="primary"
+                          ghost
+                        >
+                          Test Connection & Fetch Models
+                        </Button>
+                        {embeddingModels.length > 0 && <Tag color="success">Connected — {embeddingModels.length} models</Tag>}
+                        {embeddingError && <Tag color="error">{embeddingError}</Tag>}
+                      </Space>
+                      {embeddingError && (
+                        <Alert
+                          type="error"
+                          message="Embedding Connection Failed"
+                          description={embeddingError}
+                          showIcon
+                          closable
+                          onClose={() => setEmbeddingError('')}
+                          style={{ marginTop: 8 }}
+                        />
                       )}
                     </div>
                   )}

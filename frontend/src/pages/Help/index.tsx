@@ -216,6 +216,7 @@ aws s3 --endpoint-url=${info?.endpoints?.public_s3 || ''} ls`}
                     <li><a href="/wiki/disk-health.html" target="_blank">Disk Health</a> — S.M.A.R.T. monitoring</li>
                     <li><a href="/wiki/api-keys.html" target="_blank">API Keys</a> — Key creation, permissions, usage tracking</li>
                     <li><a href="/wiki/users.html" target="_blank">Users &amp; RBAC</a> — Roles, permissions, profile</li>
+                    <li><strong>AI Chatbot</strong> — Infrastructure analysis assistant (admin/operator only). Configure in Settings → AI. Supports OpenAI and Ollama.</li>
                     <li><a href="/wiki/glossary.html" target="_blank">Glossary</a> — SeaweedFS terminology</li>
                     <li><a href="/wiki/api-reference.html" target="_blank">API Reference</a> — Full endpoint documentation</li>
                   </ul>
