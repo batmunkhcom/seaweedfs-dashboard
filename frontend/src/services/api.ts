@@ -218,6 +218,16 @@ export async function updateS3Policy(name: string, policy: Record<string, unknow
   return data
 }
 
+export async function triggerSync() {
+  const { data } = await api.post('/s3/sync-iam')
+  return data
+}
+
+export async function getSyncStatus() {
+  const { data } = await api.get('/s3/sync-status')
+  return data
+}
+
 export async function getBackupStatus(): Promise<BackupStatus> {
   const { data } = await api.get('/backup/status')
   return data

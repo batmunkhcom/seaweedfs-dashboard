@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from datetime import datetime
 
 from app.services.seaweed_client import get_seaweed_client
 from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
@@ -160,16 +161,29 @@ async def list_policies():
 
 @router.put("/policies/{name}")
 async def update_policy(name: str, body: dict, _: bool = Depends(require_permission("s3:write"))):
-    return {"ok": True, "name": name}
+    username = name.replace("user-", "")
+    perm = body.get("permission", "readwrite")
+    if perm not in ("readonly", "readwrite"):
+        raise HTTPException(400, "Invalid permission. Must be 'readonly' or 'readwrite'")
+    db = await get_db()
+    cursor = await db.execute("SELECT id FROM users WHERE username = ?", (username,))
+    user_row = await cursor.fetchone()
+    if not user_row:
+        raise HTTPException(404, f"User '{username}' not found")
+    await db.execute("UPDATE users SET s3_permission = ? WHERE username = ?", (perm, username))
+    await db.commit()
+    logger.info("s3_policy_updated", username=username, permission=perm)
+    return {"ok": True, "username": username, "permission": perm}
 
 
-@router.get("/config")
-async def get_s3_config():
-    from app.settings_service import get_setting
-    return {
-        "endpoint": await get_setting("public_s3_url", "https://s3.mbm.mn"),
-        "region": "dc03",
-    }
+@router.get("/sync-status")
+async def get_sync_status():
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db = await get_db()
+    cursor = await db.execute("SELECT value FROM runtime_settings WHERE key = 's3_last_sync'")
+    row = await cursor.fetchone()
+    last_sync = row["value"] if row else None
+    return {"last_sync": last_sync, "gateways": S3_GATEWAY_HOSTS, "now": now}
 
 
 @router.post("/sync-iam")
@@ -178,8 +192,12 @@ async def sync_iam_to_gateways(_: bool = Depends(require_permission("s3:write"))
         from app.services.s3_sync import sync_to_all_gateways
         results = await sync_to_all_gateways()
         ok = all(results.values()) if isinstance(results, dict) and not results.get("skipped") else results.get("skipped", False)
-        logger.info("s3_iam_sync_results", results=str(results))
-        return {"ok": ok, "results": results}
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        db = await get_db()
+        await db.execute("INSERT OR REPLACE INTO runtime_settings (key, value) VALUES ('s3_last_sync', ?)", (now,))
+        await db.commit()
+        logger.info("s3_iam_sync_results", results=str(results), last_sync=now)
+        return {"ok": ok, "results": results, "last_sync": now}
     except Exception as e:
         logger.error("s3_iam_sync_error", exc_info=True)
         return {"ok": False, "error": str(e)}
