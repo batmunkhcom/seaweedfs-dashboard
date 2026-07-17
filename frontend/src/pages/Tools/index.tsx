@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Tag, Space, message, Row, Col, Statistic, Typography, Tooltip, Progress } from 'antd'
+import { Card, Table, Button, Tag, Space, message, Row, Col, Statistic, Typography, Tooltip, Progress, Input } from 'antd'
 import {
   ThunderboltOutlined,
   ReloadOutlined,
@@ -11,6 +11,10 @@ import {
   CloudServerOutlined,
   PlayCircleOutlined,
   DashboardOutlined,
+  GlobalOutlined,
+  SendOutlined,
+  RadarChartOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons'
 import { pingNodes, serviceCheck, triggerEmbeddingIndex } from '../../services/api'
 import api from '../../services/api'
@@ -65,6 +69,12 @@ export default function ToolsPage() {
   const [indexing, setIndexing] = useState(false)
   const [indexResult, setIndexResult] = useState<{ ok: boolean; total_chunks: number; indexed: number; files: number; error?: string } | null>(null)
   const [runAllLoading, setRunAllLoading] = useState(false)
+
+  const [netHost, setNetHost] = useState('')
+  const [netResult, setNetResult] = useState<{ ok: boolean; host: string; reachable: boolean; latency_ms: number; output: string } | null>(null)
+  const [netLoading, setNetLoading] = useState(false)
+  const [inetLoading, setInetLoading] = useState(false)
+  const [traceLoading, setTraceLoading] = useState(false)
 
   useEffect(() => {
     api.get('/tools/status').then((r) => setStatus(r.data)).catch(() => {})
@@ -126,6 +136,52 @@ export default function ToolsPage() {
     await handlePing()
     await handleServiceCheck()
     setRunAllLoading(false)
+  }
+
+  const handlePingHost = async () => {
+    const h = netHost.trim()
+    if (!h) { message.warning('Enter a hostname or IP'); return }
+    setNetLoading(true)
+    setNetResult(null)
+    try {
+      const { data } = await api.post('/tools/ping-host', { host: h })
+      setNetResult(data)
+      if (data.reachable) message.success(`${h}: ${data.latency_ms}ms`)
+      else message.warning(`${h}: unreachable`)
+    } catch {
+      message.error('Ping failed')
+    }
+    setNetLoading(false)
+  }
+
+  const handleInternetCheck = async () => {
+    setInetLoading(true)
+    setNetResult(null)
+    try {
+      const { data } = await api.post('/tools/ping-internet')
+      setNetResult(data)
+      if (data.reachable) message.success(`Internet: ${data.latency_ms}ms to 8.8.8.8`)
+      else message.error('Internet unreachable')
+    } catch {
+      message.error('Check failed')
+    }
+    setInetLoading(false)
+    setNetHost('')
+  }
+
+  const handleTraceroute = async () => {
+    const h = netHost.trim()
+    if (!h) { message.warning('Enter a hostname or IP'); return }
+    setTraceLoading(true)
+    setNetResult(null)
+    try {
+      const { data } = await api.post('/tools/traceroute', { host: h })
+      setNetResult(data)
+      message.success(`${data.hops} hops to ${h}`)
+    } catch {
+      message.error('Traceroute failed')
+    }
+    setTraceLoading(false)
   }
 
   const pingReachable = pingResult ? pingSummary.reachable : 0
@@ -359,6 +415,63 @@ export default function ToolsPage() {
           </Card>
         </Col>
       </Row>
+
+      <Card
+        title={<><GlobalOutlined /> Network Tools</>}
+        style={{ marginTop: 12 }}
+      >
+        <Row gutter={[12, 12]} align="middle">
+          <Col xs={24} sm={14}>
+            <Input
+              value={netHost}
+              onChange={(e) => setNetHost(e.target.value)}
+              onPressEnter={handlePingHost}
+              placeholder="Hostname or IP (e.g. 172.16.0.1 or google.com)"
+              disabled={netLoading || inetLoading || traceLoading}
+              allowClear
+              style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
+            />
+          </Col>
+          <Col xs={8} sm={4}>
+            <Button
+              block
+              icon={netLoading ? <LoadingOutlined /> : <SendOutlined />}
+              loading={netLoading}
+              onClick={handlePingHost}
+              disabled={!netHost.trim()}
+              size="middle"
+            >
+              Ping
+            </Button>
+          </Col>
+          <Col xs={8} sm={3}>
+            <Button block icon={<RadarChartOutlined />} loading={traceLoading} onClick={handleTraceroute} disabled={!netHost.trim()} size="middle">
+              Trace
+            </Button>
+          </Col>
+          <Col xs={8} sm={3}>
+            <Button block icon={<GlobalOutlined />} loading={inetLoading} onClick={handleInternetCheck} size="middle">
+              Internet
+            </Button>
+          </Col>
+        </Row>
+
+        {netResult && (
+          <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(15,23,42,0.5)', borderRadius: 6, border: '1px solid rgba(168,85,247,0.08)' }}>
+            <div style={{ marginBottom: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Text strong>{netResult.host}</Text>
+              {netResult.reachable
+                ? <Tag color="success">{netResult.latency_ms}ms</Tag>
+                : <Tag color="error">unreachable</Tag>}
+            </div>
+            {netResult.output && (
+              <pre style={{ margin: 0, padding: '8px 10px', background: 'rgba(0,0,0,0.3)', borderRadius: 4, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#94a3b8', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 200, overflowY: 'auto' }}>
+                {netResult.output}
+              </pre>
+            )}
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

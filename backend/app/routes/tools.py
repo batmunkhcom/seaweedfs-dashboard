@@ -1,8 +1,11 @@
 import asyncio
+import subprocess
 import time
+import re
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.config import settings
@@ -11,6 +14,9 @@ from app.middleware.auth_middleware import require_permission
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 logger = get_logger("tools")
+
+ALLOWED_HOSTNAME = re.compile(r'^[a-zA-Z0-9.\-_]{1,253}$')
+
 
 SERVICE_PORTS = [
     (9333, "master"),
@@ -94,9 +100,8 @@ async def _http_check(host: str, port: int, path: str, timeout: float = 5.0) -> 
         return {"reachable": False, "error": str(e)[:120]}
 
 
-@router.get("/ping", response_model=PingResponse)
-async def ping_nodes(request: Request):
-    require_permission(request, "tools:read")
+@router.get("/ping", response_model=PingResponse, dependencies=[Depends(require_permission("tools:read"))])
+async def ping_nodes():
     hosts = settings.all_node_hosts
     t0 = time.monotonic()
 
@@ -131,9 +136,8 @@ async def ping_nodes(request: Request):
     }
 
 
-@router.get("/service-check", response_model=ServiceCheckResponse)
-async def service_check(request: Request):
-    require_permission(request, "tools:read")
+@router.get("/service-check", response_model=ServiceCheckResponse, dependencies=[Depends(require_permission("tools:read"))])
+async def service_check():
     t0 = time.monotonic()
 
     checks = []
@@ -213,3 +217,95 @@ async def tool_status():
         "ai_enabled": ai_on,
         "embedding_stats": emb_stats,
     }
+
+
+class HostRequest(BaseModel):
+    host: str
+
+class PingHostResponse(BaseModel):
+    ok: bool
+    host: str
+    reachable: bool
+    latency_ms: float
+    output: str
+
+class TracerouteResponse(BaseModel):
+    ok: bool
+    host: str
+    hops: int
+    output: str
+    elapsed_ms: float
+
+
+def _validate_host(host: str) -> str | None:
+    host = host.strip()
+    if len(host) > 253:
+        return None
+    if not ALLOWED_HOSTNAME.match(host):
+        return None
+    bad = re.findall(r'[;&|$`\\\'"<>]', host)
+    if bad:
+        return None
+    return host
+
+
+async def _ping_host_async(host: str, count: int = 3) -> dict:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ping", "-c", str(count), "-W", "2", host,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        out = stdout.decode(errors="replace")
+        err = stderr.decode(errors="replace")
+
+        ms_match = re.search(r'avg[ /]*([\d.]+)', out)
+        latency = float(ms_match.group(1)) if ms_match else 0
+
+        reachable = proc.returncode == 0
+        lines = out.strip().split("\n")
+        summary = "\n".join(lines[-4:]) if len(lines) >= 4 else out[:500]
+
+        return {"ok": True, "host": host, "reachable": reachable, "latency_ms": latency, "output": summary}
+    except asyncio.TimeoutError:
+        return {"ok": False, "host": host, "reachable": False, "latency_ms": 0, "output": "timeout"}
+    except Exception as e:
+        return {"ok": False, "host": host, "reachable": False, "latency_ms": 0, "output": str(e)[:300]}
+
+
+async def _traceroute_async(host: str) -> dict:
+    try:
+        t0 = time.monotonic()
+        proc = await asyncio.create_subprocess_exec(
+            "traceroute", "-n", "-w", "2", "-q", "1", "-m", "20", host,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        elapsed = (time.monotonic() - t0) * 1000
+        out = stdout.decode(errors="replace")
+
+        hop_count = len([l for l in out.split("\n") if l.strip() and l[0].isdigit()])
+        return {"ok": True, "host": host, "hops": hop_count, "output": out[:2000], "elapsed_ms": round(elapsed, 1)}
+    except asyncio.TimeoutError:
+        return {"ok": False, "host": host, "hops": 0, "output": "traceroute timed out", "elapsed_ms": 0}
+    except Exception as e:
+        return {"ok": False, "host": host, "hops": 0, "output": str(e)[:300], "elapsed_ms": 0}
+
+
+@router.post("/ping-host", dependencies=[Depends(require_permission("tools:write"))])
+async def ping_host(body: HostRequest):
+    host = _validate_host(body.host)
+    if not host:
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    return await _ping_host_async(host)
+
+
+@router.post("/ping-internet", dependencies=[Depends(require_permission("tools:write"))])
+async def ping_internet():
+    return await _ping_host_async("8.8.8.8")
+
+
+@router.post("/traceroute", dependencies=[Depends(require_permission("tools:write"))])
+async def traceroute_host(body: HostRequest):
+    host = _validate_host(body.host)
+    if not host:
+        return JSONResponse({"ok": False, "error": "Invalid hostname"}, status_code=400)
+    return await _traceroute_async(host)
