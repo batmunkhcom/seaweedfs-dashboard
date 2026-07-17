@@ -127,7 +127,7 @@ async def create_backup(name: str | None = None) -> dict:
 
 
 async def list_backups() -> list[dict]:
-    await Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
+    Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
     db = await get_db()
     cursor = await db.execute(
@@ -156,7 +156,7 @@ async def list_backups() -> list[dict]:
 
 
 async def delete_backup(name: str) -> bool:
-    await Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
+    Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
     db = await get_db()
     cursor = await db.execute(
@@ -240,7 +240,7 @@ async def get_backup_status() -> dict:
 
 
 async def cleanup_old_backups() -> dict:
-    await Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
+    Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
     retention_days = await get_setting_int("backup_retention_days", 30)
     if retention_days <= 0:
