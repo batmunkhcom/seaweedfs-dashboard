@@ -1,6 +1,8 @@
 import asyncio
 import time
 
+import httpx
+
 from app.config import settings
 from app.database import get_db
 from app.services.seaweed_client import get_seaweed_client
@@ -83,7 +85,34 @@ class MetricsService:
 
         topology = data.get("Topology", {})
         ts = time.time()
+        node_ips: list[str] = []
+
+        for dc in topology.get("DataCenters", []):
+            for rack in dc.get("Racks", []):
+                for node in rack.get("DataNodes", []):
+                    node_url = node.get("Url", "")
+                    node_ip = node_url.split(":")[0] if node_url else "unknown"
+                    node_ips.append(node_ip)
+
         rows_to_insert: list[tuple] = []
+        disk_usage_by_ip: dict[str, float] = {}
+
+        timeout = httpx.Timeout(5.0, connect=3.0)
+        async with httpx.AsyncClient(timeout=timeout) as hc:
+            for node_ip in node_ips:
+                percent_used = 0.0
+                try:
+                    r = await hc.get(f"http://{node_ip}:8080/status")
+                    if r.status_code == 200:
+                        status = r.json()
+                        for ds in status.get("DiskStatuses", []):
+                            pct = ds.get("percent_used", 0)
+                            if pct > percent_used:
+                                percent_used = pct
+                except Exception:
+                    logger.warning("metrics_disk_status_failed", node=node_ip, exc_info=True)
+
+                disk_usage_by_ip[node_ip] = round(percent_used, 2)
 
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):
@@ -95,16 +124,11 @@ class MetricsService:
                     max_slots = node.get("Max", 0)
                     ec_shards = node.get("EcShards", 0)
 
-                    disk_usage_pct = 0.0
-                    if max_slots > 0:
-                        used = max_slots - free
-                        disk_usage_pct = round((used / max_slots) * 100, 2)
-
                     rows_to_insert.append((ts, node_ip, "volumes", volumes))
                     rows_to_insert.append((ts, node_ip, "free_slots", free))
                     rows_to_insert.append((ts, node_ip, "max_slots", max_slots))
-                    rows_to_insert.append((ts, node_ip, "disk_usage_pct", disk_usage_pct))
                     rows_to_insert.append((ts, node_ip, "ec_shards", ec_shards))
+                    rows_to_insert.append((ts, node_ip, "disk_usage_pct", disk_usage_by_ip.get(node_ip, 0.0)))
 
         if rows_to_insert:
             try:
@@ -124,9 +148,7 @@ class MetricsService:
 
         try:
             from app.routes.sse import broadcast
-            await broadcast("metrics_update", {
-                "last_updated": ts,
-            })
+            await broadcast("metrics_update", {"last_updated": ts})
         except Exception:
             pass
 

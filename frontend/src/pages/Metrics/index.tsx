@@ -8,6 +8,7 @@ import {
   CloseCircleOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
 import { getMetricsOverview, getMetricsNodes, getMetricsHistory, getMetricsAlive } from '../../services/api'
 import { useSSE } from '../../hooks/useSSE'
 import type { MetricsOverview, MetricsHistoryPoint, NodeHealthInfo, MetricsNodeInfo } from '../../types'
@@ -55,16 +56,12 @@ export default function MetricsPage() {
     setAliveLoading(false)
   }, [])
 
-  const fetchNodeDetail = useCallback(async (ip: string) => {
-    setSelectedNode(ip)
-  }, [])
-
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true)
     try {
       const data = await getMetricsHistory(
         selectedNode || undefined,
-        historyMetric.startsWith('cluster_') ? historyMetric.replace('cluster_', '') : historyMetric,
+        historyMetric,
         historyHours,
       )
       setHistory(data)
@@ -113,12 +110,11 @@ export default function MetricsPage() {
     { title: 'EC', dataIndex: 'ec_shards', key: 'ec' },
   ]
 
-  const historyChartData = history.length > 0 ? history.map(h => ({
+  const chartData = history.map((h) => ({
     time: formatTimestamp(h.timestamp),
     value: h.value,
-  })) : []
-
-  const maxHistoryValue = history.length > 0 ? Math.max(...history.map(h => h.value), 10) : 100
+    ts: h.timestamp,
+  }))
 
   return (
     <div>
@@ -155,7 +151,7 @@ export default function MetricsPage() {
                   size="small"
                   onRow={(record) => ({
                     style: { cursor: 'pointer' },
-                    onClick: () => fetchNodeDetail(record.node),
+                    onClick: () => setSelectedNode(selectedNode === record.node ? null : record.node),
                   })}
                   locale={{ emptyText: <Empty description="No nodes found" /> }}
                 />
@@ -191,35 +187,28 @@ export default function MetricsPage() {
                 }
               >
                 <Spin spinning={historyLoading}>
-                  {history.length > 0 ? (
-                    <div style={{ position: 'relative', height: 300 }}>
-                      <svg viewBox={`0 0 ${Math.max(historyChartData.length * 4, 300)} 240`} style={{ width: '100%', height: 300 }}>
-                        {historyChartData.length > 1 && (
-                          <polyline
-                            fill="none"
-                            stroke="#a855f7"
-                            strokeWidth="2"
-                            points={historyChartData.map((d, i) => {
-                              const x = (i / Math.max(historyChartData.length - 1, 1)) * Math.max(historyChartData.length * 4, 300)
-                              const y = 240 - (d.value / maxHistoryValue) * 200
-                              return `${x},${y}`
-                            }).join(' ')}
-                          />
-                        )}
-                        {historyChartData.filter((_, i) => i % Math.max(Math.floor(historyChartData.length / 8), 1) === 0).map((d, i) => (
-                          <text key={i} x={(i / Math.max(historyChartData.length - 1, 1)) * Math.max(historyChartData.length * 4, 300)} y={235} fill="#64748b" fontSize="10" textAnchor={i === 0 ? 'start' : 'middle'}>
-                            {d.time}
-                          </text>
-                        ))}
-                      </svg>
-                      <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
-                        {historyMetric.replace(/_/g, ' ')} {selectedNode ? `— ${selectedNode}` : '— cluster average'}
-                      </div>
-                    </div>
+                  {chartData.length > 1 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
+                        <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
+                        <YAxis stroke="#64748b" fontSize={11} domain={['auto', 'auto']} />
+                        <RechartsTooltip
+                          contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }}
+                          labelStyle={{ color: '#94a3b8' }}
+                        />
+                        <Line type="monotone" dataKey="value" stroke="#a855f7" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   ) : (
                     <Empty description="No history data yet. Metrics are collected every 60 seconds." />
                   )}
                 </Spin>
+                {chartData.length > 1 && (
+                  <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
+                    {metricOptions.find(m => m.value === historyMetric)?.label || historyMetric} {selectedNode ? `— ${selectedNode}` : '— cluster average'}
+                  </div>
+                )}
               </Card>
             ),
           },
