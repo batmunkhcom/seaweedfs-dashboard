@@ -27,6 +27,7 @@ import {
   ThunderboltOutlined,
   LineChartOutlined,
   SendOutlined,
+  FileSearchOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -57,6 +58,7 @@ const baseMenuItems = [
   { key: '/tools', icon: <ThunderboltOutlined />, label: 'Tools' },
   { key: '/metrics', icon: <LineChartOutlined />, label: 'Metrics' },
   { key: '/webhooks', icon: <SendOutlined />, label: 'Webhooks' },
+  { key: '/logs', icon: <FileSearchOutlined />, label: 'Logs' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]

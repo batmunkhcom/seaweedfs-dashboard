@@ -27,6 +27,7 @@ import type {
   Webhook,
   WebhookDelivery,
   WebhookTemplate,
+  LokiQueryResult,
 } from '../types'
 
 const api = axios.create({
@@ -544,4 +545,24 @@ export async function getWebhookDeliveryDetail(webhookId: number, deliveryId: nu
 export async function getWebhookTemplates(): Promise<WebhookTemplate> {
   const { data } = await api.get('/webhooks/templates')
   return data
+}
+
+export async function getLokiStatus() {
+  const { data } = await api.get('/logs/status')
+  return data
+}
+
+export async function queryLokiLogs(query: string, start?: string, end?: string, limit = 500, direction = 'backward'): Promise<LokiQueryResult> {
+  const { data } = await api.get('/logs/query', { params: { query, start, end, limit, direction } })
+  return data
+}
+
+export async function getLokiLabels(): Promise<string[]> {
+  const { data } = await api.get('/logs/labels')
+  return Array.isArray(data) ? data : []
+}
+
+export async function getLokiLabelValues(label: string): Promise<string[]> {
+  const { data } = await api.get(`/logs/labels/${encodeURIComponent(label)}/values`)
+  return Array.isArray(data) ? data : []
 }

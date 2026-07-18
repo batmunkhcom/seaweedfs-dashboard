@@ -25,6 +25,7 @@ import ChatbotPage from './pages/Chatbot'
 import ToolsPage from './pages/Tools'
 import MetricsPage from './pages/Metrics'
 import WebhooksPage from './pages/Webhooks'
+import LogsPage from './pages/Logs'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -93,6 +94,7 @@ function App() {
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/metrics" element={<MetricsPage />} />
             <Route path="/webhooks" element={<WebhooksPage />} />
+            <Route path="/logs" element={<LogsPage />} />
             </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

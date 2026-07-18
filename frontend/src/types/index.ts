@@ -373,3 +373,19 @@ export interface WebhookTemplate {
   platforms: { value: string; label: string; icon: string; description: string }[]
   events: { value: string; label: string }[]
 }
+
+export interface LokiStream {
+  stream: Record<string, string>
+  values: [string, string][]
+}
+
+export interface LokiQueryResult {
+  result?: LokiStream[]
+  error?: string
+}
+
+export interface LokiLogEntry {
+  timestamp: string
+  line: string
+  labels: Record<string, string>
+}
