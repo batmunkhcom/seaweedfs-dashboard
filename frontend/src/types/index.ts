@@ -451,3 +451,33 @@ export interface LifecycleTransition {
   status: string
   created_at: string
 }
+
+export interface AclPolicy {
+  id: number
+  name: string
+  description: string
+  path: string
+  user_pattern: string
+  permissions: string
+  priority: number
+  enabled: boolean
+  created_at: string
+}
+
+export interface AclAuditEntry {
+  id: number
+  user_name: string
+  action: string
+  path: string
+  result: string
+  details: string
+  created_at: string
+}
+
+export interface AclTestResult {
+  user: string
+  path: string
+  action: string
+  allowed: boolean
+  matched_rule: string | null
+}

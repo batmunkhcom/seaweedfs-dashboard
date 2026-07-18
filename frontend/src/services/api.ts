@@ -35,6 +35,9 @@ import type {
   LifecyclePolicy,
   CollectionTtl,
   LifecycleTransition,
+  AclPolicy,
+  AclAuditEntry,
+  AclTestResult,
 } from '../types'
 
 const api = axios.create({
@@ -676,4 +679,38 @@ export async function getLifecycleTransitions(bucket?: string): Promise<Lifecycl
 export async function getLifecycleTemplates(): Promise<{ templates: Record<string, { rules: Record<string, unknown>[] }> }> {
   const { data } = await api.get('/lifecycle/templates')
   return data
+}
+
+export async function getAclPolicies(): Promise<AclPolicy[]> {
+  const { data } = await api.get('/acl/policies')
+  return Array.isArray(data) ? data : []
+}
+
+export async function createAclPolicy(body: Record<string, unknown>) {
+  const { data } = await api.post('/acl/policies', body)
+  return data
+}
+
+export async function updateAclPolicy(id: number, body: Record<string, unknown>) {
+  const { data } = await api.put(`/acl/policies/${id}`, body)
+  return data
+}
+
+export async function deleteAclPolicy(id: number) {
+  await api.delete(`/acl/policies/${id}`)
+}
+
+export async function reorderAclPolicies(order: number[]) {
+  const { data } = await api.put('/acl/policies/reorder', { order })
+  return data
+}
+
+export async function testAclPermission(user: string, path: string, action: string): Promise<AclTestResult> {
+  const { data } = await api.post('/acl/policies/test', { user, path, action })
+  return data
+}
+
+export async function getAclAuditLog(user?: string): Promise<AclAuditEntry[]> {
+  const { data } = await api.get('/acl/audit', { params: { user } })
+  return Array.isArray(data) ? data : []
 }

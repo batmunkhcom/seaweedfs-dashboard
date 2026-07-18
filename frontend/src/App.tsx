@@ -28,6 +28,7 @@ import WebhooksPage from './pages/Webhooks'
 import LogsPage from './pages/Logs'
 import GatewaysPage from './pages/Gateways'
 import LifecyclePage from './pages/Lifecycle'
+import AclPage from './pages/ACL'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -99,6 +100,7 @@ function App() {
             <Route path="/logs" element={<LogsPage />} />
             <Route path="/gateways" element={<GatewaysPage />} />
             <Route path="/lifecycle" element={<LifecyclePage />} />
+            <Route path="/acl" element={<AclPage />} />
             </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
