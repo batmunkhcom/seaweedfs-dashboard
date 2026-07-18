@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Input, Space, Tag, message, Row, Col, Typography, Alert, Progress, Tooltip, Popconfirm, Switch } from 'antd'
+import { Card, Table, Button, Modal, Input, Space, Tag, message, Row, Col, Typography, Alert, Progress, Tooltip, Popconfirm, Switch, Select } from 'antd'
 import {
   CloudUploadOutlined,
   CheckCircleFilled,
@@ -14,7 +14,7 @@ import {
   SettingOutlined,
   CloudServerOutlined,
 } from '@ant-design/icons'
-import { getBackupStatus, triggerBackupSync, listSnapshots, createSnapshot, deleteSnapshot, restoreBackup } from '../../services/api'
+import { getBackupStatus, triggerBackupSync, listSnapshots, createSnapshot, deleteSnapshot, restoreBackup, getS3Buckets } from '../../services/api'
 import type { BackupStatus, Snapshot } from '../../types'
 
 const { Text } = Typography
@@ -49,6 +49,7 @@ export default function BackupPage() {
   const [uploadS3, setUploadS3] = useState(false)
   const [s3Bucket, setS3Bucket] = useState('')
   const [s3Endpoint, setS3Endpoint] = useState('')
+  const [s3Buckets, setS3Buckets] = useState<string[]>([])
   const [apiKey, setApiKey] = useState('')
   const [keySaved, setKeySaved] = useState(false)
   const [, setShowApiConfig] = useState(false)
@@ -69,6 +70,7 @@ export default function BackupPage() {
    }
 
   useEffect(() => { fetch() }, [])
+  useEffect(() => { getS3Buckets().then((b: any[]) => setS3Buckets(b.map(x => x.name))).catch(() => {}) }, [])
 
   const doSync = async () => {
     if (!apiKey.trim()) {
@@ -375,7 +377,7 @@ export default function BackupPage() {
             </div>
             {uploadS3 && (
               <>
-                <Input addonBefore="Bucket" value={s3Bucket} onChange={(e) => setS3Bucket(e.target.value)} placeholder="backup-bucket" />
+                <div>Bucket: <Select showSearch value={s3Bucket || undefined} onChange={setS3Bucket} style={{ width: '100%' }} placeholder="Select S3 bucket" options={s3Buckets.map(b => ({ value: b, label: b }))} /></div>
                 <Input addonBefore="Endpoint" value={s3Endpoint} onChange={(e) => setS3Endpoint(e.target.value)} placeholder="http://172.16.0.2:8333" />
               </>
             )}
