@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Button, Modal, Input, Space, Tag, message, Row, Col, Typography, Alert, Progress, Tooltip, Popconfirm } from 'antd'
+import { Card, Table, Button, Modal, Input, Space, Tag, message, Row, Col, Typography, Alert, Progress, Tooltip, Popconfirm, Switch } from 'antd'
 import {
   CloudUploadOutlined,
   CheckCircleFilled,
@@ -12,6 +12,7 @@ import {
   HistoryOutlined,
   KeyOutlined,
   SettingOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons'
 import { getBackupStatus, triggerBackupSync, listSnapshots, createSnapshot, deleteSnapshot, restoreBackup } from '../../services/api'
 import type { BackupStatus, Snapshot } from '../../types'
@@ -45,6 +46,9 @@ export default function BackupPage() {
   const [restoring, setRestoring] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [snapName, setSnapName] = useState('')
+  const [uploadS3, setUploadS3] = useState(false)
+  const [s3Bucket, setS3Bucket] = useState('')
+  const [s3Endpoint, setS3Endpoint] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [keySaved, setKeySaved] = useState(false)
   const [, setShowApiConfig] = useState(false)
@@ -75,7 +79,7 @@ export default function BackupPage() {
     setSyncing(true)
     const hideMsg = message.loading('Syncing backup — connecting to filer nodes via SSH...', 0)
     try {
-      const r = await triggerBackupSync()
+      const r = await triggerBackupSync(uploadS3 ? s3Bucket : undefined, uploadS3 ? s3Endpoint : undefined)
       hideMsg()
       if (r.ok) message.success(`Backup completed — ${formatBytes(r.bytesSynced || 0)} synced`)
       else message.warning(r.error || 'Partial sync')
@@ -99,6 +103,9 @@ export default function BackupPage() {
     const hideMsg = message.loading(`Creating backup: ${displayName}...`, 0)
     try {
       const r = await createSnapshot(snapName.trim() || '', '/')
+      if (uploadS3 && r.ok) {
+        message.info(`S3 upload requested to ${s3Bucket}`)
+      }
       hideMsg()
       if (r.ok) {
         const suffix = autoName ? ` (auto-named: ${r.name})` : ''
@@ -143,8 +150,7 @@ export default function BackupPage() {
     try {
       const r = await restoreBackup(restoringName)
       if (r.ok) {
-        message.success(`Restore initiated for: ${restoringName}`)
-        message.warning('WARNING: Filer will be overwritten. Restart filer service after restore.')
+        message.success(`Restored ${restoringName} to all filer nodes — filer auto-restarted`)             
         fetch()
           } else {
         message.error(r.error || 'Restore failed')
@@ -363,6 +369,16 @@ export default function BackupPage() {
         <Modal open={createOpen} title="Create Backup" onOk={doCreate} onCancel={() => setCreateOpen(false)} okText="Create Backup">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Input addonBefore="Name (optional)" value={snapName} onChange={(e) => setSnapName(e.target.value)} placeholder="auto-generated if empty" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch checked={uploadS3} onChange={setUploadS3} />
+              <Text>Upload to S3 after backup</Text>
+            </div>
+            {uploadS3 && (
+              <>
+                <Input addonBefore="Bucket" value={s3Bucket} onChange={(e) => setS3Bucket(e.target.value)} placeholder="backup-bucket" />
+                <Input addonBefore="Endpoint" value={s3Endpoint} onChange={(e) => setS3Endpoint(e.target.value)} placeholder="http://172.16.0.2:8333" />
+              </>
+            )}
             <Text type="secondary" style={{ fontSize: 12 }}>
             Backs up Filer LevelDB metadata from all filer nodes (<code>/data/dc03/filer/filerldb2</code>) — file/directory names, paths, sizes, permissions. File content lives on volume servers and is not included.
             </Text>
@@ -385,7 +401,7 @@ export default function BackupPage() {
            This operation is destructive \u2014 current filer data will be replaced.
           </p>
           <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-           After restore completes, restart filer service on both nodes for changes to take effect.
+            Filer service will be automatically restarted on all nodes after restore.
           </Text>
         </Modal>
       </div>

@@ -262,8 +262,8 @@ export async function getBackupStatus(): Promise<BackupStatus> {
   return data
 }
 
-export async function triggerBackupSync() {
-  const { data } = await api.post('/backup/sync')
+export async function triggerBackupSync(s3Bucket?: string, s3Endpoint?: string) {
+  const { data } = await api.post('/backup/sync', { s3_bucket: s3Bucket || '', s3_endpoint: s3Endpoint || '' })
   return data
 }
 

@@ -108,7 +108,7 @@ async def _sftp_fetch(host: str, remote_path: str, local_path: Path) -> bool:
     return result["ok"]
 
 
-async def create_backup(name: str | None = None) -> dict:
+async def create_backup(name: str | None = None, upload_s3: bool = False, s3_bucket: str = "", s3_endpoint: str = "") -> dict:
     enabled = await get_setting("backup_enabled", "true")
     if enabled.lower() != "true":
         return {"ok": False, "error": "Backup is disabled. Enable in runtime_settings."}
@@ -169,6 +169,17 @@ async def create_backup(name: str | None = None) -> dict:
     ok = all(v == "ok" for v in results.values()) and bool(total_bytes)
     status = "uploaded" if ok else ("failed" if error_msg else "partial")
 
+    s3_uploaded = False
+    if upload_s3 and s3_bucket and ok:
+        try:
+            s3_result = await _upload_to_s3(backup_file, s3_bucket, s3_endpoint)
+            s3_uploaded = s3_result.get("ok", False)
+            if s3_uploaded:
+                status = "uploaded_s3"
+            logger.info("backup_s3_upload", bucket=s3_bucket, ok=s3_uploaded)
+        except Exception:
+            logger.error("backup_s3_upload_failed", exc_info=True)
+
     await db.execute(
         "UPDATE backup_snapshots SET size_bytes=?, status=?, created_at=? WHERE id=?",
         (total_bytes, status, finished_at, sync_id),
@@ -185,6 +196,7 @@ async def create_backup(name: str | None = None) -> dict:
         "bytesSynced": total_bytes,
         "results": results,
         "finishedAt": finished_at,
+        "s3Uploaded": s3_uploaded,
     }
 
 
@@ -256,7 +268,7 @@ async def restore_backup(name: str) -> dict:
     results: dict[str, str] = {}
     error_msg: str | None = None
 
-    for host in filer_hosts[:1]:
+    for host in filer_hosts:
         try:
             tmp_remote = f"/tmp/filer-restore-{name}-{secrets.token_hex(8)}.tar.gz"
             sftp_ok = await _sftp_push(host, backup_file, tmp_remote)
@@ -267,6 +279,11 @@ async def restore_backup(name: str) -> dict:
             )
             if exit_code2 != 0:
                 raise RuntimeError(f"Extract failed: {stderr2[:200]}")
+
+            restart_service = await get_setting("backup_restart_filer", "true")
+            if restart_service.lower() == "true":
+                await _ssh_exec(host, "systemctl restart seaweed-filer 2>/dev/null || service seaweed-filer restart 2>/dev/null || echo 'no-systemctl'")
+                await asyncio.sleep(2)
 
             results[host] = "ok"
             logger.info("backup_restore_ok", host=host, name=name)
@@ -301,6 +318,21 @@ async def get_backup_status() -> dict:
     }
 
 
+async def _upload_to_s3(file_path: Path, bucket: str, endpoint: str = "") -> dict:
+    try:
+        import httpx
+        import base64
+        async with httpx.AsyncClient(timeout=300) as hc:
+            with open(file_path, "rb") as f:
+                data = f.read()
+            key = file_path.name
+            url = f"{endpoint or 'http://172.16.0.2:8333'}/{bucket}/{key}"
+            resp = await hc.put(url, content=data)
+            return {"ok": resp.status_code in (200, 204), "status": resp.status_code}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
 async def cleanup_old_backups() -> dict:
     Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
 
@@ -308,7 +340,7 @@ async def cleanup_old_backups() -> dict:
     if retention_days <= 0:
         return {"ok": True, "deleted": 0, "reason": "retention disabled"}
 
-    cutoff = datetime.now(timezone.utc) - __import__("datetime").timedelta(days=retention_days)
+    cutoff = datetime.now(timezone.utc) - datetime.timedelta(days=retention_days)
     cutoff_iso = cutoff.isoformat()
 
     db = await get_db()
