@@ -300,6 +300,8 @@ export interface MetricsOverview {
   total_volumes: number
   total_free_slots: number
   total_max_slots: number
+  total_disk_gb: number
+  total_disk_free_gb: number
   cluster_disk_usage_pct: number
   nodes_total: number
   nodes_healthy: number
@@ -312,6 +314,8 @@ export interface NodeMetrics {
   free_slots: number
   max_slots: number
   disk_usage_pct: number
+  disk_total_gb: number
+  disk_free_gb: number
   ec_shards: number
   alive: boolean
   last_seen: number
@@ -320,6 +324,7 @@ export interface NodeMetrics {
 export interface MetricsHistoryPoint {
   timestamp: number
   value: number
+  node?: string
 }
 
 export interface NodeHealthInfo {
@@ -336,4 +341,6 @@ export interface MetricsNodeInfo {
   max_slots: number
   ec_shards: number
   disk_usage_pct: number
+  disk_total_gb: number
+  disk_free_gb: number
 }

@@ -5,101 +5,66 @@ import httpx
 from fastapi import APIRouter
 
 from app.database import get_db
-from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 logger = get_logger("metrics")
 
 
-async def _fetch_real_disk_usage(node_ips: list[str]) -> dict[str, float]:
-    result: dict[str, float] = {}
-    timeout = httpx.Timeout(5.0, connect=3.0)
-    async with httpx.AsyncClient(timeout=timeout) as hc:
-        for ip in node_ips:
-            percent_used = 0.0
-            try:
-                r = await hc.get(f"http://{ip}:8080/status")
-                if r.status_code == 200:
-                    status = r.json()
-                    for ds in status.get("DiskStatuses", []):
-                        pct = ds.get("percent_used", 0)
-                        if pct > percent_used:
-                            percent_used = pct
-            except Exception:
-                pass
-            result[ip] = round(percent_used, 2)
-    return result
-
-
-async def _extract_nodes_from_topology():
-    client = get_seaweed_client()
-    try:
-        resp = await client.master_get("/dir/status?pretty=y")
-        data = resp.json()
-    except Exception:
-        return [], {}
-
-    nodes: list[dict] = []
-    topology = data.get("Topology", {})
-    for dc in topology.get("DataCenters", []):
-        for rack in dc.get("Racks", []):
-            for node in rack.get("DataNodes", []):
-                node_url = node.get("Url", "")
-                node_ip = node_url.split(":")[0] if node_url else "unknown"
-                nodes.append({"ip": node_ip, "node": node})
-    return nodes, topology
+async def _get_latest_metrics(metric: str) -> list[dict]:
+    db = await get_db()
+    cursor = await db.execute(
+        """
+        SELECT m.node, m.value, m.timestamp
+        FROM metrics_history m
+        INNER JOIN (
+            SELECT node, MAX(timestamp) as max_ts
+            FROM metrics_history
+            WHERE metric_type = ?
+            GROUP BY node
+        ) latest ON m.node = latest.node AND m.timestamp = latest.max_ts AND m.metric_type = ?
+        """,
+        (metric, metric),
+    )
+    rows = await cursor.fetchall()
+    return [{"node": r["node"], "value": r["value"]} for r in rows]
 
 
 @router.get("/overview")
 async def metrics_overview():
-    nodes, topology = await _extract_nodes_from_topology()
-    if not nodes:
-        return {
-            "total_volumes": 0, "total_free_slots": 0, "total_max_slots": 0,
-            "cluster_disk_usage_pct": 0, "nodes_total": 0, "nodes_healthy": 0, "last_updated": time.time(),
-        }
+    db = await get_db()
 
-    node_ips = [n["ip"] for n in nodes]
-    disk_usage_map = await _fetch_real_disk_usage(node_ips)
+    latest_ts = time.time() - 120
+    cursor = await db.execute(
+        "SELECT COUNT(DISTINCT node) as cnt FROM metrics_history WHERE timestamp > ? AND metric_type = 'disk_usage_pct'",
+        (latest_ts,),
+    )
+    row = await cursor.fetchone()
+    nodes_healthy = row["cnt"] if row else 0
 
-    total_volumes = 0
-    total_free = 0
-    total_max = 0
-    total_disk_usage = 0.0
-    nodes_with_disk = 0
+    disk = await _get_latest_metrics("disk_usage_pct")
+    volumes_rows = await _get_latest_metrics("volumes")
+    free_slots = await _get_latest_metrics("free_slots")
+    max_slots = await _get_latest_metrics("max_slots")
+    disk_total = await _get_latest_metrics("disk_total_gb")
+    disk_free = await _get_latest_metrics("disk_free_gb")
 
-    for n in nodes:
-        node = n["node"]
-        total_volumes += node.get("Volumes", 0)
-        total_free += node.get("Free", 0)
-        total_max += node.get("Max", 0)
-        usage = disk_usage_map.get(n["ip"], 0)
-        total_disk_usage += usage
-        if usage > 0:
-            nodes_with_disk += 1
+    total_volumes = sum(r["value"] for r in volumes_rows)
+    total_free = sum(r["value"] for r in free_slots)
+    total_max = sum(r["value"] for r in max_slots)
+    total_disk_gb = sum(r["value"] for r in disk_total)
+    total_disk_free = sum(r["value"] for r in disk_free)
 
-    cluster_usage_pct = round(total_disk_usage / max(nodes_with_disk, 1), 2) if nodes_with_disk > 0 else 0.0
-
-    nodes_healthy = 0
-    try:
-        db = await get_db()
-        latest_ts = time.time() - 120
-        cursor = await db.execute(
-            "SELECT COUNT(DISTINCT node) as cnt FROM metrics_history WHERE timestamp > ? AND metric_type = 'disk_usage_pct'",
-            (latest_ts,),
-        )
-        row = await cursor.fetchone()
-        nodes_healthy = row["cnt"] if row else 0
-    except Exception:
-        pass
+    cluster_usage = round(sum(r["value"] for r in disk) / max(len(disk), 1), 2) if disk else 0.0
 
     return {
         "total_volumes": total_volumes,
         "total_free_slots": total_free,
         "total_max_slots": total_max,
-        "cluster_disk_usage_pct": cluster_usage_pct,
-        "nodes_total": len(nodes),
+        "total_disk_gb": round(total_disk_gb, 1),
+        "total_disk_free_gb": round(total_disk_free, 1),
+        "cluster_disk_usage_pct": cluster_usage,
+        "nodes_total": len(disk),
         "nodes_healthy": nodes_healthy,
         "last_updated": time.time(),
     }
@@ -107,30 +72,42 @@ async def metrics_overview():
 
 @router.get("/node/{ip}")
 async def metrics_node(ip: str):
-    nodes, topology = await _extract_nodes_from_topology()
-    disk_usage_map = await _fetch_real_disk_usage([ip])
+    db = await get_db()
+    metrics = ["volumes", "free_slots", "max_slots", "disk_usage_pct", "ec_shards", "disk_total_gb", "disk_free_gb"]
+    result = {"node": ip, "alive": False, "last_seen": 0}
 
-    node_data = {"node": ip, "volumes": 0, "free_slots": 0, "max_slots": 0, "disk_usage_pct": 0, "ec_shards": 0, "alive": False, "last_seen": 0}
+    for m in metrics:
+        cursor = await db.execute(
+            "SELECT value, timestamp FROM metrics_history WHERE node = ? AND metric_type = ? ORDER BY timestamp DESC LIMIT 1",
+            (ip, m),
+        )
+        row = await cursor.fetchone()
+        result[m] = row["value"] if row else 0
+        if m == "disk_usage_pct" and row:
+            result["last_seen"] = row["timestamp"]
 
-    for n in nodes:
-        if n["ip"] == ip:
-            node = n["node"]
-            node_data["volumes"] = node.get("Volumes", 0)
-            node_data["free_slots"] = node.get("Free", 0)
-            node_data["max_slots"] = node.get("Max", 0)
-            node_data["ec_shards"] = node.get("EcShards", 0)
-            node_data["disk_usage_pct"] = disk_usage_map.get(ip, 0)
-            node_data["alive"] = True
-            node_data["last_seen"] = time.time()
-            break
+    cursor = await db.execute(
+        "SELECT COUNT(*) as cnt FROM metrics_history WHERE node = ? AND timestamp > ?",
+        (ip, time.time() - 120),
+    )
+    row = await cursor.fetchone()
+    result["alive"] = (row["cnt"] if row else 0) > 0
 
-    return node_data
+    return result
 
 
 @router.get("/history")
-async def metrics_history(node: str | None = None, metric: str = "disk_usage_pct", hours: int = 24):
+async def metrics_history(node: str | None = None, metric: str = "disk_usage_pct", hours: int = 24, all_nodes: bool = False):
     db = await get_db()
     cutoff = time.time() - (hours * 3600)
+
+    if all_nodes:
+        cursor = await db.execute(
+            "SELECT timestamp, value, node FROM metrics_history WHERE metric_type = ? AND timestamp >= ? ORDER BY node, timestamp ASC",
+            (metric, cutoff),
+        )
+        rows = await cursor.fetchall()
+        return [{"timestamp": r["timestamp"], "value": r["value"], "node": r["node"]} for r in rows]
 
     if node:
         cursor = await db.execute(
@@ -149,40 +126,45 @@ async def metrics_history(node: str | None = None, metric: str = "disk_usage_pct
 
 @router.get("/nodes")
 async def metrics_nodes():
-    nodes, topology = await _extract_nodes_from_topology()
-    if not nodes:
-        return []
-
-    node_ips = [n["ip"] for n in nodes]
-    disk_usage_map = await _fetch_real_disk_usage(node_ips)
+    disk = await _get_latest_metrics("disk_usage_pct")
+    volumes = {r["node"]: r["value"] for r in await _get_latest_metrics("volumes")}
+    free_s = {r["node"]: r["value"] for r in await _get_latest_metrics("free_slots")}
+    max_s = {r["node"]: r["value"] for r in await _get_latest_metrics("max_slots")}
+    ec = {r["node"]: r["value"] for r in await _get_latest_metrics("ec_shards")}
+    disk_total = {r["node"]: r["value"] for r in await _get_latest_metrics("disk_total_gb")}
+    disk_free = {r["node"]: r["value"] for r in await _get_latest_metrics("disk_free_gb")}
 
     result = []
-    for n in nodes:
-        node = n["node"]
+    for d in disk:
+        node = d["node"]
         result.append({
-            "node": n["ip"],
-            "volumes": node.get("Volumes", 0),
-            "free_slots": node.get("Free", 0),
-            "max_slots": node.get("Max", 0),
-            "ec_shards": node.get("EcShards", 0),
-            "disk_usage_pct": disk_usage_map.get(n["ip"], 0),
+            "node": node,
+            "volumes": int(volumes.get(node, 0)),
+            "free_slots": int(free_s.get(node, 0)),
+            "max_slots": int(max_s.get(node, 0)),
+            "ec_shards": int(ec.get(node, 0)),
+            "disk_usage_pct": d["value"],
+            "disk_total_gb": disk_total.get(node, 0),
+            "disk_free_gb": disk_free.get(node, 0),
         })
     return result
 
 
 @router.get("/alive")
 async def metrics_alive():
-    nodes, topology = await _extract_nodes_from_topology()
-    if not nodes:
+    nodes_rows = await _get_latest_metrics("disk_usage_pct")
+    if not nodes_rows:
         return []
 
+    node_ips = [r["node"] for r in nodes_rows]
     timeout = httpx.Timeout(5.0, connect=3.0)
+
     async with httpx.AsyncClient(timeout=timeout) as hc:
-        async def check_one(n):
-            status = {"node": n["ip"], "alive": False, "latency_ms": None, "error": None}
+        async def check_one(ip):
+            status = {"node": ip, "alive": False, "latency_ms": None, "error": None}
             try:
                 t0 = time.monotonic()
-                r = await hc.get(f"http://{n['ip']}:8080/status", timeout=5.0)
+                r = await hc.get(f"http://{ip}:8080/status", timeout=5.0)
                 latency = round((time.monotonic() - t0) * 1000, 1)
                 status["alive"] = r.status_code == 200
                 status["latency_ms"] = latency
@@ -190,4 +172,4 @@ async def metrics_alive():
                 status["error"] = str(e)[:200]
             return status
 
-        return await asyncio.gather(*[check_one(n) for n in nodes])
+        return await asyncio.gather(*[check_one(ip) for ip in node_ips])

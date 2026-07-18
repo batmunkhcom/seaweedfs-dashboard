@@ -96,23 +96,33 @@ class MetricsService:
 
         rows_to_insert: list[tuple] = []
         disk_usage_by_ip: dict[str, float] = {}
+        disk_total_by_ip: dict[str, float] = {}
+        disk_free_by_ip: dict[str, float] = {}
 
         timeout = httpx.Timeout(5.0, connect=3.0)
         async with httpx.AsyncClient(timeout=timeout) as hc:
             for node_ip in node_ips:
                 percent_used = 0.0
+                disk_total = 0.0
+                disk_free = 0.0
                 try:
                     r = await hc.get(f"http://{node_ip}:8080/status")
                     if r.status_code == 200:
                         status = r.json()
                         for ds in status.get("DiskStatuses", []):
+                            all_bytes = ds.get("all", 0)
+                            free_bytes = ds.get("free", 0)
                             pct = ds.get("percent_used", 0)
+                            disk_total += all_bytes
+                            disk_free += free_bytes
                             if pct > percent_used:
                                 percent_used = pct
                 except Exception:
                     logger.warning("metrics_disk_status_failed", node=node_ip, exc_info=True)
 
                 disk_usage_by_ip[node_ip] = round(percent_used, 2)
+                disk_total_by_ip[node_ip] = round(disk_total / (1024**3), 1)
+                disk_free_by_ip[node_ip] = round(disk_free / (1024**3), 1)
 
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):
@@ -129,6 +139,8 @@ class MetricsService:
                     rows_to_insert.append((ts, node_ip, "max_slots", max_slots))
                     rows_to_insert.append((ts, node_ip, "ec_shards", ec_shards))
                     rows_to_insert.append((ts, node_ip, "disk_usage_pct", disk_usage_by_ip.get(node_ip, 0.0)))
+                    rows_to_insert.append((ts, node_ip, "disk_total_gb", disk_total_by_ip.get(node_ip, 0.0)))
+                    rows_to_insert.append((ts, node_ip, "disk_free_gb", disk_free_by_ip.get(node_ip, 0.0)))
 
         if rows_to_insert:
             try:

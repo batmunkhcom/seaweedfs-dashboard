@@ -8,13 +8,20 @@ import {
   CloseCircleOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { getMetricsOverview, getMetricsNodes, getMetricsHistory, getMetricsAlive } from '../../services/api'
 import { useSSE } from '../../hooks/useSSE'
 import type { MetricsOverview, MetricsHistoryPoint, NodeHealthInfo, MetricsNodeInfo } from '../../types'
 
+const COLORS = ['#a855f7', '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4']
+
 function formatTimestamp(ts: number): string {
   return new Date(ts * 1000).toLocaleTimeString()
+}
+
+function formatGB(gb: number): string {
+  if (gb >= 1000) return `${(gb / 1000).toFixed(1)} TB`
+  return `${gb.toFixed(0)} GB`
 }
 
 export default function MetricsPage() {
@@ -63,6 +70,7 @@ export default function MetricsPage() {
         selectedNode || undefined,
         historyMetric,
         historyHours,
+        !selectedNode,
       )
       setHistory(data)
     } catch {}
@@ -78,7 +86,8 @@ export default function MetricsPage() {
     { value: 'volumes', label: 'Volume Count' },
     { value: 'free_slots', label: 'Free Slots' },
     { value: 'max_slots', label: 'Max Slots' },
-    { value: 'ec_shards', label: 'EC Shards' },
+    { value: 'disk_total_gb', label: 'Disk Total GB' },
+    { value: 'disk_free_gb', label: 'Disk Free GB' },
   ]
 
   const aliveColumns = [
@@ -101,20 +110,38 @@ export default function MetricsPage() {
   const nodesColumns = [
     { title: 'Node', dataIndex: 'node', key: 'node' },
     { title: 'Volumes', dataIndex: 'volumes', key: 'volumes' },
-    { title: 'Free', dataIndex: 'free_slots', key: 'free' },
-    { title: 'Max', dataIndex: 'max_slots', key: 'max' },
     {
-      title: 'Usage', dataIndex: 'disk_usage_pct', key: 'usage',
-      render: (v: number) => <Progress percent={v} size="small" status={v > 85 ? 'exception' : v > 60 ? 'active' : 'normal'} format={(p) => `${p?.toFixed(1)}%`} />,
+      title: 'Disk', dataIndex: 'disk_total_gb', key: 'disk',
+      render: (_: number, r: MetricsNodeInfo) => (
+        <Tooltip title={`${formatGB(r.disk_free_gb)} free / ${formatGB(r.disk_total_gb)} total`}>
+          <Progress
+            percent={r.disk_total_gb > 0 ? ((r.disk_total_gb - r.disk_free_gb) / r.disk_total_gb) * 100 : 0}
+            size="small"
+            status={r.disk_usage_pct > 85 ? 'exception' : r.disk_usage_pct > 60 ? 'active' : 'normal'}
+            format={() => `${r.disk_usage_pct.toFixed(1)}%`}
+          />
+        </Tooltip>
+      ),
     },
+    { title: 'Vol Slots', key: 'slots', render: (_: number, r: MetricsNodeInfo) => `${r.volumes}/${r.max_slots}` },
     { title: 'EC', dataIndex: 'ec_shards', key: 'ec' },
   ]
 
-  const chartData = history.map((h) => ({
-    time: formatTimestamp(h.timestamp),
-    value: h.value,
-    ts: h.timestamp,
-  }))
+  const isMultiNode = !selectedNode && history.some(h => h.node)
+  const nodesInHistory = isMultiNode ? [...new Set(history.filter(h => h.node).map(h => h.node!))] : []
+  const chartData = isMultiNode
+    ? (() => {
+        const buckets: Record<number, Record<string, number>> = {}
+        history.forEach(h => {
+          const bucket = Math.round(h.timestamp / 60) * 60
+          if (!buckets[bucket]) buckets[bucket] = {}
+          buckets[bucket][h.node!] = h.value
+        })
+        return Object.entries(buckets)
+          .sort(([a], [b]) => Number(a) - Number(b))
+          .map(([ts, values]) => ({ time: formatTimestamp(Number(ts)), ...values }))
+      })()
+    : history.map(h => ({ time: formatTimestamp(h.timestamp), value: h.value }))
 
   return (
     <div>
@@ -130,7 +157,7 @@ export default function MetricsPage() {
             <Card><Statistic title="Disk Usage" value={overview?.cluster_disk_usage_pct || 0} suffix="%" precision={1} valueStyle={{ color: (overview?.cluster_disk_usage_pct || 0) > 85 ? '#ef4444' : '#a855f7' }} /></Card>
           </Col>
           <Col xs={12} sm={6}>
-            <Card><Statistic title="Free Slots" value={overview?.total_free_slots || 0} /></Card>
+            <Card><Statistic title="Free Disk" value={formatGB(overview?.total_disk_free_gb || 0)} /></Card>
           </Col>
         </Row>
       </Spin>
@@ -197,18 +224,26 @@ export default function MetricsPage() {
                           contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }}
                           labelStyle={{ color: '#94a3b8' }}
                         />
-                        <Line type="monotone" dataKey="value" stroke="#a855f7" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        {isMultiNode ? (
+                          <>
+                            {nodesInHistory.map((node, i) => (
+                              <Line key={node} type="monotone" dataKey={node} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                            ))}
+                            <Legend />
+                          </>
+                        ) : (
+                          <Line type="monotone" dataKey="value" stroke="#a855f7" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        )}
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
                     <Empty description="No history data yet. Metrics are collected every 60 seconds." />
                   )}
                 </Spin>
-                {chartData.length > 1 && (
-                  <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
-                    {metricOptions.find(m => m.value === historyMetric)?.label || historyMetric} {selectedNode ? `— ${selectedNode}` : '— cluster average'}
-                  </div>
-                )}
+                <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
+                  {metricOptions.find(m => m.value === historyMetric)?.label || historyMetric}
+                  {selectedNode ? ` — ${selectedNode}` : isMultiNode ? ` — all nodes` : ' — cluster average'}
+                </div>
               </Card>
             ),
           },

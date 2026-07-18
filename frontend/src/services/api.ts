@@ -486,8 +486,11 @@ export async function getMetricsNodes(): Promise<MetricsNodeInfo[]> {
   return Array.isArray(data) ? data : []
 }
 
-export async function getMetricsHistory(node?: string, metric?: string, hours?: number): Promise<MetricsHistoryPoint[]> {
-  const { data } = await api.get('/metrics/history', { params: { node, metric, hours } })
+export async function getMetricsHistory(node?: string, metric?: string, hours?: number, allNodes?: boolean): Promise<MetricsHistoryPoint[]> {
+  const params: Record<string, string | number | boolean> = { metric: metric || 'disk_usage_pct', hours: hours || 24 }
+  if (node) params.node = node
+  if (allNodes) params.all_nodes = true
+  const { data } = await api.get('/metrics/history', { params })
   return Array.isArray(data) ? data : []
 }
 
