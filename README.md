@@ -1,272 +1,183 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/note/seaweedfs.png" height="80" alt="SeaweedFS" />
-</p>
-
-<h1 align="center">SeaweedFS Dashboard</h1>
-
-<p align="center">
-  <strong>Modern web-based management dashboard for SeaweedFS</strong><br/>
-  Monitor clusters, manage volumes, browse files, administer S3 buckets — all in one place.
+  <strong>SeaweedFS Dashboard</strong> — v0.01.65
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" />
-  <img src="https://img.shields.io/badge/typescript-5-3178C6?logo=typescript" />
-  <img src="https://img.shields.io/badge/fastapi-0.115-009688?logo=fastapi" />
-  <img src="https://img.shields.io/badge/python-3.11+-3776AB?logo=python" />
-  <img src="https://img.shields.io/badge/antd-5-0170FE?logo=antdesign" />
-  <img src="https://img.shields.io/badge/license-Apache%202.0-blue" />
+  React 19 · TypeScript · FastAPI · Ant Design 5 · SQLite · Prometheus
 </p>
 
 ---
 
-## What is SeaweedFS Dashboard?
+Web-based management dashboard for SeaweedFS clusters. Monitor, manage, browse, and administer — volumes, filer, S3, backups, workers, disk health, ACL, lifecycle, tiers, hardening, gateways, NFS, WebDAV, FUSE.
 
-[SeaweedFS](https://github.com/seaweedfs/seaweedfs) is an excellent distributed file system — but managing it via raw API calls is tedious. This dashboard puts a clean, reactive UI on top, turning system administration into a visual, intuitive experience.
-
-> Built for the **dc03 production cluster** at mBm TECHNOLOGY — now open sourced.
-
-### Why another dashboard?
-
-SeaweedFS ships with a built-in web UI, but it's minimal. This project adds:
-
-- **Full S3 management** — buckets, users, policies, all with a UI
-- **Real-time monitoring** via Server-Sent Events — no polling, no stale data
-- **Historical trends** — volume growth, disk usage over time
-- **Smart alerts** — configurable thresholds with acknowledge/resolve lifecycle
-- **Filer file browser** — upload, download, delete with validation
-- **Backup & restore** — filer metadata snapshots at your fingertips
-- **Disk health** — S.M.A.R.T. monitoring across all nodes
-- **AI-powered chatbot** — infrastructure analysis assistant with live cluster context (OpenAI + Ollama)
-- **Worker management** — detect nodes, execute vacuum/compact/rebalance jobs
-
----
-
-## Architecture
-
-```
-Browser                    Backend (BFF)                SeaweedFS Cluster
-┌──────────┐    HTTP     ┌──────────────┐    httpx     ┌─────────────────┐
-│ React 19 │ ◄─────────► │ FastAPI      │ ◄──────────► │ Master  (x3)    │
-│ Antd 5   │    SSE      │ structlog    │              │ Volume  (x7)    │
-│ Recharts │             │ SQLite / PG  │              │ Filer   (x2 HA) │
-│ Zustand  │             │ Redis*       │              │ S3 GW   (x4)    │
-└──────────┘             └──────────────┘              └─────────────────┘
-     :5173                    :8000                       :9333 :8888 :8333
-```
-
-| Layer | Stack | Why |
-|-------|-------|-----|
-| **Frontend** | React 19, TypeScript, Vite, Ant Design 5, Recharts, Zustand | Modern admin UI, rich components, declarative charts |
-| **Backend** | Python 3.11+, FastAPI, httpx, Pydantic v2, structlog | Async proxy, multi-master failover, typed validation |
-| **Database** | SQLite (default) or PostgreSQL | Lightweight, zero-config to production-ready |
-| **Cache** | Redis (optional) | Rate limiting, session store, SSE pub/sub |
+> Built for the **dc03 production cluster** at mBm TECHNOLOGY. [seaweed.mbm.mn](https://seaweed.mbm.mn)
 
 ---
 
 ## Features
 
-### Cluster Management
-- Topology tree — DC → Rack → Node drill-down
-- Master server status — leader detection, peer list, response times
-- Volume server grid — disk usage, free slots, health per node
-- **Per-node volume limits** — set custom max volumes per server with inline editing on cluster cards
-- **Volume growth enforcement** — grow blocked automatically when any node reaches its configured limit
-- Multi-master auto-failover with audit logging
-
-### Volume & Collection Operations
-- Volume list with search, filter, sort, detail drawer
-- Volume grow wizard and vacuum (garbage collection) trigger
-- Collection browser with delete support
-- **Per-node capacity planning** — calculate volumes per node (e.g. 1.8TB / 30GB ≈ 60 volumes), set custom limits per server
-
-### Filer File Browser
-- Directory navigation with breadcrumbs and pagination
-- File upload with drag-drop, multi-file, live progress, streaming chunks
-- Download, delete, batch delete with confirmation modals
-- Create folders, file metadata viewer
-- Upload validation (configurable size/type limits)
-- Operator write mode with folder/file icons
-
-### S3 Object Store
-- Bucket CRUD — create, list, set quota, delete
-- User management — generate access/secret key pairs, per-user bucket policies
-- **IAM sync** — auto-sync IAM users/policies to S3 gateway nodes via SSH
-- Policy editor — JSON editor with syntax validation
-- Readonly/readwrite permissions, masked secrets with admin password verification
-- Audit logging for all S3 operations
-
-### Backup & Restore
-- Filer metadata sync trigger
-- Snapshot list, create, delete
-- Async backup status monitoring
-- Worker management — job history, detect/execute triggers
-
-### Real-time Monitoring
-- Live KPI cards — volumes, files, total size, free space
-- Disk usage pie chart per server
-- Volume growth trend (area chart, configurable time range)
-- SSE stream with automatic reconnect
-- Dashboard stats aggregated from multiple masters/filers
-
-### Alert Engine
-- Thresholds: disk usage, node offline, garbage ratio, readonly volumes
-- Lifecycle: new → acknowledged → resolved
-- Deduplication — one alert per issue
-- Configurable via settings page
-
-### Disk Health (S.M.A.R.T. monitoring)
-- **Lifespan estimation** — power-on hours, wear %, TBW, reallocated sectors, age warnings
-- S.M.A.R.T. data via SSH (`smartctl --json`) with fallback to `lsblk`
-- Temperature, wear level, reallocated sector alerts
-- Per-disk detail pages with trend history
-- Scheduled auto-scan (configurable interval)
-- Disabled by default — enable via `DISK_HEALTH_ENABLED=true`
+| Module | Capabilities |
+|--------|-------------|
+| **Dashboard** | KPI cards, real-time SSE updates, disk pie chart, volume trend charts, alert panel |
+| **Cluster** | Topology tree (DC→Rack→Node), master/volume/filer tables, search/filter |
+| **Volumes** | List + detail drawer, grow, vacuum, readonly/replica status |
+| **Filer** | File browser with breadcrumb, upload, download, delete, mkdir |
+| **S3** | Buckets CRUD, user/access-key management, IAM policy editor, key rotation |
+| **Collections** | List, delete, TTL lifecycle policies |
+| **ACL** | Permission rules (R/W/D/L/A), auto-sync to filer, audit log |
+| **Lifecycle** | S3 bucket lifecycle policies, tier transitions, TTL parsing |
+| **Tiers** | GCS/Azure cloud tier connection test, SSH deploy, sync-to-cluster |
+| **Hardening** | Compression/encryption deploy via SSH, replication drift detection, checksum history |
+| **Backup** | Multi-filer sync, local snapshot + S3/filer upload, cron daily at 03:00 |
+| **Workers** | status overview, job history, detect/execute triggers |
+| **Disk Health** | S.M.A.R.T. via SSH (smartctl), temperature/wear/realloc alerts |
+| **Gateways** | WebDAV start/stop/test, FUSE mount/unmount, NFS exports management |
+| **Metrics** | Node-level metrics history (disk, volumes, slots), timeseries charts |
+| **Prometheus** | `/api/prometheus` — counters, histograms, gauges for HTTP, cluster, services |
+| **Logs** | Loki proxy with SSE tail streaming + local structlog JSON fallback |
+| **Webhooks** | Slack/Discord/Generic delivery, event filtering, secret HMAC |
+| **Chatbot** | AI RAG — index codebase/docs, chat with natural language |
+| **API Keys** | Create/revoke/audit API keys with permission scopes |
+| **Settings** | Runtime config (thresholds, intervals, feature toggles), no restart needed |
+| **Users** | Admin + viewer roles, bcrypt passwords, S3 credential binding |
+| **Feedback** | Feature request board with voting and status tracking |
 
 ### Security
-- Session-based authentication (admin / read-only roles)
-- CSRF protection on all state-changing requests
-- Rate limiting (20 failed logins / 5 min per IP)
-- Structured JSON logging with audit trail
-- Login error messages displayed inline
-- Protected routes with admin guards
 
-### Developer Tools
-- **API documentation page** — full endpoint reference with code examples
-- **manage.sh** — dev/up/stop/restart/build/status/lint/test/logs/info commands
+| Control | Detail |
+|---------|--------|
+| CSRF | All POST/PUT/DELETE require `X-CSRF-Token` header matching session token |
+| Auth | Session-based (JWT via itsdangerous), admin/viewer roles, RBAC permissions |
+| Rate limiting | Login `20/5min`, volume grow `5/min`, backup sync `2/min`, S3 secrets `10/min` |
+| Sensitive data | S3 keys masked (`AKxx****xxxx`), webhook URLs stripped, SMTP/API keys hidden in settings |
+| Bcrypt | All passwords hashed with bcrypt, secrets via `secrets.token_hex()` |
+| SQL | All queries use `?` parameterized placeholders, no string concatenation |
 
-## Advantages
+### Architecture
 
-| Feature | Default SeaweedFS UI | This Dashboard |
-|---------|---------------------|----------------|
-| **Cluster overview** | Basic volume count | Full topology tree, per-node health, capacity planning |
-| **Real-time updates** | Manual refresh only | SSE push — instant alerts, no polling overhead |
-| **Volume management** | Limited grow/vacuum | Per-node limits, inline editing, growth enforcement |
-| **S3 administration** | CLI only | Full UI — buckets, users, policies, IAM sync via SSH |
-| **File browser** | Minimal listing | Breadcrumbs, drag-drop upload, batch delete, metadata viewer |
-| **Disk health** | Not available | S.M.A.R.T. monitoring, lifespan estimation, temperature trends |
-| **Alerts** | None | Configurable thresholds, lifecycle management, deduplication |
-| **Backup/Restore** | Manual commands | UI-driven snapshots, sync triggers, job tracking |
-| **Security** | Basic auth | CSRF protection, rate limiting, session management, audit trail |
-| **Multi-master** | Manual failover | Automatic failover with audit logging |
-
-### Why use this dashboard?
-
-1. **Single pane of glass** — cluster health, volumes, files, S3, backups, disk health all in one place
-2. **Per-node capacity planning** — set custom volume limits per server based on actual disk capacity
-3. **Real-time visibility** — SSE stream keeps everything fresh without polling
-4. **Production-hardened** — CSRF, rate limiting, audit logging, structured JSON logs
-5. **Open source** — Apache 2.0, built for production at mBm TECHNOLOGY dc03 cluster
-
-```bash
-# 1. Backend
-cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env          # ← edit your cluster endpoints
-uvicorn app.main:app --reload --port 8000
-
-# 2. Frontend
-cd frontend
-npm install
-npm run dev                   # → http://localhost:5173
+```
+[Frontend: React 19 + TS + Ant Design 5] ←→ [Backend: Python FastAPI] ←→ [SeaweedFS Cluster]
+     Port 8081 (nginx)                              Port 8000 (uvicorn)        Ports 9333/8888/8333
 ```
 
-Vite proxies `/api` → `localhost:8000` automatically. Open `http://localhost:5173` and log in.
+- **7 background services** with heartbeat monitoring: `alert_engine`, `snapshot_service`, `lifecycle_engine`, `hardening_service`, `disk_health`, `webhook_service`, `metrics_service`
+- **Multi-master failover** — auto-switch on master failure, exponential backoff
+- **SSE real-time** — single persistent connection, auto-reconnect
+- **Cron** — health monitor every 5min, daily backup at 03:00
 
----
-
-## Deployment
-
-### Docker
-
-```bash
-docker compose up -d
-```
-
-Multi-stage build: frontend compiled to static files, served by Nginx alongside the API proxy.
-
-### Bare Metal
+## Quick Start
 
 ```bash
-# Backend systemd service on port 8000
-# Nginx fronting static files on port 8081
-# Reverse proxy /api → localhost:8000
+# Prerequisites
+python3 -m venv backend/venv && source backend/venv/bin/activate
+pip install -r backend/requirements.txt
+cd frontend && npm install
+
+# Configure
+cp backend/.env.example backend/.env
+# Edit .env with your cluster hosts and credentials
+
+# Development mode (backend hot-reload + Vite HMR)
+./manage.sh dev
+
+# Production
+./manage.sh build
+./manage.sh up
 ```
 
-See `AGENTS.md` for full systemd unit and Nginx config examples.
+## Manage
 
----
+```bash
+./manage.sh dev       # Dev mode (backend + frontend)
+./manage.sh up        # Start all — backend (bg) + nginx on :8081
+./manage.sh stop      # Stop everything
+./manage.sh restart   # Stop + up
+./manage.sh build     # Build frontend for production
+./manage.sh status    # Show what's running + health check
+./manage.sh lint      # Run backend + frontend linters
+./manage.sh test      # Run all tests (67 backend + 26 frontend)
+./manage.sh logs      # Tail backend logs
+./manage.sh info      # Show ports, domain, project path
+```
 
-## Development Roadmap
+## Testing
 
-### ✅ Completed (v0.83)
-- [x] Phase 1 — Backend skeleton, config, logging, SeaweedFS client with failover, DB, middleware, frontend scaffold
-- [x] Phase 2 — Auth system (login, logout, CSRF, rate limit, admin guard)
-- [x] Phase 3 — Layout, navigation, sidebar, routing, dark/light theme, mobile responsive
-- [x] Phase 4 — Dashboard overview with KPI cards, SSE real-time stream, charts, alert panel
-- [x] Phase 5 — Historical data via snapshot service (SQLite time-series)
-- [x] Phase 6 — Alert engine with configurable thresholds and lifecycle management
-- [x] Phase 7 — Topology tree, master/volume/filer server tables with search/filter/sort
-- [x] Phase 8 — Volume management (list, grow, vacuum), collections, filer browser with upload validation
-- [x] Phase 9 — S3 buckets/users/policies CRUD, backup & restore, worker management, IAM sync
-- [x] Phase 10 — Disk health (S.M.A.R.T. via SSH, temperature/wear/realloc alerts, lifespan estimation)
-
-### Additional Features
-- [x] Per-node volume limits with inline editing on cluster cards
-- [x] Volume growth enforcement per configured node limit
-- [x] API documentation page with full endpoint reference
-- [x] manage.sh — dev/up/stop/restart/build/status/lint/test/logs/info
-
-### Future (v2+)
-- [ ] Phase 12 — Prometheus metrics integration
-- [ ] Phase 13 — Webhook notifications (Slack, Discord, Email)
-- [ ] Phase 14 — Log aggregation (Loki)
-- [ ] Phase 15 — WebDAV + FUSE gateway management
-- [ ] Phase 16 — NFS gateway management
-- [ ] Phase 17 — Collections with lifecycle policies (TTL)
-- [ ] Phase 18 — Filer ACL (file-level access control)
-- [ ] Phase 19 — Tiered storage (S3/GCS/Azure cloud tier)
-- [ ] Phase 20 — Production hardening (compression, encryption, replication tuning)
-- [ ] Phase 21 — Feature request board
-
----
+```
+93 tests total
+├── Backend: 67 (pytest + pytest-asyncio)
+│   ├── AlertEngine, SnapshotService, LifecycleEngine, HardeningService
+│   ├── BackupService, GatewayService, NfsService, WebhookService
+│   ├── S3, ACL, SSE, CSRF, API keys, Settings, Database
+│   └── Auth routes, Health endpoint
+└── Frontend: 26 (Vitest)
+    ├── Component rendering, Type interfaces, Utils
+    ├── RBAC, Disk health, Lifecycle TTL, NFS options
+    └── IP validation, Time formatter, Alert severity
+```
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SEAWEEDFS_MASTER_HOSTS` | Comma-separated master endpoints | required |
-| `SEAWEEDFS_FILER_HOST` | Comma-separated filer endpoints (HA) | required |
-| `DATABASE_URL` | SQLite path or PostgreSQL connection | `sqlite:///data/data.db` |
-| `REDIS_URL` | Redis for cache/rate/session/SSE | optional |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | Admin credentials | `admin` / `changeme` |
-| `READONLY_USER` / `READONLY_PASSWORD` | View-only credentials | `viewer` / `viewpass` |
-| `MAX_UPLOAD_SIZE_MB` | Max file upload size | `500` |
-| `SNAPSHOT_INTERVAL_SECONDS` | Metrics polling interval | `60` |
-| `ALERT_DISK_USAGE_PCT` | Disk usage alert threshold | `90` |
-| `DISK_HEALTH_ENABLED` | Enable S.M.A.R.T. monitoring | `false` |
+```bash
+SEAWEEDFS_MASTER_HOSTS=10.10.95.101:9333,10.10.95.103:9333,10.10.95.105:9333
+SEAWEEDFS_FILER_HOST=10.10.95.102:8888,10.10.95.104:8888
+SEAWEEDFS_S3_GATEWAY_HOSTS=10.10.95.102:8333,10.10.95.104:8333,10.10.95.106:8333,10.10.95.107:8333
+SEAWEEDFS_REQUEST_TIMEOUT=30
+DATABASE_URL=sqlite:///data/data.db
+ADMIN_USER=admin
+ADMIN_PASSWORD=changeme
+READONLY_USER=viewer
+READONLY_PASSWORD=viewpass
+SESSION_SECRET=auto-generate-random-secret
+MAX_UPLOAD_SIZE_MB=500
+SNAPSHOT_INTERVAL_SECONDS=60
+DISK_HEALTH_ENABLED=false
+```
 
-Full list in `backend/.env.example`.
+## API
 
----
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/health` | public | System health + component heartbeats |
+| `GET /api/info` | public | Version, endpoints, cluster metadata |
+| `GET /api/prometheus` | public | Prometheus text format metrics |
+| `POST /api/auth/login` | public | Session login (rate limited) |
+| `GET /api/dashboard/stats` | session | Aggregated KPI + active alerts |
+| `GET /api/dashboard/sse` | session | Real-time SSE event stream |
+| `GET /api/cluster/status` | admin | Cluster health, topology, leader |
+| `GET /api/volumes` | session | Volume list with filters |
+| `GET /api/filer/list/{path}` | admin | Filer directory listing |
+| `GET /api/s3/buckets` | session | S3 bucket list |
+| `GET /api/s3/users` | admin | S3 user/credential management |
+| `GET /api/backup/snapshots` | admin | Backup snapshot list |
+| `GET /api/metrics/overview` | admin | Cluster-level metrics |
+| `GET /api/logs/query` | admin | Log query (Loki or local) |
+| `GET /api/webhooks` | admin | Webhook configuration |
+| `GET /api/disk-health/{node}` | admin | S.M.A.R.T. data by node |
+| `GET /api/feedback/requests` | admin | Feature request board |
+
+Full API documentation at `/api-doc` in the UI.
+
+## Deployment
+
+```nginx
+server {
+    listen 8081;
+    root /srv/seaweed-dashboard/frontend/dist;
+    gzip on;
+    gzip_types text/plain text/css application/javascript;
+    location / { try_files $uri /index.html; }
+    location /api/ { proxy_pass http://127.0.0.1:8000; }
+}
+```
+
+```ini
+# systemd: /etc/systemd/system/seaweed-dashboard.service
+[Service]
+WorkingDirectory=/srv/seaweed-dashboard/backend
+ExecStart=/srv/seaweed-dashboard/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+```
 
 ## License
 
-Apache License 2.0 — use, modify, and distribute freely. Attribution must be retained. See [LICENSE](./LICENSE).
-
----
-
-## About
-
-SeaweedFS Dashboard is developed using [mBm AI Assistant](https://console.mbm.mn) — an AI-powered engineering and operations assistant by [mBm TECHNOLOGY LLC](https://www.mbm.technology) that handles rapid coding, server management, deployments, and full-stack troubleshooting.
-
-Try mBm AI Assistant: [console.mbm.mn](https://console.mbm.mn)
-
-Built and battle-tested on the **dc03** SeaweedFS production cluster at mBm TECHNOLOGY.
-
----
-—
-<p align="center">
-  Developed with <a href="https://console.mbm.mn">mBm AI Assistant</a> at <a href="https://www.mbm.technology">mBm TECHNOLOGY LLC</a>
-</p>
+Apache 2.0 — [mBm TECHNOLOGY LLC](https://www.mbm.technology)
