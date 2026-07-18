@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Modal, Input, Select, Switch, Popconfirm, message, Space, Tag, Tooltip } from 'antd'
 import { UserAddOutlined, CopyOutlined } from '@ant-design/icons'
-import { listUsers, createUser, updateUser, deleteUser } from '../../services/api'
+import { listUsers, createUser, updateUser, deleteUser, getAclPolicies } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+
+const PERM_LABELS: Record<string, string> = { R: 'Read', W: 'Write', D: 'Delete', L: 'List', A: 'Admin' }
 
 export default function UsersPage() {
   const roleColor: Record<string, string> = { admin: 'pink', operator: 'purple', viewer: 'blue', user: 'cyan' }
@@ -18,6 +20,7 @@ export default function UsersPage() {
     username: '', password: '', firstname: '', lastname: '', email: '', phone: '',
     role: '', create_bucket: false, s3_permission: 'readwrite',
   })
+  const [aclPolicies, setAclPolicies] = useState<any[]>([])
   const role = useAuthStore((s) => s.user?.role)
 
   const fetchUsers = () => {
@@ -31,7 +34,7 @@ export default function UsersPage() {
     })
   }
 
-  useEffect(() => { fetchUsers(); fetchRoles() }, [])
+  useEffect(() => { fetchUsers(); fetchRoles(); getAclPolicies().then(setAclPolicies).catch(() => {}) }, [])
 
   const doCreate = async () => {
     if (!newUser.username.trim() || !newUser.firstname.trim() || !newUser.lastname.trim() || !newUser.email.trim() || !newUser.password) {
@@ -111,6 +114,23 @@ export default function UsersPage() {
       render: (v: boolean, record: any) => role === 'admin' ? (
         <Switch checked={!!v} onChange={(checked) => doToggle(record.id, checked)} />
       ) : v ? 'Yes' : 'No',
+    },
+    {
+      title: 'ACL Perms', key: 'acl',
+      render: (_: any, r: any) => {
+        const matched = aclPolicies.filter(p =>
+          p.enabled && (p.user_pattern === '*' || p.user_pattern === r.username)
+        )
+        if (!matched.length) return <Tag>none</Tag>
+        const allPerms = [...new Set(matched.flatMap((p: any) => (p.permissions || '').split('')))]
+        return (
+          <Space size={2}>
+            {allPerms.map((c: string) => (
+              <Tag key={c} color="blue">{PERM_LABELS[c] || c}</Tag>
+            ))}
+          </Space>
+        )
+      },
     },
     {
       title: 'S3', dataIndex: 's3_access_key', key: 's3',
