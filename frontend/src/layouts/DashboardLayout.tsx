@@ -41,45 +41,61 @@ import api from '../services/api'
 
 const { Header, Sider, Content } = Layout
 
-const baseMenuItems = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
-  { key: '/cluster', icon: <ClusterOutlined />, label: 'Cluster' },
-  { key: '/volumes', icon: <HddOutlined />, label: 'Volumes' },
-  { key: '/collections', icon: <FolderOpenOutlined />, label: 'Collections' },
-  { key: '/filer', icon: <FolderOutlined />, label: 'Filer' },
-  {
-    key: '/s3',
-    icon: <CloudOutlined />,
-    label: 'S3',
-    children: [
-      { key: '/s3/buckets', label: 'Buckets' },
-      { key: '/s3/secrets', label: 'Secrets / API Keys' },
-      { key: '/s3/policies', label: 'Policies' },
-    ],
-  },
-  { key: '/backup', icon: <SafetyOutlined />, label: 'Backup' },
-  { key: '/workers', icon: <ToolOutlined />, label: 'Workers' },
-  { key: '/chatbot', icon: <RobotOutlined />, label: 'AI Chat' },
-  { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
-  { key: '/tools', icon: <ThunderboltOutlined />, label: 'Tools' },
-  { key: '/metrics', icon: <LineChartOutlined />, label: 'Metrics' },
-  { key: '/webhooks', icon: <SendOutlined />, label: 'Webhooks' },
-  { key: '/logs', icon: <FileSearchOutlined />, label: 'Logs' },
-  { key: '/gateways', icon: <GatewayOutlined />, label: 'Gateways' },
-  { key: '/lifecycle', icon: <ClockCircleOutlined />, label: 'Lifecycle' },
-  { key: '/acl', icon: <SafetyCertificateOutlined />, label: 'ACL' },
-  { key: '/tiers', icon: <CloudServerOutlined />, label: 'Tiers' },
-  { key: '/hardening', icon: <LockOutlined />, label: 'Hardening' },
-  { key: '/feedback', icon: <BulbOutlined />, label: 'Feedback' },
-  { key: '/users', icon: <TeamOutlined />, label: 'Users' },
-  { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
-]
+interface MenuItem {
+  type?: 'group' | 'divider'
+  key?: string
+  label?: string
+  icon?: React.ReactNode
+  children?: MenuItem[]
+  style?: React.CSSProperties
+}
 
-const bottomLinks = [
-  { key: '/help', icon: <ReadOutlined />, label: 'Docs', tooltip: 'Documentation & guides' },
-  { key: '/api-doc', icon: <ApiOutlined />, label: 'API Doc', tooltip: 'REST API reference' },
-  { key: '/glossary', icon: <BookOutlined />, label: 'Glossary', tooltip: 'SeaweedFS terminology' },
-  { key: '/about', icon: <InfoCircleOutlined />, label: 'About', tooltip: 'About this dashboard' },
+const baseMenuItems: MenuItem[] = [
+  { type: 'group', label: 'Monitor', children: [
+    { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { key: '/metrics', icon: <LineChartOutlined />, label: 'Metrics' },
+    { key: '/logs', icon: <FileSearchOutlined />, label: 'Logs' },
+  ]},
+  { type: 'group', label: 'Cluster', children: [
+    { key: '/cluster', icon: <ClusterOutlined />, label: 'Cluster' },
+    { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
+  ]},
+  { type: 'group', label: 'Storage', children: [
+    { key: '/volumes', icon: <HddOutlined />, label: 'Volumes' },
+    { key: '/collections', icon: <FolderOpenOutlined />, label: 'Collections' },
+    { key: '/filer', icon: <FolderOutlined />, label: 'Filer' },
+  ]},
+  { type: 'group', label: 'S3', children: [
+    { key: '/s3/buckets', icon: <CloudOutlined />, label: 'Buckets' },
+    { key: '/s3/secrets', icon: <KeyOutlined />, label: 'Secrets / API Keys' },
+    { key: '/s3/policies', icon: <SafetyCertificateOutlined />, label: 'Policies' },
+  ]},
+  { type: 'group', label: 'Services', children: [
+    { key: '/backup', icon: <SafetyOutlined />, label: 'Backup' },
+    { key: '/workers', icon: <ToolOutlined />, label: 'Workers' },
+    { key: '/gateways', icon: <GatewayOutlined />, label: 'Gateways' },
+    { key: '/webhooks', icon: <SendOutlined />, label: 'Webhooks' },
+  ]},
+  { type: 'group', label: 'Advanced', children: [
+    { key: '/lifecycle', icon: <ClockCircleOutlined />, label: 'Lifecycle' },
+    { key: '/acl', icon: <SafetyCertificateOutlined />, label: 'ACL' },
+    { key: '/tiers', icon: <CloudServerOutlined />, label: 'Tiers' },
+    { key: '/hardening', icon: <LockOutlined />, label: 'Hardening' },
+  ]},
+  { type: 'group', label: 'System', children: [
+    { key: '/users', icon: <TeamOutlined />, label: 'Users' },
+    { key: '/chatbot', icon: <RobotOutlined />, label: 'AI Chat' },
+    { key: '/feedback', icon: <BulbOutlined />, label: 'Feedback' },
+    { key: '/tools', icon: <ThunderboltOutlined />, label: 'Tools' },
+    { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
+  ]},
+  { type: 'divider', style: { borderColor: 'rgba(168,85,247,0.4)', margin: '4px 16px' } },
+  { type: 'group', label: 'Documentation', children: [
+    { key: '/help', icon: <ReadOutlined />, label: 'Docs' },
+    { key: '/api-doc', icon: <ApiOutlined />, label: 'API Doc' },
+    { key: '/glossary', icon: <BookOutlined />, label: 'Glossary' },
+    { key: '/about', icon: <InfoCircleOutlined />, label: 'About' },
+  ]},
 ]
 
 export default function DashboardLayout() {
@@ -97,29 +113,51 @@ export default function DashboardLayout() {
   const logout = useAuthStore((s) => s.logout)
 
   const roleLabel: Record<string, string> = {
-  admin: 'System Administrator',
-  operator: 'Operator',
-  viewer: 'Read-only Viewer',
-  user: 'Standard User',
-}
-
-const userAllowedKeys = new Set(['/dashboard', '/cluster', '/volumes', '/filer', '/s3'])
-
-function getMenuItems(role?: string, aiOn = false) {
-  let items = [...baseMenuItems]
-
-  if (!aiOn) {
-    items = items.filter((item) => item.key !== '/chatbot')
+    admin: 'System Administrator',
+    operator: 'Operator',
+    viewer: 'Read-only Viewer',
+    user: 'Standard User',
   }
 
-  if (role === 'admin') {
-    items = [...items.slice(0, -1), { key: '/api-keys', icon: <KeyOutlined />, label: 'API Keys' }, items[items.length - 1]]
-  } else if (role === 'user') {
-    items = items.filter((item) => userAllowedKeys.has(item.key as string))
-  }
+  const userAllowedKeys = new Set(['/dashboard', '/cluster', '/volumes', '/filer', '/s3/buckets', '/s3/secrets', '/s3/policies'])
 
-  return items
-}
+  function getMenuItems(role?: string, aiOn = false): MenuItem[] {
+    const result: MenuItem[] = []
+
+    for (const group of baseMenuItems) {
+      if (group.type === 'divider') {
+        result.push({ ...group })
+        continue
+      }
+
+      if (group.type === 'group' && group.children) {
+        let children = group.children.filter((child) => {
+          if (!aiOn && child.key === '/chatbot') return false
+          if (role === 'user') {
+            return userAllowedKeys.has(child.key as string)
+          }
+          return true
+        })
+
+        if (role === 'admin' && group.label === 'System') {
+          const settingsIdx = children.findIndex((c) => c.key === '/settings')
+          if (settingsIdx >= 0) {
+            children = [
+              ...children.slice(0, settingsIdx),
+              { key: '/api-keys', icon: <KeyOutlined />, label: 'API Keys' },
+              ...children.slice(settingsIdx),
+            ]
+          }
+        }
+
+        if (children.length > 0) {
+          result.push({ ...group, children })
+        }
+      }
+    }
+
+    return result
+  }
 
   const menuItems = getMenuItems(user?.role, aiEnabled)
 
@@ -155,7 +193,6 @@ function getMenuItems(role?: string, aiOn = false) {
   }
 
   const selectedKeys = [location.pathname]
-  const openKeys = ['/s3']
 
   const userMenuItems = [
     {
@@ -224,6 +261,7 @@ function getMenuItems(role?: string, aiOn = false) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
               borderBottom: '1px solid rgba(236,72,153,0.1)',
             }}
           >
@@ -238,105 +276,32 @@ function getMenuItems(role?: string, aiOn = false) {
           <Menu
             mode="inline"
             selectedKeys={selectedKeys}
-            defaultOpenKeys={openKeys}
             items={menuItems}
             onClick={handleMenuClick}
             theme="dark"
-            style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8, flex: 1 }}
+            inlineCollapsed={collapsed}
+            style={{ background: 'transparent', borderInlineEnd: 'none', marginTop: 8, flex: 1, overflow: 'auto' }}
+            className="sidebar-menu"
           />
-          {!collapsed && (
-            <div style={{
-              borderTop: '1px solid rgba(236,72,153,0.08)',
-              padding: '8px 0 0',
-            }}>
-              {bottomLinks.map((link) => {
-                const isActive = location.pathname === link.key
-                return (
-                  <Tooltip key={link.key} title={link.tooltip} placement="right">
-                    <div
-                      onClick={() => navigate(link.key)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '10px 24px',
-                        cursor: 'pointer',
-                        color: isActive ? '#a855f7' : '#94a3b8',
-                        background: isActive ? 'rgba(168,85,247,0.1)' : 'transparent',
-                        borderRight: isActive ? '2px solid #a855f7' : '2px solid transparent',
-                        transition: 'all 0.15s ease',
-                        fontSize: 13,
-                        margin: '0 0 1px',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive) {
-                          (e.currentTarget as HTMLElement).style.color = '#e2e8f0'
-                          ;(e.currentTarget as HTMLElement).style.background = 'rgba(168,85,247,0.05)'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) {
-                          (e.currentTarget as HTMLElement).style.color = '#94a3b8'
-                          ;(e.currentTarget as HTMLElement).style.background = 'transparent'
-                        }
-                      }}
-                    >
-                      <span style={{ fontSize: 15, width: 20, textAlign: 'center', flexShrink: 0 }}>
-                        {link.icon}
-                      </span>
-                      <span>{link.label}</span>
-                    </div>
-                  </Tooltip>
-                )
-              })}
-              <div style={{
-                padding: '16px 24px 12px',
-                fontSize: 11,
-                color: '#475569',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>mBm TECHNOLOGY LLC</span>
-                  {version && <span style={{ color: '#a855f7', fontWeight: 600 }}>v{version}</span>}
-                </div>
-              </div>
-            </div>
-          )}
-          {collapsed && (
-            <div style={{
-              borderTop: '1px solid rgba(236,72,153,0.08)',
-              padding: '8px 0',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 6,
-            }}>
-              {bottomLinks.map((link) => (
-                <Tooltip key={link.key} title={link.tooltip} placement="right">
-                  <div
-                    onClick={() => navigate(link.key)}
-                    style={{
-                      cursor: 'pointer',
-                      color: location.pathname === link.key ? '#a855f7' : '#64748b',
-                      padding: 6,
-                      borderRadius: 6,
-                      fontSize: 18,
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#a855f7' }}
-                    onMouseLeave={(e) => {
-                      if (location.pathname !== link.key)
-                        (e.currentTarget as HTMLElement).style.color = '#64748b'
-                    }}
-                  >
-                    {link.icon}
-                  </div>
-                </Tooltip>
-              ))}
-            </div>
-          )}
+          <div style={{
+            flexShrink: 0,
+            padding: collapsed ? '8px 0' : '12px 24px',
+            fontSize: 11,
+            color: '#475569',
+            display: 'flex',
+            gap: 4,
+            flexDirection: collapsed ? 'column' : 'row',
+            justifyContent: collapsed ? 'center' : 'space-between',
+            alignItems: 'center',
+            borderTop: '1px solid rgba(236,72,153,0.08)',
+          }}>
+            <span>{collapsed ? '' : 'mBm TECHNOLOGY LLC'}</span>
+            {version && (
+              <span style={{ color: '#a855f7', fontWeight: 600, fontSize: collapsed ? 10 : 11 }}>
+                v{version}
+              </span>
+            )}
+          </div>
         </Sider>
         <Layout style={{ background: 'transparent' }}>
           <Header

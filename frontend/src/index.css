@@ -101,6 +101,8 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+.sidebar-menu .ant-menu-item-divider { border-color: rgba(168,85,247,0.4) !important; margin: 4px 16px !important; }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #0f172a; }
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }

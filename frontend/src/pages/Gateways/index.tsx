@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Card, Table, Button, Tag, Popconfirm, message, Tabs, Progress, Statistic, Row, Col, Space, Tooltip, Empty, InputNumber, Modal, Form, Input } from 'antd'
-import { PlayCircleOutlined, PauseCircleOutlined, CloudOutlined, FolderOutlined, LinkOutlined, CheckCircleOutlined, CloseCircleOutlined, HddOutlined, SyncOutlined } from '@ant-design/icons'
-import { getGateways, startWebdav, stopWebdav, testWebdavConnection, mountFuse, unmountFuse, getFuseStatus, getNfsExports, createNfsExport, deleteNfsExport, getNfsClients, syncNfsExports } from '../../services/api'
+import { Card, Table, Button, Tag, Popconfirm, message, Tabs, Progress, Statistic, Row, Col, Space, Tooltip, Empty, InputNumber, Modal, Form, Input, Select } from 'antd'
+import { PlayCircleOutlined, PauseCircleOutlined, CloudOutlined, FolderOutlined, LinkOutlined, CheckCircleOutlined, CloseCircleOutlined, HddOutlined, SyncOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons'
+import { getGateways, startWebdav, stopWebdav, testWebdavConnection, mountFuse, unmountFuse, getFuseStatus, getNfsExports, createNfsExport, updateNfsExport, deleteNfsExport, getNfsClients, syncNfsExports, getClusterHealth } from '../../services/api'
 import type { Gateway, FuseStatus, NfsExport, NfsClient } from '../../types'
 
 function copyToClipboard(text: string) {
@@ -12,6 +12,7 @@ export default function GatewaysPage() {
   const [gateways, setGateways] = useState<Gateway[]>([])
   const [loading, setLoading] = useState(true)
   const [fuseStatuses, setFuseStatuses] = useState<Record<string, FuseStatus>>({})
+  const [clusterNodes, setClusterNodes] = useState<string[]>([])
   const [webdavModal, setWebdavModal] = useState(false)
   const [webdavNode, setWebdavNode] = useState('')
   const [webdavPort, setWebdavPort] = useState(9001)
@@ -24,7 +25,13 @@ export default function GatewaysPage() {
   const [nfsNode, setNfsNode] = useState('')
   const [nfsPath, setNfsPath] = useState('/data/dc03')
   const [nfsOptions, setNfsOptions] = useState('*(rw,sync,no_subtree_check)')
+  const [editNfsId, setEditNfsId] = useState<number | null>(null)
+  const [editNfsOptions, setEditNfsOptions] = useState('')
+  const [editNfsModal, setEditNfsModal] = useState(false)
   const [nfsClients, setNfsClients] = useState<NfsClient[]>([])
+  const [nfsClientsNode, setNfsClientsNode] = useState('')
+  const [clientsModal, setClientsModal] = useState(false)
+  const [clientsLoading, setClientsLoading] = useState(false)
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -39,6 +46,11 @@ export default function GatewaysPage() {
       setFuseStatuses(statuses)
       const exports = await getNfsExports()
       setNfsExports(exports)
+      const health = await getClusterHealth()
+      if (health.nodes) {
+        const ips = [...new Set(health.nodes.map((n: { url: string }) => n.url?.split(':')[0]).filter(Boolean))]
+        setClusterNodes(ips)
+      }
     } catch {}
     setLoading(false)
   }, [])
@@ -104,6 +116,14 @@ export default function GatewaysPage() {
     setActionLoading(null)
   }
 
+  const handleNfsEdit = async () => {
+    if (!editNfsId) return
+    setActionLoading('edit-nfs')
+    try { await updateNfsExport(editNfsId, editNfsOptions); message.success('Updated'); setEditNfsModal(false); fetchNfs() }
+    catch (e: any) { message.error(e.response?.data?.detail || 'Failed') }
+    setActionLoading(null)
+  }
+
   const handleNfsDelete = async (id: number) => {
     try { await deleteNfsExport(id); message.success('Removed'); fetchNfs() }
     catch (e: any) { message.error(e.response?.data?.detail || 'Failed') }
@@ -115,12 +135,20 @@ export default function GatewaysPage() {
   }
 
   const handleShowClients = async (node: string) => {
+    setNfsClientsNode(node)
+    setNfsClients([])
+    setClientsModal(true)
+    setClientsLoading(true)
     try {
       const r = await getNfsClients(node)
-      setNfsClients(r.clients)
-      if (r.clients.length === 0) message.info('No connected clients')
-    } catch (e: any) { message.error('Failed') }
+      setNfsClients(r.clients || [])
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || 'Failed to fetch clients')
+    }
+    setClientsLoading(false)
   }
+
+  const nodeOptions = clusterNodes.map(ip => ({ label: ip, value: ip }))
 
   const webdavGateways = gateways.filter(g => g.gw_type === 'webdav')
   const fuseGateways = gateways.filter(g => g.gw_type === 'fuse')
@@ -188,10 +216,25 @@ export default function GatewaysPage() {
     { title: 'Path', dataIndex: 'path', key: 'path', render: (p: string) => <code>{p}</code> },
     { title: 'Options', dataIndex: 'options', key: 'options', ellipsis: true, render: (o: string) => <Tooltip title={o}><code style={{ fontSize: 11 }}>{o.length > 40 ? o.slice(0, 40) + '...' : o}</code></Tooltip> },
     {
+      title: 'Mount', key: 'mount',
+      render: (_: unknown, r: NfsExport) => {
+        const cmd = `mount -t nfs ${r.node}:${r.path} /mnt/nfs`
+        return (
+          <Space>
+            <code style={{ fontSize: 11 }}>{cmd.length > 30 ? cmd.slice(0, 30) + '...' : cmd}</code>
+            <Tooltip title="Copy mount command">
+              <Button size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(cmd)} />
+            </Tooltip>
+          </Space>
+        )
+      },
+    },
+    {
       title: 'Actions', key: 'actions',
       render: (_: unknown, r: NfsExport) => (
         <Space>
           <Button size="small" onClick={() => handleShowClients(r.node)} icon={<LinkOutlined />}>Clients</Button>
+          <Button size="small" icon={<EditOutlined />} onClick={() => { setEditNfsId(r.id); setEditNfsOptions(r.options); setEditNfsModal(true) }} />
           <Popconfirm title="Remove export?" onConfirm={() => handleNfsDelete(r.id)}>
             <Button size="small" danger icon={<CloseCircleOutlined />} />
           </Popconfirm>
@@ -253,14 +296,6 @@ export default function GatewaysPage() {
             >
               <Table dataSource={nfsExports.map(e => ({ ...e, key: e.id }))} columns={nfsColumns} loading={loading} pagination={false} size="middle"
                 locale={{ emptyText: <Empty description="No NFS exports configured" /> }} />
-              {nfsClients.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <strong style={{ color: '#94a3b8' }}>Connected Clients:</strong>
-                  <ul style={{ margin: '4px 0 0 16px', color: '#e2e8f0', fontSize: 13 }}>
-                    {nfsClients.map((c, i) => <li key={i}>{c.host} → {c.path}</li>)}
-                  </ul>
-                </div>
-              )}
             </Card>
           ),
         },
@@ -268,24 +303,49 @@ export default function GatewaysPage() {
 
       <Modal title="Start WebDAV" open={webdavModal} onOk={handleWebdavStart} onCancel={() => setWebdavModal(false)} confirmLoading={actionLoading === 'webdav'}>
         <Form layout="vertical">
-          <Form.Item label="Node IP"><Input placeholder="172.16.0.2" value={webdavNode} onChange={e => setWebdavNode(e.target.value)} /></Form.Item>
+          <Form.Item label="Node">
+            <Select showSearch placeholder="Select node" value={webdavNode || undefined} onChange={v => setWebdavNode(v || '')} options={nodeOptions} />
+          </Form.Item>
           <Form.Item label="Port"><InputNumber min={1024} max={65535} value={webdavPort} onChange={v => setWebdavPort(v || 9001)} style={{ width: '100%' }} /></Form.Item>
         </Form>
       </Modal>
 
       <Modal title="Mount FUSE" open={fuseModal} onOk={handleFuseMount} onCancel={() => setFuseModal(false)} confirmLoading={actionLoading === 'fuse'}>
         <Form layout="vertical">
-          <Form.Item label="Node IP"><Input placeholder="172.16.0.2" value={fuseNode} onChange={e => setFuseNode(e.target.value)} /></Form.Item>
+          <Form.Item label="Node">
+            <Select showSearch placeholder="Select node" value={fuseNode || undefined} onChange={v => setFuseNode(v || '')} options={nodeOptions} />
+          </Form.Item>
           <Form.Item label="Mount Path"><Input value={fusePath} onChange={e => setFusePath(e.target.value)} /></Form.Item>
         </Form>
       </Modal>
 
       <Modal title="Add NFS Export" open={nfsModal} onOk={handleNfsCreate} onCancel={() => setNfsModal(false)} confirmLoading={actionLoading === 'nfs'}>
         <Form layout="vertical">
-          <Form.Item label="Node IP"><Input placeholder="172.16.0.2" value={nfsNode} onChange={e => setNfsNode(e.target.value)} /></Form.Item>
+          <Form.Item label="Node">
+            <Select showSearch placeholder="Select cluster node" value={nfsNode || undefined} onChange={v => setNfsNode(v || '')} options={nodeOptions} />
+          </Form.Item>
           <Form.Item label="Path"><Input value={nfsPath} onChange={e => setNfsPath(e.target.value)} /></Form.Item>
           <Form.Item label="Options"><Input value={nfsOptions} onChange={e => setNfsOptions(e.target.value)} /></Form.Item>
         </Form>
+      </Modal>
+
+      <Modal title="Edit NFS Export" open={editNfsModal} onOk={handleNfsEdit} onCancel={() => setEditNfsModal(false)} confirmLoading={actionLoading === 'edit-nfs'}>
+        <Form layout="vertical">
+          <Form.Item label="Options" help="Access control options for the NFS export (e.g. *(rw,sync,no_subtree_check))">
+            <Input value={editNfsOptions} onChange={e => setEditNfsOptions(e.target.value)} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={`NFS Clients — ${nfsClientsNode}`} open={clientsModal} onCancel={() => setClientsModal(false)} footer={null} loading={clientsLoading}>
+        {nfsClients.length === 0 && !clientsLoading && (
+          <Empty description="No connected clients" style={{ padding: '24px 0' }} />
+        )}
+        {nfsClients.length > 0 && (
+          <ul style={{ margin: 0, paddingLeft: 16, color: '#e2e8f0', fontSize: 13 }}>
+            {nfsClients.map((c, i) => <li key={i} style={{ marginBottom: 4 }}>{c.host} → {c.path}</li>)}
+          </ul>
+        )}
       </Modal>
     </div>
   )
