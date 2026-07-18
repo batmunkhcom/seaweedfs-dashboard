@@ -409,3 +409,17 @@ export interface FuseStatus {
   disk?: { total_gb: number; used_gb: number; avail_gb: number; pct: string }
   error?: string
 }
+
+export interface NfsExport {
+  id: number
+  node: string
+  path: string
+  options: string
+  enabled: boolean
+  created_at: string
+}
+
+export interface NfsClient {
+  host: string
+  path: string
+}

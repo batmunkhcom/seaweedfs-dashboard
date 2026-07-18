@@ -30,6 +30,8 @@ import type {
   LokiQueryResult,
   Gateway,
   FuseStatus,
+  NfsExport,
+  NfsClient,
 } from '../types'
 
 const api = axios.create({
@@ -601,5 +603,35 @@ export async function unmountFuse(node: string) {
 
 export async function getFuseStatus(node: string): Promise<FuseStatus> {
   const { data } = await api.get('/gateways/fuse/status', { params: { node } })
+  return data
+}
+
+export async function getNfsExports(): Promise<NfsExport[]> {
+  const { data } = await api.get('/nfs/exports')
+  return Array.isArray(data) ? data : []
+}
+
+export async function createNfsExport(node: string, path: string, options: string) {
+  const { data } = await api.post('/nfs/exports', { node, path, options })
+  return data
+}
+
+export async function updateNfsExport(id: number, options: string) {
+  const { data } = await api.put(`/nfs/exports/${id}`, { options })
+  return data
+}
+
+export async function deleteNfsExport(id: number) {
+  const { data } = await api.delete(`/nfs/exports/${id}`)
+  return data
+}
+
+export async function getNfsClients(node: string): Promise<{ node: string; clients: NfsClient[] }> {
+  const { data } = await api.get('/nfs/clients', { params: { node } })
+  return data
+}
+
+export async function syncNfsExports() {
+  const { data } = await api.post('/nfs/sync')
   return data
 }
