@@ -29,6 +29,7 @@ import {
   SendOutlined,
   FileSearchOutlined,
   GatewayOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -61,6 +62,7 @@ const baseMenuItems = [
   { key: '/webhooks', icon: <SendOutlined />, label: 'Webhooks' },
   { key: '/logs', icon: <FileSearchOutlined />, label: 'Logs' },
   { key: '/gateways', icon: <GatewayOutlined />, label: 'Gateways' },
+  { key: '/lifecycle', icon: <ClockCircleOutlined />, label: 'Lifecycle' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]

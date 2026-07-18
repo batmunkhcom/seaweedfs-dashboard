@@ -423,3 +423,31 @@ export interface NfsClient {
   host: string
   path: string
 }
+
+export interface LifecyclePolicy {
+  id: number
+  bucket: string
+  policy_json: string
+  enabled: boolean
+  last_run_at: string | null
+  created_at: string
+}
+
+export interface LifecycleTemplate {
+  rules: Record<string, unknown>[]
+}
+
+export interface CollectionTtl {
+  name: string
+  ttl: string
+  ttl_seconds: number
+}
+
+export interface LifecycleTransition {
+  id: number
+  bucket: string
+  object_key: string
+  action: string
+  status: string
+  created_at: string
+}

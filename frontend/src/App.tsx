@@ -27,6 +27,7 @@ import MetricsPage from './pages/Metrics'
 import WebhooksPage from './pages/Webhooks'
 import LogsPage from './pages/Logs'
 import GatewaysPage from './pages/Gateways'
+import LifecyclePage from './pages/Lifecycle'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -97,6 +98,7 @@ function App() {
             <Route path="/webhooks" element={<WebhooksPage />} />
             <Route path="/logs" element={<LogsPage />} />
             <Route path="/gateways" element={<GatewaysPage />} />
+            <Route path="/lifecycle" element={<LifecyclePage />} />
             </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

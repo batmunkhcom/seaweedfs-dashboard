@@ -32,6 +32,9 @@ import type {
   FuseStatus,
   NfsExport,
   NfsClient,
+  LifecyclePolicy,
+  CollectionTtl,
+  LifecycleTransition,
 } from '../types'
 
 const api = axios.create({
@@ -633,5 +636,44 @@ export async function getNfsClients(node: string): Promise<{ node: string; clien
 
 export async function syncNfsExports() {
   const { data } = await api.post('/nfs/sync')
+  return data
+}
+
+export async function getLifecyclePolicies(): Promise<LifecyclePolicy[]> {
+  const { data } = await api.get('/lifecycle/policies')
+  return Array.isArray(data) ? data : []
+}
+
+export async function getLifecyclePolicy(bucket: string): Promise<LifecyclePolicy> {
+  const { data } = await api.get(`/lifecycle/policies/${encodeURIComponent(bucket)}`)
+  return data
+}
+
+export async function saveLifecyclePolicy(bucket: string, policy: Record<string, unknown>, enabled = true) {
+  const { data } = await api.put(`/lifecycle/policies/${encodeURIComponent(bucket)}`, { policy, enabled })
+  return data
+}
+
+export async function deleteLifecyclePolicy(bucket: string) {
+  await api.delete(`/lifecycle/policies/${encodeURIComponent(bucket)}`)
+}
+
+export async function getCollectionsTtl(): Promise<CollectionTtl[]> {
+  const { data } = await api.get('/lifecycle/collections/ttl')
+  return Array.isArray(data) ? data : []
+}
+
+export async function setCollectionTtl(name: string, ttl: string) {
+  const { data } = await api.put(`/lifecycle/collections/${encodeURIComponent(name)}/ttl`, { ttl })
+  return data
+}
+
+export async function getLifecycleTransitions(bucket?: string): Promise<LifecycleTransition[]> {
+  const { data } = await api.get('/lifecycle/transitions', { params: { bucket } })
+  return Array.isArray(data) ? data : []
+}
+
+export async function getLifecycleTemplates(): Promise<{ templates: Record<string, { rules: Record<string, unknown>[] }> }> {
+  const { data } = await api.get('/lifecycle/templates')
   return data
 }
