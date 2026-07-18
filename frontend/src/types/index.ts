@@ -481,3 +481,17 @@ export interface AclTestResult {
   allowed: boolean
   matched_rule: string | null
 }
+
+export interface TierConfig {
+  id: number
+  name: string
+  tier_type: string
+  provider: string
+  config_json: string
+  enabled: boolean
+}
+
+export interface TierStats {
+  tiers: TierConfig[]
+  total_estimated_cost: number
+}

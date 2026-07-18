@@ -38,6 +38,8 @@ import type {
   AclPolicy,
   AclAuditEntry,
   AclTestResult,
+  TierConfig,
+  TierStats,
 } from '../types'
 
 const api = axios.create({
@@ -713,4 +715,28 @@ export async function testAclPermission(user: string, path: string, action: stri
 export async function getAclAuditLog(user?: string): Promise<AclAuditEntry[]> {
   const { data } = await api.get('/acl/audit', { params: { user } })
   return Array.isArray(data) ? data : []
+}
+
+export async function getTiers(): Promise<TierConfig[]> {
+  const { data } = await api.get('/tiers')
+  return Array.isArray(data) ? data : []
+}
+
+export async function getTierStats(): Promise<TierStats> {
+  const { data } = await api.get('/tiers/stats')
+  return data
+}
+
+export async function saveTier(body: Record<string, unknown>) {
+  const { data } = await api.post('/tiers', body)
+  return data
+}
+
+export async function deleteTier(id: number) {
+  await api.delete(`/tiers/${id}`)
+}
+
+export async function testTierConnection(provider: string, config: Record<string, unknown>) {
+  const { data } = await api.post('/tiers/test', { provider, config })
+  return data
 }
