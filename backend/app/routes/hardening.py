@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.middleware.auth_middleware import require_admin
 from app.settings_service import get_setting, get_setting_int, update_setting
+from app.services.hardening_service import get_hardening_service
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/hardening", tags=["hardening"])
@@ -46,4 +47,43 @@ async def update_hardening(body: dict, _: bool = Depends(require_admin)):
 
 @router.post("/checksums/verify")
 async def trigger_checksum(_: bool = Depends(require_admin)):
-    return {"ok": True, "message": "Checksum verification queued"}
+    svc = get_hardening_service()
+    if not svc._running:
+        await svc.start()
+    result = await svc.verify_checksums_all()
+    return result
+
+
+@router.post("/compression/deploy")
+async def deploy_compression(_: bool = Depends(require_admin)):
+    svc = get_hardening_service()
+    result = await svc.deploy_compression()
+    if not result.get("ok"):
+        logger.warning("compression_deploy_failed", error=result.get("error"))
+    return result
+
+
+@router.post("/encryption/deploy")
+async def deploy_encryption(_: bool = Depends(require_admin)):
+    svc = get_hardening_service()
+    result = await svc.deploy_encryption()
+    if not result.get("ok"):
+        logger.warning("encryption_deploy_failed", error=result.get("error"))
+    return result
+
+
+@router.get("/replication/drift")
+async def replication_drift():
+    svc = get_hardening_service()
+    return await svc.check_replication_drift()
+
+
+@router.get("/checksums/history")
+async def checksum_history(limit: int = 20):
+    from app.database import get_db
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM hardening_checksums ORDER BY created_at DESC LIMIT ?", (limit,),
+    )
+    rows = await cursor.fetchall()
+    return [dict(r) for r in rows]

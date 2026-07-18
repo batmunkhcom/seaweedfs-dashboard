@@ -763,6 +763,31 @@ export async function updateHardening(settings: Record<string, unknown>) {
   return data
 }
 
+export async function triggerChecksum(): Promise<Record<string, unknown>> {
+  const { data } = await api.post('/hardening/checksums/verify')
+  return data
+}
+
+export async function deployCompression(): Promise<Record<string, unknown>> {
+  const { data } = await api.post('/hardening/compression/deploy')
+  return data
+}
+
+export async function deployEncryption(): Promise<Record<string, unknown>> {
+  const { data } = await api.post('/hardening/encryption/deploy')
+  return data
+}
+
+export async function checkReplicationDrift(): Promise<Record<string, unknown>> {
+  const { data } = await api.get('/hardening/replication/drift')
+  return data
+}
+
+export async function getChecksumHistory(): Promise<Record<string, unknown>[]> {
+  const { data } = await api.get('/hardening/checksums/history')
+  return Array.isArray(data) ? data : []
+}
+
 export async function getFeatureRequests(status?: string): Promise<FeatureRequest[]> {
   const { data } = await api.get('/feedback/requests', { params: { status } })
   return Array.isArray(data) ? data : []

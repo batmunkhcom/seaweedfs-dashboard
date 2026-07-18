@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Card, Button, Switch, Select, Input, InputNumber, Statistic, Row, Col, message } from 'antd'
-import { SafetyCertificateOutlined } from '@ant-design/icons'
-import { getHardeningStatus, updateHardening } from '../../services/api'
+import { Card, Button, Switch, Select, Input, InputNumber, Statistic, Row, Col, message, Space, Tag } from 'antd'
+import { SafetyCertificateOutlined, CheckCircleOutlined, LockOutlined, FileZipOutlined, SyncOutlined } from '@ant-design/icons'
+import { getHardeningStatus, updateHardening, triggerChecksum, deployCompression, deployEncryption, checkReplicationDrift } from '../../services/api'
 import type { HardeningSetting } from '../../types'
 
 export default function HardeningPage() {
   const [settings, setSettings] = useState<HardeningSetting[]>([])
   const [dirty, setDirty] = useState<Record<string, unknown>>({})
   const [saving, setSaving] = useState(false)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [driftResult, setDriftResult] = useState<Record<string, unknown> | null>(null)
 
   const fetch = useCallback(async () => {
     try {
@@ -31,6 +33,20 @@ export default function HardeningPage() {
       fetch()
     } catch (e: any) { message.error(e.response?.data?.detail || 'Failed') }
     setSaving(false)
+  }
+
+  const handleAction = async (action: string, fn: () => Promise<Record<string, unknown>>) => {
+    setActionLoading(action)
+    try {
+      const r = await fn()
+      if (action === 'drift') {
+        setDriftResult(r)
+        message.info(`Replication: ${r.current_replication || 'unknown'} (desired: ${r.desired_replication}) — ${r.ok ? 'No drift' : 'DRIFT DETECTED'}`)
+      } else {
+        message.success(`${action} completed: ${r.nodes_scanned || Object.keys(r.results || {}).length} nodes, ${r.healthy || (r.ok ? 'success' : 'failed')}`)
+      }
+    } catch (e: any) { message.error(e.response?.data?.detail || `${action} failed`) }
+    setActionLoading(null)
   }
 
   const completed = settings.filter(s => {
@@ -74,6 +90,32 @@ export default function HardeningPage() {
             </div>
           </Card.Grid>
         ))}
+      </Card>
+
+      <Card title="Actions" style={{ marginTop: 16 }}>
+        <Space wrap size="middle">
+          <Button icon={<CheckCircleOutlined />} loading={actionLoading === 'checksum'} onClick={() => handleAction('checksum', triggerChecksum)}>
+            Verify Checksums (weed fix)
+          </Button>
+          <Button icon={<FileZipOutlined />} loading={actionLoading === 'compression'} onClick={() => handleAction('compression', deployCompression)}>
+            Deploy Compression
+          </Button>
+          <Button icon={<LockOutlined />} loading={actionLoading === 'encryption'} onClick={() => handleAction('encryption', deployEncryption)}>
+            Deploy Encryption
+          </Button>
+          <Button icon={<SyncOutlined />} loading={actionLoading === 'drift'} onClick={() => handleAction('drift', checkReplicationDrift)}>
+            Check Replication Drift
+          </Button>
+        </Space>
+        {driftResult && (
+          <div style={{ marginTop: 12 }}>
+            <Tag color={driftResult.ok ? 'green' : 'red'}>
+              Current: {driftResult.current_replication || '—'} | Desired: {driftResult.desired_replication || '—'}
+              {driftResult.drifted ? ' — DRIFT DETECTED' : ' — OK'}
+            </Tag>
+            <span style={{ marginLeft: 8, color: '#64748b' }}>{driftResult.total_volumes} volumes</span>
+          </div>
+        )}
       </Card>
     </div>
   )
