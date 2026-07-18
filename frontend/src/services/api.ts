@@ -28,6 +28,8 @@ import type {
   WebhookDelivery,
   WebhookTemplate,
   LokiQueryResult,
+  Gateway,
+  FuseStatus,
 } from '../types'
 
 const api = axios.create({
@@ -565,4 +567,39 @@ export async function getLokiLabels(): Promise<string[]> {
 export async function getLokiLabelValues(label: string): Promise<string[]> {
   const { data } = await api.get(`/logs/labels/${encodeURIComponent(label)}/values`)
   return Array.isArray(data) ? data : []
+}
+
+export async function getGateways(): Promise<Gateway[]> {
+  const { data } = await api.get('/gateways/status')
+  return Array.isArray(data) ? data : []
+}
+
+export async function startWebdav(node: string, port?: number) {
+  const { data } = await api.post('/gateways/webdav/start', { node, port })
+  return data
+}
+
+export async function stopWebdav(node: string) {
+  const { data } = await api.post('/gateways/webdav/stop', { node })
+  return data
+}
+
+export async function testWebdavConnection(node: string, port: number) {
+  const { data } = await api.post('/gateways/webdav/test', { node, port })
+  return data
+}
+
+export async function mountFuse(node: string, mountPath?: string) {
+  const { data } = await api.post('/gateways/fuse/mount', { node, mount_path: mountPath })
+  return data
+}
+
+export async function unmountFuse(node: string) {
+  const { data } = await api.post('/gateways/fuse/unmount', { node })
+  return data
+}
+
+export async function getFuseStatus(node: string): Promise<FuseStatus> {
+  const { data } = await api.get('/gateways/fuse/status', { params: { node } })
+  return data
 }

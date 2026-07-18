@@ -389,3 +389,23 @@ export interface LokiLogEntry {
   line: string
   labels: Record<string, string>
 }
+
+export interface Gateway {
+  id: number
+  gw_type: string
+  node: string
+  port: number
+  mount_path: string
+  enabled: boolean
+  running: boolean
+  pid: string
+  config: Record<string, unknown>
+}
+
+export interface FuseStatus {
+  node: string
+  mount_path: string
+  mounted: boolean
+  disk?: { total_gb: number; used_gb: number; avail_gb: number; pct: string }
+  error?: string
+}
