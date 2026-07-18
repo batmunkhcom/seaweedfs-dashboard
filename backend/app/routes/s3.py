@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.services.seaweed_client import get_seaweed_client
+from app.services.s3_sync import S3_GATEWAY_HOSTS
 from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
 from app.middleware.rate_limit import limiter
 from app.database import get_db
@@ -99,7 +100,8 @@ async def list_s3_users():
 
 
 @router.post("/users/{user_id}/reveal-secret")
-async def reveal_secret(user_id: int, body: RevealSecretRequest, _: bool = Depends(require_admin), current_user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def reveal_secret(request: Request, user_id: int, body: RevealSecretRequest, _: bool = Depends(require_admin), current_user: dict = Depends(get_current_user)):
     db = await get_db()
     cursor = await db.execute(
         "SELECT password_hash FROM users WHERE username = ? AND enabled = 1",
@@ -123,7 +125,8 @@ async def reveal_secret(user_id: int, body: RevealSecretRequest, _: bool = Depen
 
 
 @router.post("/users/{user_id}/credentials")
-async def regenerate_credentials(user_id: int, _: bool = Depends(require_permission("s3:write"))):
+@limiter.limit("10/minute")
+async def regenerate_credentials(request: Request, user_id: int, _: bool = Depends(require_permission("s3:write"))):
     import secrets
     access_key = f"AK{secrets.token_hex(10)}"
     secret_key = secrets.token_hex(20)
@@ -206,7 +209,8 @@ async def sync_iam_to_gateways(request: Request, _: bool = Depends(require_permi
 
 
 @router.post("/generate-key")
-async def generate_s3_key(body: GenerateKeyRequest, _: bool = Depends(require_permission("s3:write"))):
+@limiter.limit("10/minute")
+async def generate_s3_key(request: Request, body: GenerateKeyRequest, _: bool = Depends(require_permission("s3:write"))):
     import secrets
     username = body.username.strip().lower()
     if not username:

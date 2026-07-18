@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
@@ -6,6 +6,8 @@ import json
 
 from app.logging_config import get_logger
 from app.services.chatbot_service import chat_stream, is_ai_enabled, _get_setting
+from app.middleware.auth_middleware import require_admin
+from app.middleware.rate_limit import limiter
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 logger = get_logger("chatbot_routes")
@@ -23,7 +25,8 @@ class TestConnectionRequest(BaseModel):
 
 
 @router.post("/test-connection")
-async def test_connection(body: TestConnectionRequest):
+@limiter.limit("5/minute")
+async def test_connection(request: Request, body: TestConnectionRequest, _: bool = Depends(require_admin)):
     api_base = body.api_base_url.rstrip("/")
     api_key = body.api_key
 
@@ -82,7 +85,8 @@ async def ai_stats():
 
 
 @router.post("/chat")
-async def chat(body: ChatRequest):
+@limiter.limit("30/minute")
+async def chat(request: Request, body: ChatRequest, _: bool = Depends(require_admin)):
     if not await is_ai_enabled():
         from fastapi.responses import JSONResponse
         return JSONResponse({"error": "AI features are disabled"}, status_code=403)
@@ -99,7 +103,8 @@ async def chatbot_status():
 
 
 @router.post("/embedding/index")
-async def trigger_indexing():
+@limiter.limit("2/minute")
+async def trigger_indexing(request: Request, _: bool = Depends(require_admin)):
     if not await is_ai_enabled():
         return {"ok": False, "error": "AI features are disabled"}
     from app.services.ai_embedding import index_wiki_files

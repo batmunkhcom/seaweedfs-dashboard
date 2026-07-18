@@ -157,8 +157,9 @@ async def disk_usage():
 @router.get("/kpi-extras")
 async def kpi_extras():
     db = await get_db()
+    ALLOWED_TABLES = {"webhooks", "acl_policies", "tier_configs", "lifecycle_policies"}
     extras = {}
-    for table in ["webhooks", "acl_policies", "tier_configs", "lifecycle_policies"]:
+    for table in ALLOWED_TABLES:
         cursor = await db.execute(f"SELECT COUNT(*) as cnt FROM {table}")
         row = await cursor.fetchone()
         extras[table] = row["cnt"] if row else 0

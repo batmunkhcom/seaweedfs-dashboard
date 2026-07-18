@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 import bcrypt
 import secrets
 
 from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
+from app.middleware.rate_limit import limiter
 from app.database import get_db
 from app.logging_config import get_logger
 from app.rbac import get_roles, get_default_role
@@ -185,7 +186,8 @@ async def delete_user(user_id: int, _: bool = Depends(require_admin)):
 
 
 @router.post("/me/password")
-async def change_password(body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def change_password(request: Request, body: ChangePasswordRequest, user: dict = Depends(get_current_user)):
     db = await get_db()
     cursor = await db.execute(
         "SELECT password_hash FROM users WHERE username = ? AND enabled = 1",
