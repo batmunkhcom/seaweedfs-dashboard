@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, Table, Button, Tag, Popconfirm, message, Tabs, Drawer, Form, Input, Select, Space, Empty, Modal, Descriptions } from 'antd'
-import { SafetyOutlined, AuditOutlined, PlusOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined, CloudSyncOutlined } from '@ant-design/icons'
+import { SafetyOutlined, AuditOutlined, PlusOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined, CloudSyncOutlined, FolderOpenOutlined } from '@ant-design/icons'
 import { getAclPolicies, createAclPolicy, updateAclPolicy, deleteAclPolicy, testAclPermission, getAclAuditLog, syncAclToFiler, getAclSyncStatus } from '../../services/api'
+import { getFilerList } from '../../services/api'
 import type { AclPolicy, AclAuditEntry, AclTestResult } from '../../types'
 
 const PERM_CHIPS: Record<string, { color: string; label: string }> = {
@@ -17,6 +18,10 @@ export default function AclPage() {
   const [editing, setEditing] = useState<AclPolicy | null>(null)
   const [testModal, setTestModal] = useState(false)
   const [testResult, setTestResult] = useState<AclTestResult | null>(null)
+  const [filerBrowserOpen, setFilerBrowserOpen] = useState(false)
+  const [filerPath, setFilerPath] = useState('/')
+  const [filerItems, setFilerItems] = useState<any[]>([])
+  const [filerLoading, setFilerLoading] = useState(false)
   const [form] = Form.useForm()
   const [testForm] = Form.useForm()
   const [syncStatus, setSyncStatus] = useState<{ status: string; rule_count: number; last_sync_at: string | null }>({ status: 'never_synced', rule_count: 0, last_sync_at: null })
@@ -52,6 +57,27 @@ export default function AclPage() {
       const r = await testAclPermission(vals.user, vals.path, vals.action)
       setTestResult(r); setTestModal(true)
     } catch (e: any) { message.error(e.response?.data?.detail || 'Failed') }
+  }
+
+  const openFilerBrowser = async (path: string = '/') => {
+    setFilerBrowserOpen(true)
+    setFilerPath(path)
+    setFilerLoading(true)
+    try {
+      const items = await getFilerList(path)
+      setFilerItems(Array.isArray(items) ? items : [])
+    } catch { setFilerItems([]) }
+    setFilerLoading(false)
+  }
+
+  const selectFilerPath = (item: any) => {
+    const fullPath = filerPath === '/' ? `/${item.name}` : `${filerPath}/${item.name}`
+    if (item.type === 'directory') {
+      openFilerBrowser(fullPath)
+    } else {
+      testForm.setFieldsValue({ path: fullPath })
+      setFilerBrowserOpen(false)
+    }
   }
 
   const policyColumns = [
@@ -103,7 +129,11 @@ export default function AclPage() {
               <Card size="small" style={{ marginBottom: 12 }}>
                 <Form form={testForm} layout="inline">
                   <Form.Item name="user" rules={[{ required: true }]}><Input placeholder="username" style={{ width: 140 }} /></Form.Item>
-                  <Form.Item name="path" initialValue="/"><Input placeholder="/path" style={{ width: 180 }} /></Form.Item>
+                  <Form.Item name="path" initialValue="/">
+                    <Input placeholder="/path" style={{ width: 180 }} addonAfter={
+                      <Button type="text" size="small" icon={<FolderOpenOutlined />} onClick={() => openFilerBrowser('/')} />
+                    } />
+                  </Form.Item>
                   <Form.Item name="action" initialValue="R">
                     <Select style={{ width: 100 }} options={Object.entries(PERM_CHIPS).map(([k, v]) => ({ value: k, label: v.label }))} />
                   </Form.Item>
@@ -163,6 +193,32 @@ export default function AclPage() {
             <Descriptions.Item label="Matched Rule">{testResult.matched_rule || '—'}</Descriptions.Item>
           </Descriptions>
         )}
+      </Modal>
+
+      <Modal title={`Filer Directory — ${filerPath}`} open={filerBrowserOpen} onCancel={() => setFilerBrowserOpen(false)} footer={null} width={500}>
+        <Space style={{ marginBottom: 8 }}>
+          {filerPath !== '/' && (
+            <Button size="small" onClick={() => openFilerBrowser(filerPath.split('/').slice(0, -1).join('/') || '/')}>..</Button>
+          )}
+          <Button size="small" type="primary" onClick={() => { testForm.setFieldsValue({ path: filerPath }); setFilerBrowserOpen(false) }}>
+            Select this directory
+          </Button>
+        </Space>
+        <Table
+          dataSource={filerItems.map((item: any, i: number) => ({ ...item, key: i }))}
+          columns={[
+            { title: 'Name', dataIndex: 'name', key: 'name', render: (n: string, r: any) => (
+              <a onClick={() => selectFilerPath(r)} style={{ cursor: 'pointer' }}>
+                {r.type === 'directory' ? <FolderOpenOutlined style={{ marginRight: 6 }} /> : null}
+                {n}
+              </a>
+            )},
+            { title: 'Type', dataIndex: 'type', key: 'type', width: 80, render: (t: string) => <Tag>{t === 'directory' ? 'dir' : 'file'}</Tag> },
+          ]}
+          loading={filerLoading}
+          size="small"
+          pagination={false}
+        />
       </Modal>
     </div>
   )
