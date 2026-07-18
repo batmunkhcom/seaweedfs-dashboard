@@ -1,4 +1,5 @@
 from app.database import get_db
+from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
 
 logger = get_logger("acl_service")
@@ -109,3 +110,75 @@ async def get_audit_log(user: str | None = None, limit: int = 50) -> list[dict]:
         cursor = await db.execute("SELECT * FROM acl_audit_log ORDER BY created_at DESC LIMIT ?", (limit,))
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+async def build_filer_acl_rules() -> list[dict]:
+    policies = await get_policies()
+    rules = []
+    for p in policies:
+        rules.append({
+            "user": p.get("user_pattern", "*"),
+            "path": p.get("path", "/"),
+            "permissions": p.get("permissions", "R"),
+        })
+    return rules
+
+
+async def push_acl_to_filer():
+    rules = await build_filer_acl_rules()
+    client = get_seaweed_client()
+    import json
+    payload = json.dumps(rules)
+
+    filer_hosts = ["172.16.0.2:8888", "172.16.0.4:8888"]
+    results = {}
+    for host in filer_hosts:
+        try:
+            resp = await client.client.put(
+                f"http://{host}/admin/acl",
+                content=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            ok = resp.status_code in (200, 204)
+            results[host] = {"ok": ok, "status": resp.status_code}
+            logger.info("acl_sync", host=host, ok=ok, status=resp.status_code)
+        except Exception as e:
+            results[host] = {"ok": False, "error": str(e)}
+            logger.error("acl_sync_failed", host=host, exc_info=True)
+
+    await _update_sync_status(rules, results)
+    return {"ok": all(r.get("ok") for r in results.values()), "results": results}
+
+
+async def _update_sync_status(rules: list[dict], results: dict):
+    try:
+        db = await get_db()
+        ok = all(r.get("ok") for r in results.values())
+        sync_status = "synced" if ok else "partial"
+        await db.execute(
+            "INSERT OR REPLACE INTO acl_sync_status (id, status, rule_count, last_sync_at, details) VALUES (1, ?, ?, datetime('now'), ?)",
+            (sync_status, len(rules), str(results)),
+        )
+        await db.commit()
+    except Exception:
+        pass
+
+
+async def get_sync_status() -> dict:
+    try:
+        db = await get_db()
+        cursor = await db.execute("SELECT * FROM acl_sync_status WHERE id=1")
+        row = await cursor.fetchone()
+        if row:
+            return dict(row)
+    except Exception:
+        pass
+    return {"status": "never_synced", "rule_count": 0, "last_sync_at": None}
+
+
+async def auto_sync_on_change():
+    try:
+        await push_acl_to_filer()
+    except Exception:
+        logger.error("acl_auto_sync_failed", exc_info=True)

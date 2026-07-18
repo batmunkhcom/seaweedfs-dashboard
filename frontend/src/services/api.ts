@@ -719,6 +719,16 @@ export async function getAclAuditLog(user?: string): Promise<AclAuditEntry[]> {
   return Array.isArray(data) ? data : []
 }
 
+export async function syncAclToFiler(): Promise<{ ok: boolean; results: Record<string, unknown> }> {
+  const { data } = await api.post('/acl/sync')
+  return data
+}
+
+export async function getAclSyncStatus(): Promise<{ status: string; rule_count: number; last_sync_at: string | null }> {
+  const { data } = await api.get('/acl/sync-status')
+  return data
+}
+
 export async function getTiers(): Promise<TierConfig[]> {
   const { data } = await api.get('/tiers')
   return Array.isArray(data) ? data : []

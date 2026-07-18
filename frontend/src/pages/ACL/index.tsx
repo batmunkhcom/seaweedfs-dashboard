@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, Table, Button, Tag, Popconfirm, message, Tabs, Drawer, Form, Input, Select, Space, Empty, Modal, Descriptions } from 'antd'
-import { SafetyOutlined, AuditOutlined, PlusOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined } from '@ant-design/icons'
-import { getAclPolicies, createAclPolicy, updateAclPolicy, deleteAclPolicy, testAclPermission, getAclAuditLog } from '../../services/api'
+import { SafetyOutlined, AuditOutlined, PlusOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined, CloudSyncOutlined } from '@ant-design/icons'
+import { getAclPolicies, createAclPolicy, updateAclPolicy, deleteAclPolicy, testAclPermission, getAclAuditLog, syncAclToFiler, getAclSyncStatus } from '../../services/api'
 import type { AclPolicy, AclAuditEntry, AclTestResult } from '../../types'
 
 const PERM_CHIPS: Record<string, { color: string; label: string }> = {
@@ -19,13 +19,15 @@ export default function AclPage() {
   const [testResult, setTestResult] = useState<AclTestResult | null>(null)
   const [form] = Form.useForm()
   const [testForm] = Form.useForm()
+  const [syncStatus, setSyncStatus] = useState<{ status: string; rule_count: number; last_sync_at: string | null }>({ status: 'never_synced', rule_count: 0, last_sync_at: null })
 
   const fetch = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, log] = await Promise.all([getAclPolicies(), getAclAuditLog()])
+      const [pols, log, sync] = await Promise.all([getAclPolicies(), getAclAuditLog(), getAclSyncStatus()])
       setPolicies(pols)
       setAuditLog(log)
+      setSyncStatus(sync)
     } catch {}
     setLoading(false)
   }, [])
@@ -84,6 +86,15 @@ export default function AclPage() {
               title="ACL Policies"
               extra={
                 <Space>
+                  <Tag color={syncStatus.status === 'synced' ? 'green' : syncStatus.status === 'partial' ? 'orange' : 'red'}>
+                    {syncStatus.status === 'never_synced' ? 'Not Synced' : syncStatus.status}
+                  </Tag>
+                  <Button icon={<CloudSyncOutlined />} onClick={async () => {
+                    const r = await syncAclToFiler()
+                    message[r.ok ? 'success' : 'error'](r.ok ? 'Synced to all filers' : 'Sync failed on some filers')
+                    const s = await getAclSyncStatus()
+                    setSyncStatus(s)
+                  }}>Sync to Filer</Button>
                   <Button icon={<ExperimentOutlined />} onClick={() => testForm.resetFields()}>Test</Button>
                   <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Add Rule</Button>
                 </Space>
