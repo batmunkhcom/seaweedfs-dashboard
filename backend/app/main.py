@@ -12,6 +12,7 @@ from app.services.seaweed_client import startup_seaweed_client, shutdown_seaweed
 from app.middleware.rate_limit import limiter
 from app.middleware.csrf_middleware import CsrfMiddleware
 from app.middleware.auth_middleware import AuthMiddleware
+from app.metrics.middleware import MetricsMiddleware
 from app.settings_service import load_runtime_settings
 
 setup_logging()
@@ -82,6 +83,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "X-API-Key", "Accept", "X-Requested-With"],
 )
 app.add_middleware(CsrfMiddleware)
+app.add_middleware(MetricsMiddleware)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
 
@@ -111,6 +113,7 @@ from app.routes.acl import router as acl_router
 from app.routes.tiers import router as tiers_router
 from app.routes.hardening import router as hardening_router
 from app.routes.feedback import router as feedback_router
+from app.routes.prometheus import router as prometheus_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -135,6 +138,7 @@ app.include_router(gateways_router, prefix="/api")
 app.include_router(nfs_router, prefix="/api")
 app.include_router(lifecycle_router, prefix="/api")
 app.include_router(acl_router, prefix="/api")
+app.include_router(prometheus_router, prefix="/api")
 app.include_router(tiers_router, prefix="/api")
 app.include_router(hardening_router, prefix="/api")
 app.include_router(feedback_router, prefix="/api")
