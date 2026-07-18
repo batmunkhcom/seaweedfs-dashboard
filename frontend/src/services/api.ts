@@ -40,6 +40,8 @@ import type {
   AclTestResult,
   TierConfig,
   TierStats,
+  HardeningSetting,
+  FeatureRequest,
 } from '../types'
 
 const api = axios.create({
@@ -738,5 +740,47 @@ export async function deleteTier(id: number) {
 
 export async function testTierConnection(provider: string, config: Record<string, unknown>) {
   const { data } = await api.post('/tiers/test', { provider, config })
+  return data
+}
+
+export async function getHardeningStatus(): Promise<{ settings: HardeningSetting[] }> {
+  const { data } = await api.get('/hardening/status')
+  return data
+}
+
+export async function updateHardening(settings: Record<string, unknown>) {
+  const { data } = await api.put('/hardening/config', { settings })
+  return data
+}
+
+export async function getFeatureRequests(status?: string): Promise<FeatureRequest[]> {
+  const { data } = await api.get('/feedback/requests', { params: { status } })
+  return Array.isArray(data) ? data : []
+}
+
+export async function getFeatureRequest(id: number): Promise<FeatureRequest> {
+  const { data } = await api.get(`/feedback/requests/${id}`)
+  return data
+}
+
+export async function createFeatureRequest(title: string, description: string, category: string) {
+  const { data } = await api.post('/feedback/requests', { title, description, category })
+  return data
+}
+
+export async function voteFeatureRequest(id: number) {
+  await api.post(`/feedback/requests/${id}/vote`)
+}
+
+export async function unvoteFeatureRequest(id: number) {
+  await api.delete(`/feedback/requests/${id}/vote`)
+}
+
+export async function updateFeatureStatus(id: number, status: string) {
+  await api.put(`/feedback/requests/${id}/status`, { status })
+}
+
+export async function addFeatureComment(requestId: number, body: string) {
+  const { data } = await api.post(`/feedback/requests/${requestId}/comments`, { body })
   return data
 }

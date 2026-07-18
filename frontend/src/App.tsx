@@ -30,6 +30,8 @@ import GatewaysPage from './pages/Gateways'
 import LifecyclePage from './pages/Lifecycle'
 import AclPage from './pages/ACL'
 import TiersPage from './pages/Tiers'
+import HardeningPage from './pages/Hardening'
+import FeedbackPage from './pages/Feedback'
 import DashboardLayout from './layouts/DashboardLayout'
 import { SseProvider } from './components/SseProvider'
 
@@ -103,6 +105,8 @@ function App() {
             <Route path="/lifecycle" element={<LifecyclePage />} />
             <Route path="/acl" element={<AclPage />} />
             <Route path="/tiers" element={<TiersPage />} />
+            <Route path="/hardening" element={<HardeningPage />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

@@ -32,6 +32,8 @@ import {
   ClockCircleOutlined,
   SafetyCertificateOutlined,
   CloudServerOutlined,
+  LockOutlined,
+  BulbOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -67,6 +69,8 @@ const baseMenuItems = [
   { key: '/lifecycle', icon: <ClockCircleOutlined />, label: 'Lifecycle' },
   { key: '/acl', icon: <SafetyCertificateOutlined />, label: 'ACL' },
   { key: '/tiers', icon: <CloudServerOutlined />, label: 'Tiers' },
+  { key: '/hardening', icon: <LockOutlined />, label: 'Hardening' },
+  { key: '/feedback', icon: <BulbOutlined />, label: 'Feedback' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]

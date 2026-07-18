@@ -495,3 +495,31 @@ export interface TierStats {
   tiers: TierConfig[]
   total_estimated_cost: number
 }
+
+export interface HardeningSetting {
+  key: string
+  label: string
+  type: string
+  value: unknown
+  options?: string[]
+  has_value?: boolean
+}
+
+export interface FeatureRequest {
+  id: number
+  title: string
+  description: string
+  category: string
+  status: string
+  votes: number
+  created_by: string
+  created_at: string
+  comments?: FeatureComment[]
+}
+
+export interface FeatureComment {
+  id: number
+  author: string
+  body: string
+  created_at: string
+}

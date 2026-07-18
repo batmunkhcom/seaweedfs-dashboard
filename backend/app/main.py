@@ -93,6 +93,8 @@ from app.routes.nfs import router as nfs_router
 from app.routes.lifecycle import router as lifecycle_router
 from app.routes.acl import router as acl_router
 from app.routes.tiers import router as tiers_router
+from app.routes.hardening import router as hardening_router
+from app.routes.feedback import router as feedback_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -118,6 +120,8 @@ app.include_router(nfs_router, prefix="/api")
 app.include_router(lifecycle_router, prefix="/api")
 app.include_router(acl_router, prefix="/api")
 app.include_router(tiers_router, prefix="/api")
+app.include_router(hardening_router, prefix="/api")
+app.include_router(feedback_router, prefix="/api")
 
 
 @app.get("/api/health")
