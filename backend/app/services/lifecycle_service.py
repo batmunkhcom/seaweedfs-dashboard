@@ -390,7 +390,7 @@ class LifecycleEngine:
             db = await get_db()
             await db.execute(
                 "INSERT OR REPLACE INTO services_health (name, last_heartbeat, ttl_seconds) VALUES (?, datetime('now'), ?)",
-                ("lifecycle_engine", 300),
+                ("lifecycle_engine", 3600),
             )
             await db.commit()
         except Exception:

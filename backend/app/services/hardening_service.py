@@ -209,7 +209,7 @@ class HardeningService:
             db = await get_db()
             await db.execute(
                 "INSERT OR REPLACE INTO services_health (name, last_heartbeat, ttl_seconds) VALUES (?, datetime('now'), ?)",
-                ("hardening_service", 300),
+                ("hardening_service", 7200),
             )
             await db.commit()
         except Exception:
