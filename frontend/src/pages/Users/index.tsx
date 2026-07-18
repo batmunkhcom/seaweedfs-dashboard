@@ -134,7 +134,13 @@ export default function UsersPage() {
     },
     {
       title: 'S3', dataIndex: 's3_access_key', key: 's3',
-      render: (v: string) => v ? <Tag color="green">Active</Tag> : <Tag>None</Tag>,
+      render: (v: string) => v ? (
+        <Tooltip title={`Key: ${v.substring(0, 8)}...${v.slice(-4)} — Click to copy`}>
+          <Tag color="green" onClick={() => { navigator.clipboard.writeText(v); message.success('S3 Access Key copied') }} style={{ cursor: 'pointer' }}>
+            Active
+          </Tag>
+        </Tooltip>
+      ) : <Tag>None</Tag>,
     },
     ...(role === 'admin' ? [{
       title: '', key: 'actions', width: 120,
