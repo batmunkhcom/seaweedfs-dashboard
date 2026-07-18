@@ -263,15 +263,20 @@ class TestAuthRoutes:
 
     @pytest.mark.integration
     def test_login_bad_credentials(self):
+        from app.database import setup_database, shutdown_database
         from app.main import app
         from httpx import AsyncClient, ASGITransport
         import asyncio
 
         async def run():
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                r = await ac.post("/api/auth/login", json={"username": "bad", "password": "wrong"})
-                assert r.status_code >= 400
+            await setup_database()
+            try:
+                transport = ASGITransport(app=app)
+                async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                    r = await ac.post("/api/auth/login", json={"username": "bad", "password": "wrong"})
+                    assert r.status_code >= 400
+            finally:
+                await shutdown_database()
 
         asyncio.run(run())
 
