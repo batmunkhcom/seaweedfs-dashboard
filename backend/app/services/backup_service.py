@@ -1,7 +1,7 @@
 import asyncio
 import json
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from app.config import settings
@@ -355,7 +355,7 @@ async def cleanup_old_backups() -> dict:
     if retention_days <= 0:
         return {"ok": True, "deleted": 0, "reason": "retention disabled"}
 
-    cutoff = datetime.now(timezone.utc) - datetime.timedelta(days=retention_days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     cutoff_iso = cutoff.isoformat()
 
     db = await get_db()
