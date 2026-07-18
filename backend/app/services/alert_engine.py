@@ -115,12 +115,14 @@ class AlertEngine:
         percent_used = round(percent_used, 2)
 
         if percent_used > threshold:
+            severity = "critical" if percent_used > 95 else "warning"
             await self._create_alert(
-                "disk_usage", "critical" if percent_used > 95 else "warning",
+                "disk_usage", severity,
                 f"Disk usage {percent_used}% on {node_ip}",
                 f"Threshold: {threshold}%, current: {percent_used}%",
                 node_ip, dedup_key,
             )
+            await self._publish_webhook(f"disk_{severity}", {"node": node_ip, "usage_pct": percent_used, "threshold": threshold})
         else:
             await self._resolve_alert(dedup_key)
 
@@ -133,7 +135,8 @@ class AlertEngine:
             async with httpx.AsyncClient(timeout=5) as hc:
                 r = await hc.get(f"http://{node_ip}:8080/status")
                 if r.status_code == 200:
-                    await self._resolve_alert(dedup_key)
+                    if await self._resolve_alert(dedup_key):
+                        await self._publish_webhook("node_up", {"node": node_ip})
                 else:
                     await self._create_alert(
                         "node_down", "critical",
@@ -141,6 +144,7 @@ class AlertEngine:
                         f"HTTP {r.status_code} on port 8080",
                         node_ip, dedup_key,
                     )
+                    await self._publish_webhook("node_down", {"node": node_ip})
         except Exception:
             await self._create_alert(
                 "node_down", "critical",
@@ -148,6 +152,7 @@ class AlertEngine:
                 "Connection refused on port 8080",
                 node_ip, dedup_key,
             )
+            await self._publish_webhook("node_down", {"node": node_ip})
 
     def _check_readonly_volumes(self, node_ip: str, node: dict, max_allowed: int):
         try:
@@ -219,6 +224,15 @@ class AlertEngine:
             if rows:
                 await db.commit()
                 logger.info("alert_resolved", dedup_key=dedup_key, count=len(rows))
+                return True
+            return False
+        except Exception:
+            return False
+
+    async def _publish_webhook(self, event_type: str, data: dict):
+        try:
+            from app.services.webhook_service import publish_webhook_event
+            await publish_webhook_event(event_type, data)
         except Exception:
             pass
 

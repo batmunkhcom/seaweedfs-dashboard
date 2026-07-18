@@ -279,6 +279,15 @@ class LifecycleEngine:
         await self._update_policy_timestamps(bucket)
         if transition_count:
             logger.info("lifecycle_transitions_recorded", bucket=bucket, count=transition_count)
+            try:
+                from app.services.webhook_service import publish_webhook_event
+                await publish_webhook_event("lifecycle_transition", {
+                    "bucket": bucket,
+                    "count": transition_count,
+                    "action": "evaluated",
+                })
+            except Exception:
+                logger.warning("lifecycle_webhook_failed", exc_info=True)
 
         await self._cleanup_old_transitions(bucket)
 
