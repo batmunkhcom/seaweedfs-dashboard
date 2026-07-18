@@ -299,8 +299,9 @@ class LifecycleEngine:
                     from app.config import settings
                 except Exception:
                     pass
+            s3_host = settings.filer_list[0].replace(":8888", ":8333") if hasattr(settings, 'filer_list') else "172.16.0.2:8333"
             s3_resp = await self._client.client.get(
-                f"http://172.16.0.2:8333/{bucket}?list-type=2&max-keys={max_keys}",
+                f"http://{s3_host}/{bucket}?list-type=2&max-keys={max_keys}",
                 timeout=10,
             )
             if s3_resp.status_code != 200:
@@ -310,7 +311,8 @@ class LifecycleEngine:
             return self._parse_s3_list(await self._get_any_s3_node(bucket, max_keys))
 
     async def _get_any_s3_node(self, bucket: str, max_keys: int):
-        for host in ["172.16.0.2", "172.16.0.4", "172.16.0.6", "172.16.0.7"]:
+        hosts = [h.split(":")[0] for h in settings.seaweedfs_s3_gateway_hosts.split(",")] if hasattr(settings, 'seaweedfs_s3_gateway_hosts') else ["172.16.0.2"]
+        for host in hosts:
             try:
                 r = await self._client.client.get(
                     f"http://{host}:8333/{bucket}?list-type=2&max-keys={max_keys}",

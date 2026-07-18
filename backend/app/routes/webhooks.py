@@ -39,10 +39,20 @@ async def list_webhooks():
     rows = await cursor.fetchall()
     return [{
         "id": r["id"], "name": r["name"], "platform": r["platform"],
-        "url": r["url"], "events": [e.strip() for e in (r["events"] or "").split(",") if e.strip()],
+        "url": _mask_url(r["url"]), "events": [e.strip() for e in (r["events"] or "").split(",") if e.strip()],
         "enabled": bool(r["enabled"]),
         "created_at": r["created_at"], "updated_at": r["updated_at"],
     } for r in rows]
+
+
+def _mask_url(url: str) -> str:
+    if len(url) > 60 and "/" in url:
+        import re
+        masked = re.sub(r'(token=|key=|secret=|sig=|api_key=)[^&\s]+', r'\1****', url)
+        if masked != url:
+            return masked
+        return url[:50] + "..." + url[-10:]
+    return url
 
 
 @router.post("")

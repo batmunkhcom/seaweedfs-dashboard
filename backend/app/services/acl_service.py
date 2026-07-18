@@ -1,4 +1,5 @@
 from app.database import get_db
+from app.config import settings
 from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
 
@@ -130,7 +131,7 @@ async def push_acl_to_filer():
     import json
     payload = json.dumps(rules)
 
-    filer_hosts = ["172.16.0.2:8888", "172.16.0.4:8888"]
+    filer_hosts = settings.filer_list
     results = {}
     for host in filer_hosts:
         try:

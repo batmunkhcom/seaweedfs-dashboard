@@ -81,7 +81,14 @@ async def list_users():
         "SELECT id, username, firstname, lastname, email, phone, role, enabled, s3_access_key, s3_permission, created_at FROM users ORDER BY username"
     )
     rows = await cursor.fetchall()
-    return [dict(r) for r in rows]
+    return [_mask_user(r) for r in rows]
+
+
+def _mask_user(row) -> dict:
+    d = dict(row)
+    if d.get("s3_access_key") and len(str(d["s3_access_key"])) > 8:
+        d["s3_access_key"] = str(d["s3_access_key"])[:4] + "****" + str(d["s3_access_key"])[-4:]
+    return d
 
 
 @router.get("/roles")

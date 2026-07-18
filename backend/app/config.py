@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     seaweedfs_master_hosts: str = "172.16.0.1:9333,172.16.0.3:9333,172.16.0.5:9333"
     seaweedfs_filer_host: str = "172.16.0.2:8888,172.16.0.4:8888"
     seaweedfs_volume_hosts: str = "172.16.0.6:8080,172.16.0.7:8080"
+    seaweedfs_s3_gateway_hosts: str = "172.16.0.2:8333,172.16.0.4:8333,172.16.0.6:8333,172.16.0.7:8333"
     seaweedfs_request_timeout: int = 30
 
     database_url: str = "sqlite:///data/data.db"

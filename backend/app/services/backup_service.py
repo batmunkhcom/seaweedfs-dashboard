@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from app.config import settings
+from app.config import settings
 from app.database import get_db
 from app.logging_config import get_logger
 from app.settings_service import get_setting, get_setting_int
@@ -326,12 +327,12 @@ async def _upload_to_s3(file_path: Path, bucket: str, endpoint: str = "") -> dic
                 data = f.read()
             key = file_path.name
 
-            s3_url = f"{endpoint or 'http://172.16.0.2:8333'}/{bucket}/{key}"
+            s3_url = f"{endpoint or 'http://' + settings.filer_list[0].replace(':8888',':8333')}/{bucket}/{key}"
             resp = await hc.put(s3_url, content=data, headers={"Content-Type": "application/octet-stream"})
 
             filer_success = False
             if resp.status_code >= 400:
-                filer_hosts = ["172.16.0.2:8888", "172.16.0.4:8888"]
+                filer_hosts = settings.filer_list
                 for host in filer_hosts:
                     try:
                         filer_url = f"http://{host}/{bucket}/{key}"

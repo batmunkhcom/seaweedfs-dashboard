@@ -7,6 +7,26 @@ from app.services.api_key_service import validate_api_key, record_usage
 
 PUBLIC_PATHS = {"/api/health", "/api/info", "/api/auth/login", "/api/auth/csrf-token", "/api/prometheus", "/docs", "/openapi.json"}
 
+ADMIN_ONLY_PREFIXES = (
+    "/api/users",
+    "/api/webhooks",
+    "/api/disk-health",
+    "/api/filer/list",
+    "/api/logs",
+    "/api/s3/users",
+    "/api/api-keys",
+    "/api/acl/audit",
+    "/api/cluster/health",
+    "/api/cluster/topology",
+    "/api/collections",
+    "/api/backup",
+    "/api/workers",
+    "/api/metrics",
+    "/api/hardening",
+    "/api/feedback/requests",
+    "/api/nfs",
+)
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -32,6 +52,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         request.state.user = session["user"]
         request.state.role = session.get("role", "viewer")
+
+        if request.state.role == "viewer":
+            path = request.url.path
+            for prefix in ADMIN_ONLY_PREFIXES:
+                if path.startswith(prefix):
+                    return JSONResponse(status_code=403, content={"detail": "Admin access required"})
+
         return await call_next(request)
 
 
