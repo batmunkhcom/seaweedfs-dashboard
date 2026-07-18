@@ -745,41 +745,17 @@ export async function saveTier(body: Record<string, unknown>) {
 }
 
 export async function deleteTier(id: number) {
-  await api.delete(`/tiers/${id}`)
+  const { data } = await api.delete(`/tiers/${id}`)
+  return data
 }
 
 export async function testTierConnection(provider: string, config: Record<string, unknown>) {
-  const { data } = await api.post('/tiers/test', { provider, config })
+  const { data } = await api.post('/tiers/test-connection', { provider, config })
   return data
 }
 
-export async function getHardeningStatus(): Promise<{ settings: HardeningSetting[] }> {
-  const { data } = await api.get('/hardening/status')
-  return data
-}
-
-export async function updateHardening(settings: Record<string, unknown>) {
-  const { data } = await api.put('/hardening/config', { settings })
-  return data
-}
-
-export async function triggerChecksum(): Promise<Record<string, unknown>> {
-  const { data } = await api.post('/hardening/checksums/verify')
-  return data
-}
-
-export async function deployCompression(): Promise<Record<string, unknown>> {
-  const { data } = await api.post('/hardening/compression/deploy')
-  return data
-}
-
-export async function deployEncryption(): Promise<Record<string, unknown>> {
-  const { data } = await api.post('/hardening/encryption/deploy')
-  return data
-}
-
-export async function checkReplicationDrift(): Promise<Record<string, unknown>> {
-  const { data } = await api.get('/hardening/replication/drift')
+export async function syncTiers(): Promise<{ ok: boolean; synced: number; total: number }> {
+  const { data } = await api.post('/tiers/sync')
   return data
 }
 

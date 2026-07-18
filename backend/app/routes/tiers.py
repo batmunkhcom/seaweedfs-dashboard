@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Depends
 
 from app.middleware.auth_middleware import require_admin
-from app.services.tier_service import get_tiers, save_tier, delete_tier, get_tier_stats, test_tier_connection, TIER_TYPES, PROVIDERS
+from app.services.tier_service import (
+    get_tiers, save_tier, delete_tier, get_tier_stats,
+    test_tier_connection, test_tier_connection_full, test_gcs_connection, test_azure_connection,
+    configure_tier_on_cluster, sync_all_tiers, get_tier_usage_per_node,
+    TIER_TYPES, PROVIDERS,
+)
 
 router = APIRouter(prefix="/tiers", tags=["tiers"])
 
@@ -40,3 +45,27 @@ async def test_connection(body: dict, _: bool = Depends(require_admin)):
 @router.get("/types")
 async def tier_types():
     return {"types": TIER_TYPES, "providers": PROVIDERS}
+
+
+@router.post("/test-connection")
+async def test_provider_connection(body: dict, _: bool = Depends(require_admin)):
+    provider = body.get("provider", "s3")
+    config = body.get("config", {})
+    return await test_tier_connection_full(provider, config)
+
+
+@router.post("/configure")
+async def deploy_tier_to_cluster(body: dict, _: bool = Depends(require_admin)):
+    return await configure_tier_on_cluster(
+        body["name"], body.get("tier_type", "hot"), body.get("provider", "local"), body.get("config", {}),
+    )
+
+
+@router.post("/sync")
+async def sync_tiers(_: bool = Depends(require_admin)):
+    return await sync_all_tiers()
+
+
+@router.get("/usage")
+async def tier_usage_per_node():
+    return await get_tier_usage_per_node()
