@@ -180,6 +180,102 @@ class DiskHealthService:
             except Exception:
                 logger.error("disk_health_node_failed", host=host, exc_info=True)
 
+        asyncio.create_task(self._evaluate_smart_alerts())
+
+    async def _evaluate_smart_alerts(self):
+        try:
+            from app.services.alert_engine import get_alert_engine
+            temp_warn = await get_setting_int("disk_health_temp_warn_c", 55)
+            temp_crit = await get_setting_int("disk_health_temp_crit_c", 65)
+            wear_warn = await get_setting_int("disk_health_wear_warn_pct", 85)
+            realloc_warn = await get_setting_int("disk_health_realloc_warn_count", 10)
+
+            db = await get_db()
+            cursor = await db.execute(
+                "SELECT node, device, smart_json, timestamp FROM disk_health WHERE rowid IN (SELECT MAX(rowid) FROM disk_health GROUP BY node, device)"
+            )
+            rows = await cursor.fetchall()
+            for row in rows:
+                try:
+                    data = json.loads(row["smart_json"])
+                except Exception:
+                    continue
+
+                node = row["node"]
+                device = row["device"]
+
+                temp = data.get("temperature", {}).get("current") if isinstance(data.get("temperature"), dict) else data.get("temperature")
+
+                if temp is not None and isinstance(temp, (int, float)):
+                    dedup = f"disk_temp:{node}:{device}"
+                    if temp > temp_crit:
+                        await self._create_disk_alert(node, device, f"Critical disk temperature {temp}°C on {device}", dedup, "critical")
+                    elif temp > temp_warn:
+                        await self._create_disk_alert(node, device, f"High disk temperature {temp}°C on {device}", dedup, "warning")
+                    else:
+                        await self._resolve_disk_alert(dedup)
+
+                wear = None
+                if isinstance(data.get("nvme_smart_health_information_log"), dict):
+                    wear = data["nvme_smart_health_information_log"].get("percentage_used")
+
+                if wear is not None and isinstance(wear, (int, float)):
+                    dedup = f"disk_wear:{node}:{device}"
+                    if wear > wear_warn:
+                        await self._create_disk_alert(node, device, f"SSD wear {wear}% on {device}", dedup, "critical")
+                    else:
+                        await self._resolve_disk_alert(dedup)
+
+                realloc = None
+                ata = data.get("ata_smart_attributes", {}).get("table", [])
+                if ata:
+                    for attr in ata:
+                        if attr.get("id") == 5:
+                            realloc = attr.get("raw", {}).get("value") if isinstance(attr.get("raw"), dict) else attr.get("value")
+
+                if realloc is not None and isinstance(realloc, (int, float)) and realloc > 0:
+                    dedup = f"disk_realloc:{node}:{device}"
+                    if realloc > realloc_warn:
+                        await self._create_disk_alert(node, device, f"{realloc} reallocated sectors on {device}", dedup, "warning")
+                    else:
+                        await self._resolve_disk_alert(dedup)
+
+        except Exception:
+            logger.error("smart_alert_eval_failed", exc_info=True)
+
+    async def _create_disk_alert(self, node: str, device: str, title: str, dedup_key: str, severity: str):
+        try:
+            from app.services.alert_engine import get_alert_engine
+            engine = get_alert_engine()
+            if engine._running:
+                from app.routes.sse import publish_alert
+                await publish_alert({"type": "disk_health", "severity": severity, "title": title,
+                                     "description": f"Device: {device}", "node": node, "dedup_key": dedup_key})
+                db = await get_db()
+                cursor = await db.execute(
+                    "SELECT id FROM alerts WHERE dedup_key = ? AND status != 'resolved'",
+                    (dedup_key,),
+                )
+                if not await cursor.fetchone():
+                    await db.execute(
+                        "INSERT INTO alerts (type, severity, title, description, node, status, dedup_key) VALUES (?, ?, ?, ?, ?, 'new', ?)",
+                        ("disk_health", severity, title, f"Device: {device}", node, dedup_key),
+                    )
+                    await db.commit()
+        except Exception:
+            pass
+
+    async def _resolve_disk_alert(self, dedup_key: str):
+        try:
+            db = await get_db()
+            await db.execute(
+                "UPDATE alerts SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE dedup_key = ? AND status != 'resolved'",
+                (dedup_key,),
+            )
+            await db.commit()
+        except Exception:
+            pass
+
     def _update_heartbeat(self):
         asyncio.create_task(self._write_heartbeat())
 
