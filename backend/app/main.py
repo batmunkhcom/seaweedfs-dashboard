@@ -37,8 +37,12 @@ async def lifespan(app: FastAPI):
     await start_webhook_service()
     from app.services.alert_engine import start_alert_engine
     await start_alert_engine()
+    from app.services.snapshot import start_snapshot_service
+    await start_snapshot_service()
     yield
     logger.info("shutdown")
+    from app.services.snapshot import stop_snapshot_service
+    await stop_snapshot_service()
     from app.services.alert_engine import stop_alert_engine
     await stop_alert_engine()
     from app.services.webhook_service import stop_webhook_service
