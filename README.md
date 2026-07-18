@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>SeaweedFS Dashboard</strong> — v0.01.65
+  <strong>SeaweedFS Dashboard</strong> — v0.01.70
 </p>
 
 <p align="center">
@@ -33,9 +33,9 @@ Web-based management dashboard for SeaweedFS clusters. Monitor, manage, browse, 
 | **Tiers** | GCS/Azure cloud tier connection test, SSH deploy, sync-to-cluster |
 | **Hardening** | Compression/encryption deploy via SSH, replication drift detection, checksum history |
 | **Backup** | Multi-filer sync, local snapshot + S3/filer upload, cron daily at 03:00 |
-| **Workers** | status overview, job history, detect/execute triggers |
+| **Workers** | Status overview, job history, detect/execute triggers |
 | **Disk Health** | S.M.A.R.T. via SSH (smartctl), temperature/wear/realloc alerts |
-| **Gateways** | WebDAV start/stop/test, FUSE mount/unmount, NFS exports management |
+| **Gateways** | WebDAV start/stop/test, FUSE mount/unmount, NFS exports (dropdown, edit, mount cmd, clients modal) |
 | **Metrics** | Node-level metrics history (disk, volumes, slots), timeseries charts |
 | **Prometheus** | `/api/prometheus` — counters, histograms, gauges for HTTP, cluster, services |
 | **Logs** | Loki proxy with SSE tail streaming + local structlog JSON fallback |
@@ -45,6 +45,7 @@ Web-based management dashboard for SeaweedFS clusters. Monitor, manage, browse, 
 | **Settings** | Runtime config (thresholds, intervals, feature toggles), no restart needed |
 | **Users** | Admin + viewer roles, bcrypt passwords, S3 credential binding |
 | **Feedback** | Feature request board with voting and status tracking |
+| **Navigation** | 7-section grouped sidebar (Monitor, Cluster, Storage, S3, Services, Advanced, System) with Documentation at bottom |
 
 ### Security
 
@@ -157,6 +158,8 @@ DISK_HEALTH_ENABLED=false
 | `GET /api/logs/query` | admin | Log query (Loki or local) |
 | `GET /api/webhooks` | admin | Webhook configuration |
 | `GET /api/disk-health/{node}` | admin | S.M.A.R.T. data by node |
+| `GET /api/nfs/exports` | session | NFS export list |
+| `GET /api/nfs/clients` | session | Connected NFS clients (showmount) |
 | `GET /api/feedback/requests` | admin | Feature request board |
 
 Full API documentation at `/api-doc` in the UI.
