@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, Table, Button, Modal, Tag, Space, message, Row, Col, Statistic, Select, Drawer, Input, Descriptions, Progress, Tooltip } from 'antd'
 import {
   ThunderboltOutlined,
@@ -12,6 +13,7 @@ import {
   SyncOutlined,
   HddOutlined,
   InfoCircleOutlined,
+  TableOutlined,
 } from '@ant-design/icons'
 import { getWorkerStatus, listWorkerJobs, triggerWorkerDetect, triggerWorkerExecute, getNodeVolumes } from '../../services/api'
 import type { WorkerStatusResponse, WorkerNode, WorkerJob } from '../../types'
@@ -52,6 +54,7 @@ const statusColors: Record<string, string> = {
 }
 
 export default function WorkersPage() {
+  const navigate = useNavigate()
   const [status, setStatus] = useState<WorkerStatusResponse>({ total: 0, healthy: 0, nodes: [] })
   const [jobs, setJobs] = useState<WorkerJob[]>([])
   const [loading, setLoading] = useState(true)
@@ -175,9 +178,15 @@ export default function WorkersPage() {
     },
     { title: 'Version', dataIndex: 'version', key: 'version', width: 100, render: (v: string) => v ? <code style={{ fontSize: 11 }}>{v.split(' ')[0]}</code> : '—' },
     {
-      title: '', key: 'action', width: 40,
+      title: '', key: 'action', width: 80,
       render: (_: unknown, r: WorkerNode) => (
-        <Button type="link" size="small" icon={<InfoCircleOutlined />} onClick={() => { setSelectedWorker(r); setWorkerDrawer(true) }} />
+        <Space size={2}>
+          <Tooltip title="View Volumes">
+            <Button type="text" size="small" icon={<TableOutlined />}
+              onClick={() => navigate(`/volumes?node=${encodeURIComponent(r.name)}`)} />
+          </Tooltip>
+          <Button type="link" size="small" icon={<InfoCircleOutlined />} onClick={() => { setSelectedWorker(r); setWorkerDrawer(true) }} />
+        </Space>
       ),
     },
   ]
