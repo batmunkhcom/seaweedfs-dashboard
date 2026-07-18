@@ -36,7 +36,7 @@ async def is_ai_enabled() -> bool:
     return await _get_setting("ai_enabled", "false") == "true"
 
 
-async def _build_context() -> tuple[str, list[dict]]:
+async def _build_context(user_prompt: str = "") -> tuple[str, list[dict]]:
     lines = ["Current SeaweedFS cluster state (dc03, rack2, replication=001, 2 copies per volume):"]
     client = get_seaweed_client()
     try:
@@ -114,7 +114,7 @@ async def _build_context() -> tuple[str, list[dict]]:
     citations = []
     try:
         from app.services.ai_embedding import search_similar
-        rag_context, citations = await search_similar(prompt)
+        rag_context, citations = await search_similar(user_prompt) if user_prompt else ([], [])
         if rag_context:
             lines.append("\n--- Wiki Documentation (RAG) ---")
             lines.append(rag_context)
@@ -133,7 +133,7 @@ async def chat_stream(prompt: str, history: list[dict]) -> AsyncGenerator[str, N
     temperature = await _get_setting_float("ai_temperature", 0.7)
     system_prompt = await _get_setting("ai_system_prompt", "You are a helpful AI assistant for a SeaweedFS cluster.")
 
-    context, citations = await _build_context()
+    context, citations = await _build_context(prompt)
     full_system = f"{system_prompt}\n\n{context}"
 
     messages = [{"role": "system", "content": full_system}]
