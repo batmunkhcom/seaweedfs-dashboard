@@ -39,8 +39,12 @@ async def lifespan(app: FastAPI):
     await start_alert_engine()
     from app.services.snapshot import start_snapshot_service
     await start_snapshot_service()
+    from app.services.lifecycle_service import start_lifecycle_engine
+    await start_lifecycle_engine()
     yield
     logger.info("shutdown")
+    from app.services.lifecycle_service import stop_lifecycle_engine
+    await stop_lifecycle_engine()
     from app.services.snapshot import stop_snapshot_service
     await stop_snapshot_service()
     from app.services.alert_engine import stop_alert_engine

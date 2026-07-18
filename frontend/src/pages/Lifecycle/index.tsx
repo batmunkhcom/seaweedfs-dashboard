@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card, Table, Button, Tag, Popconfirm, message, Tabs, Drawer, Form, Select, InputNumber, Input, Switch, Space, Empty } from 'antd'
 import { ClockCircleOutlined, CloudOutlined, DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined } from '@ant-design/icons'
-import { getLifecyclePolicies, saveLifecyclePolicy, deleteLifecyclePolicy, getCollectionsTtl, setCollectionTtl, getLifecycleTransitions, getLifecycleTemplates, getS3Buckets } from '../../services/api'
+import { getLifecyclePolicies, saveLifecyclePolicy, deleteLifecyclePolicy, getCollectionsTtl, setCollectionTtl, getLifecycleTransitions, getLifecycleTemplates, getS3Buckets, getTiers } from '../../services/api'
 import type { LifecyclePolicy, CollectionTtl, LifecycleTransition } from '../../types'
 
 const TTL_PRESETS = [
@@ -20,19 +20,21 @@ export default function LifecyclePage() {
   const [editing, setEditing] = useState<LifecyclePolicy | null>(null)
   const [buckets, setBuckets] = useState<string[]>([])
   const [templates, setTemplates] = useState<Record<string, { rules: Record<string, unknown>[] }>>({})
+  const [tierNames, setTierNames] = useState<string[]>([])
   const [form] = Form.useForm()
 
   const fetch = useCallback(async () => {
     setLoading(true)
     try {
-      const [pols, colls, trans, bcks, tpls] = await Promise.all([
-        getLifecyclePolicies(), getCollectionsTtl(), getLifecycleTransitions(), getS3Buckets(), getLifecycleTemplates(),
+      const [pols, colls, trans, bcks, tpls, tiers] = await Promise.all([
+        getLifecyclePolicies(), getCollectionsTtl(), getLifecycleTransitions(), getS3Buckets(), getLifecycleTemplates(), getTiers(),
       ])
       setPolicies(pols)
       setCollections(colls)
       setTransitions(trans)
       setBuckets(bcks.map(b => b.name))
       setTemplates(tpls.templates || {})
+      setTierNames(tiers.map(t => t.name))
     } catch {}
     setLoading(false)
   }, [])
@@ -58,7 +60,7 @@ export default function LifecyclePage() {
               id: `rule-${Date.now()}`, status: vals.enabled !== false ? 'Enabled' : 'Disabled',
               filter: { prefix: vals.prefix || '' },
               expiration: vals.expireDays ? { days: vals.expireDays } : vals.transitionDays ? { days: vals.transitionDays } : undefined,
-              transitions: vals.transitionDays ? [{ days: vals.transitionDays, storageClass: vals.storageClass || 'GLACIER' }] : undefined,
+               transitions: vals.transitionDays ? [{ days: vals.transitionDays, storageClass: vals.storageClass || tierNames[0] || 'GLACIER' }] : undefined,
             }],
           }
       await saveLifecyclePolicy(vals.bucket, policy, vals.enabled !== false)
@@ -176,6 +178,9 @@ export default function LifecyclePage() {
           </Form.Item>
           <Form.Item name="transitionDays" label="Transition after (days)" tooltip="Move to cold storage after N days">
             <InputNumber min={1} max={3650} style={{ width: '100%' }} placeholder="90" />
+          </Form.Item>
+          <Form.Item name="storageClass" label="Storage Class" tooltip="Target storage tier for transition">
+            <Select placeholder="Select tier" allowClear options={tierNames.map(n => ({ value: n, label: n.toUpperCase() }))} />
           </Form.Item>
           <Form.Item name="enabled" label="Enabled" valuePropName="checked" initialValue={true}>
             <Switch />
