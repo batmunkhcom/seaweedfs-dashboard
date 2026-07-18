@@ -774,6 +774,41 @@ export async function getChecksumHistory(): Promise<Record<string, unknown>[]> {
   return Array.isArray(data) ? data : []
 }
 
+export async function getHardeningStatus(): Promise<{ settings: HardeningSetting[] }> {
+  const { data } = await api.get('/hardening/status')
+  return data
+}
+
+export async function updateHardening(settings: Record<string, unknown>) {
+  const { data } = await api.put('/hardening/config', { settings })
+  return data
+}
+
+export async function triggerChecksum(): Promise<Record<string, unknown>> {
+  const { data } = await api.post('/hardening/checksums/verify')
+  return data
+}
+
+export async function deployCompression(): Promise<Record<string, unknown>> {
+  const { data } = await api.post('/hardening/compression/deploy')
+  return data
+}
+
+export async function deployEncryption(): Promise<Record<string, unknown>> {
+  const { data } = await api.post('/hardening/encryption/deploy')
+  return data
+}
+
+export async function checkReplicationDrift(): Promise<Record<string, unknown>> {
+  const { data } = await api.get('/hardening/replication/drift')
+  return data
+}
+
+export async function getFilerList(path: string = '/'): Promise<any[]> {
+  const { data } = await api.get(`/filer/list/${path === '/' ? '' : encodeURIComponent(path)}`)
+  return Array.isArray(data) ? data : []
+}
+
 export async function getFeatureRequests(status?: string): Promise<FeatureRequest[]> {
   const { data } = await api.get('/feedback/requests', { params: { status } })
   return Array.isArray(data) ? data : []
