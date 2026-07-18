@@ -168,3 +168,18 @@ async def kpi_extras():
     extras["active_alerts"] = row["cnt"] if row else 0
 
     return extras
+
+
+@router.get("/features")
+async def feature_toggles():
+    from app.settings_service import get_setting
+    toggles = [
+        "feature_loki_enabled", "feature_webhooks_enabled", "feature_gateways_enabled",
+        "feature_nfs_enabled", "feature_acl_enabled", "feature_lifecycle_enabled",
+        "feature_tiers_enabled", "feature_hardening_enabled",
+    ]
+    result = {}
+    for key in toggles:
+        val = await get_setting(key, "false")
+        result[key] = val == "true"
+    return result

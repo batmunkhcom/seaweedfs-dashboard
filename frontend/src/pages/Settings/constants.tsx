@@ -43,6 +43,17 @@ export const CLUSTER_SETTINGS: SettingMeta[] = [
   { key: 'seaweedfs_request_timeout', label: 'API Request Timeout', description: 'Timeout for SeaweedFS API requests. Increase if cluster is slow to respond', type: 'int', unit: 'sec', min: 5, max: 120, defaultVal: '30' },
 ]
 
+export const FEATURE_TOGGLES: SettingMeta[] = [
+  { key: 'feature_loki_enabled', label: 'Loki Logs', description: 'Enable Loki log aggregation proxy and SSE tail streaming', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_webhooks_enabled', label: 'Webhooks', description: 'Enable webhook delivery for alert, backup, and system events', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_gateways_enabled', label: 'WebDAV + FUSE', description: 'Enable SSH-based WebDAV/FUSE gateway management', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_nfs_enabled', label: 'NFS Exports', description: 'Enable NFS /etc/exports management and sync', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_acl_enabled', label: 'ACL Policies', description: 'Enable filer-level ACL policy management and sync', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_lifecycle_enabled', label: 'Lifecycle Policies', description: 'Enable S3 bucket lifecycle policy management and TTL', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_tiers_enabled', label: 'Tiered Storage', description: 'Enable hot/warm/cold tier configuration and deployment', type: 'toggle', defaultVal: 'false' },
+  { key: 'feature_hardening_enabled', label: 'Hardening', description: 'Enable production hardening checksum/encryption/compliance', type: 'toggle', defaultVal: 'false' },
+]
+
 export const GENERAL_SETTINGS: SettingMeta[] = [
   { key: 'timezone', label: 'Timezone', description: 'System timezone for scheduling, timestamps, and display', type: 'string', defaultVal: 'UTC' },
   { key: 'log_level', label: 'Log Level', description: 'Backend logging level. DEBUG shows most detail, ERROR shows only errors', type: 'string', defaultVal: 'INFO' },

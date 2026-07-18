@@ -26,6 +26,7 @@ import {
   GENERAL_SETTINGS,
   AI_SETTINGS,
   AI_EMBEDDING_SETTINGS,
+  FEATURE_TOGGLES,
 } from './constants'
 import type { SettingMeta } from './constants'
 
@@ -242,6 +243,7 @@ export default function SettingsPage() {
     disk_health: DISK_HEALTH_SETTINGS,
     cluster: CLUSTER_SETTINGS,
     ai: AI_SETTINGS,
+    features: FEATURE_TOGGLES,
   }
 
   const defaultByCategory: Record<string, Record<string, string>> = {}
@@ -532,6 +534,10 @@ export default function SettingsPage() {
           )}
         </>
       ),
+    },
+    {
+      key: 'features', label: <span><ApiOutlined /> Features</span>,
+      children: createTabContent(FEATURE_TOGGLES, defaultByCategory.features),
     },
   ]
 
