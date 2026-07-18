@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime
 
 import httpx
 
@@ -65,7 +66,38 @@ class AlertEngine:
                 logger.error("alert_eval_failed", exc_info=True)
             await asyncio.sleep(60)
 
+    async def _check_stale_heartbeats(self):
+        try:
+            db = await get_db()
+            cursor = await db.execute(
+                "SELECT name, last_heartbeat, ttl_seconds FROM services_health"
+            )
+            rows = await cursor.fetchall()
+
+            for row in rows:
+                hb_str = row["last_heartbeat"]
+                try:
+                    hb = datetime.strptime(hb_str, "%Y-%m-%d %H:%M:%S") if hb_str else None
+                except Exception:
+                    hb = None
+                ttl = row["ttl_seconds"] or 300
+                stale = not hb or (datetime.utcnow() - hb).total_seconds() > ttl
+                dedup_key = f"stale_heartbeat:{row['name']}"
+                if stale:
+                    await self._create_alert(
+                        "stale_heartbeat", "critical",
+                        f"Service {row['name']} heartbeat stale",
+                        f"Last heartbeat: {hb_str}, TTL: {ttl}s",
+                        "dashboard", dedup_key,
+                    )
+                else:
+                    await self._resolve_alert(dedup_key)
+        except Exception:
+            pass
+
     async def _evaluate_thresholds(self):
+        await self._check_stale_heartbeats()
+
         disk_pct = await get_setting_int("alert_disk_usage_pct", 90)
         max_readonly = await get_setting_int("alert_max_readonly_volumes", 3)
         garbage_ratio = 0.5
