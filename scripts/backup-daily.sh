@@ -1,5 +1,6 @@
 #!/bin/bash
 # SeaweedFS Dashboard — Daily Backup Cron Script
+# Backs up filer metadata to SeaweedFS S3 bucket (and local)
 # Place in crontab: 0 3 * * * /home/seaweed-dashboard/scripts/backup-daily.sh
 
 LOG_DIR="/home/seaweed-dashboard/backend/logs"
@@ -7,6 +8,8 @@ LOG_FILE="$LOG_DIR/backup-cron-$(date +%Y%m%d).log"
 BACKEND_URL="http://127.0.0.1:8000"
 ADMIN_USER="admin"
 ADMIN_PASS="REDACTED"
+S3_ENDPOINT="http://172.16.0.2:8333"
+S3_BUCKET="backups"
 RETENTION_DAYS=30
 
 mkdir -p "$LOG_DIR"
@@ -23,7 +26,7 @@ fi
 
 log "CSRF token: ${CSRF_TOKEN:0:8}..."
 
-LOGIN_RESP=$(curl -s -b /tmp/backup-cookies.txt -c /tmp/backup-cookies.txt \
+LOGIN_RESP=$(curl -s -D /tmp/backup-headers.txt -b /tmp/backup-cookies.txt -c /tmp/backup-cookies.txt \
     -X POST "$BACKEND_URL/api/auth/login" \
     -H "Content-Type: application/json" \
     -H "X-CSRF-Token: $CSRF_TOKEN" \
@@ -31,22 +34,29 @@ LOGIN_RESP=$(curl -s -b /tmp/backup-cookies.txt -c /tmp/backup-cookies.txt \
 
 if echo "$LOGIN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('user') else 1)" 2>/dev/null; then
     log "Login successful"
+    CSRF_TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('csrfToken',''))" 2>/dev/null)
+    if [ -z "$CSRF_TOKEN" ]; then
+        CSRF_TOKEN=$(grep -i "set-cookie" /tmp/backup-headers.txt | grep -oP 'csrf_token=\K[^;]+' 2>/dev/null)
+    fi
+    if [ -z "$CSRF_TOKEN" ]; then
+        CSRF_TOKEN="none"
+    fi
+    log "CSRF token: ${CSRF_TOKEN:0:8}..."
 else
     log "ERROR: Login failed — $LOGIN_RESP"
     exit 1
 fi
 
-CSRF_TOKEN2=$(curl -s -b /tmp/backup-cookies.txt "$BACKEND_URL/api/auth/csrf-token" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('csrfToken', d.get('csrf_token','')))" 2>/dev/null)
-
 SYNC_RESP=$(curl -s -b /tmp/backup-cookies.txt \
     -X POST "$BACKEND_URL/api/backup/sync" \
     -H "Content-Type: application/json" \
-    -H "X-CSRF-Token: $CSRF_TOKEN2" \
-    -d '{}' 2>/dev/null)
+    -H "X-CSRF-Token: $CSRF_TOKEN" \
+    -d "{\"s3_bucket\":\"$S3_BUCKET\",\"s3_endpoint\":\"$S3_ENDPOINT\"}" 2>/dev/null)
 
 if echo "$SYNC_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)" 2>/dev/null; then
     BYTES=$(echo "$SYNC_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('bytesSynced',0))" 2>/dev/null)
-    log "Backup OK — $BYTES bytes synced"
+    S3_OK=$(echo "$SYNC_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('s3Uploaded',False))" 2>/dev/null)
+    log "Backup OK — $BYTES bytes synced, S3 upload: $S3_OK → s3://$S3_BUCKET/"
 else
     log "ERROR: Backup failed — $SYNC_RESP"
     exit 2

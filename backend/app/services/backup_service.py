@@ -321,14 +321,29 @@ async def get_backup_status() -> dict:
 async def _upload_to_s3(file_path: Path, bucket: str, endpoint: str = "") -> dict:
     try:
         import httpx
-        import base64
         async with httpx.AsyncClient(timeout=300) as hc:
             with open(file_path, "rb") as f:
                 data = f.read()
             key = file_path.name
-            url = f"{endpoint or 'http://172.16.0.2:8333'}/{bucket}/{key}"
-            resp = await hc.put(url, content=data)
-            return {"ok": resp.status_code in (200, 204), "status": resp.status_code}
+
+            s3_url = f"{endpoint or 'http://172.16.0.2:8333'}/{bucket}/{key}"
+            resp = await hc.put(s3_url, content=data, headers={"Content-Type": "application/octet-stream"})
+
+            filer_success = False
+            if resp.status_code >= 400:
+                filer_hosts = ["172.16.0.2:8888", "172.16.0.4:8888"]
+                for host in filer_hosts:
+                    try:
+                        filer_url = f"http://{host}/{bucket}/{key}"
+                        fresp = await hc.put(filer_url, content=data, headers={"Content-Type": "application/octet-stream"})
+                        if fresp.status_code in (200, 201, 204):
+                            filer_success = True
+                            break
+                    except Exception:
+                        continue
+
+            ok = resp.status_code in (200, 201, 204) or filer_success
+            return {"ok": ok, "status": resp.status_code if not filer_success else 200, "filer_fallback": filer_success}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 
