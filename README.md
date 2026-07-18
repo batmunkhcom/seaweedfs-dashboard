@@ -6,6 +6,10 @@
   React 19 · TypeScript · FastAPI · Ant Design 5 · SQLite · Prometheus
 </p>
 
+<p align="center">
+  <em>Built with <strong>DeepSeek V4 Pro</strong> via <a href="https://console.mbm.mn">mBm AI Assistant</a></em>
+</p>
+
 ---
 
 Web-based management dashboard for SeaweedFS clusters. Monitor, manage, browse, and administer — volumes, filer, S3, backups, workers, disk health, ACL, lifecycle, tiers, hardening, gateways, NFS, WebDAV, FUSE.

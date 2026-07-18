@@ -44,7 +44,8 @@ export default function AboutPage() {
       <Card title="Developer" size="small" style={{ marginBottom: 16, background: 'rgba(30,41,59,0.6)' }}>
         <p><GlobalOutlined /> <a href={about.website} target="_blank" rel="noopener">{about.developer}</a></p>
         <p><GithubOutlined /> <a href="https://github.com/batmunkhcom/seaweedfs-dashboard" target="_blank" rel="noopener">github.com/batmunkhcom/seaweedfs-dashboard</a></p>
-        <p>Built with <a href="https://console.mbm.mn" target="_blank" rel="noopener">mBm AI Assistant</a> — AI-powered engineering &amp; operations assistant</p>
+        <p style={{ marginBottom: 4 }}>Built entirely with DeepSeek V4 Pro via <a href="https://console.mbm.mn" target="_blank" rel="noopener">mBm AI Assistant</a></p>
+        <p style={{ color: '#64748b', fontSize: 12, marginTop: 0 }}>AI-powered engineering &amp; operations assistant for rapid software development, server management, and full-stack troubleshooting.</p>
       </Card>
 
       <Card title="License" size="small" style={{ background: 'rgba(30,41,59,0.6)' }}>
