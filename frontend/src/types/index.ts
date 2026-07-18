@@ -344,3 +344,32 @@ export interface MetricsNodeInfo {
   disk_total_gb: number
   disk_free_gb: number
 }
+
+export interface Webhook {
+  id: number
+  name: string
+  platform: string
+  url: string
+  events: string[]
+  enabled: boolean
+  created_at: string
+  updated_at: string | null
+}
+
+export interface WebhookDelivery {
+  id: number
+  webhook_id: number
+  event: string
+  status: string
+  request_body: string
+  response_code: number | null
+  response_body: string
+  error: string
+  duration_ms: number | null
+  created_at: string
+}
+
+export interface WebhookTemplate {
+  platforms: { value: string; label: string; icon: string; description: string }[]
+  events: { value: string; label: string }[]
+}

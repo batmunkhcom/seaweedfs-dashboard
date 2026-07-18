@@ -26,9 +26,19 @@ async def trigger_sync(request: Request, _: bool = Depends(require_permission("b
     try:
         result = await create_backup()
         logger.info("backup_sync_result", ok=result["ok"], sync_id=result.get("syncId"), bytes_synced=result.get("bytesSynced", 0))
+        try:
+            from app.services.webhook_service import publish_webhook_event
+            await publish_webhook_event("backup_completed", result)
+        except Exception:
+            pass
         return result
     except Exception as e:
         logger.error("backup_sync_error", exc_info=True)
+        try:
+            from app.services.webhook_service import publish_webhook_event
+            await publish_webhook_event("backup_failed", {"error": str(e)})
+        except Exception:
+            pass
         raise HTTPException(500, str(e))
 
 

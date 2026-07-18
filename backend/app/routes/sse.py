@@ -61,6 +61,11 @@ async def publish_stats(stats: dict):
 
 async def publish_alert(alert: dict):
     await broadcast("alert_new", alert)
+    try:
+        from app.services.webhook_service import publish_webhook_event
+        await publish_webhook_event("alert_created", alert)
+    except Exception:
+        pass
 
 
 async def publish_metrics(metrics: dict):

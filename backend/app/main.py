@@ -33,8 +33,12 @@ async def lifespan(app: FastAPI):
     await start_disk_health()
     from app.services.metrics_service import start_metrics_service
     await start_metrics_service()
+    from app.services.webhook_service import start_webhook_service
+    await start_webhook_service()
     yield
     logger.info("shutdown")
+    from app.services.webhook_service import stop_webhook_service
+    await stop_webhook_service()
     from app.services.metrics_service import stop_metrics_service
     await stop_metrics_service()
     from app.services.disk_health import stop_disk_health
@@ -82,6 +86,7 @@ from app.routes.info import router as info_router
 from app.routes.api_keys import router as api_keys_router
 from app.routes.chatbot import router as chatbot_router
 from app.routes.tools import router as tools_router
+from app.routes.webhooks import router as webhooks_router
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
@@ -100,6 +105,7 @@ app.include_router(info_router, prefix="/api")
 app.include_router(api_keys_router, prefix="/api")
 app.include_router(chatbot_router, prefix="/api")
 app.include_router(tools_router, prefix="/api")
+app.include_router(webhooks_router, prefix="/api")
 
 
 @app.get("/api/health")

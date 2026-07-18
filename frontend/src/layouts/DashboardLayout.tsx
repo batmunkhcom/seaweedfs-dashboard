@@ -26,6 +26,7 @@ import {
   RobotOutlined,
   ThunderboltOutlined,
   LineChartOutlined,
+  SendOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../stores/authStore'
 import { changeMyPassword } from '../services/api'
@@ -55,6 +56,7 @@ const baseMenuItems = [
   { key: '/disk-health', icon: <MedicineBoxOutlined />, label: 'Disk Health' },
   { key: '/tools', icon: <ThunderboltOutlined />, label: 'Tools' },
   { key: '/metrics', icon: <LineChartOutlined />, label: 'Metrics' },
+  { key: '/webhooks', icon: <SendOutlined />, label: 'Webhooks' },
   { key: '/users', icon: <TeamOutlined />, label: 'Users' },
   { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
 ]

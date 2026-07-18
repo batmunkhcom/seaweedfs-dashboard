@@ -24,6 +24,9 @@ import type {
   MetricsHistoryPoint,
   NodeHealthInfo,
   MetricsNodeInfo,
+  Webhook,
+  WebhookDelivery,
+  WebhookTemplate,
 } from '../types'
 
 const api = axios.create({
@@ -497,4 +500,48 @@ export async function getMetricsHistory(node?: string, metric?: string, hours?: 
 export async function getMetricsAlive(): Promise<NodeHealthInfo[]> {
   const { data } = await api.get('/metrics/alive')
   return Array.isArray(data) ? data : []
+}
+
+export async function getWebhooks(): Promise<Webhook[]> {
+  const { data } = await api.get('/webhooks')
+  return Array.isArray(data) ? data : []
+}
+
+export async function createWebhook(body: { name: string; platform: string; url: string; events: string[]; secret: string }) {
+  const { data } = await api.post('/webhooks', body)
+  return data
+}
+
+export async function updateWebhook(id: number, body: Record<string, unknown>) {
+  const { data } = await api.put(`/webhooks/${id}`, body)
+  return data
+}
+
+export async function deleteWebhook(id: number) {
+  await api.delete(`/webhooks/${id}`)
+}
+
+export async function testWebhook(id: number) {
+  const { data } = await api.post(`/webhooks/${id}/test`)
+  return data
+}
+
+export async function toggleWebhook(id: number) {
+  const { data } = await api.put(`/webhooks/${id}/toggle`)
+  return data
+}
+
+export async function getWebhookHistory(id: number, limit = 50): Promise<WebhookDelivery[]> {
+  const { data } = await api.get(`/webhooks/${id}/history`, { params: { limit } })
+  return Array.isArray(data) ? data : []
+}
+
+export async function getWebhookDeliveryDetail(webhookId: number, deliveryId: number): Promise<WebhookDelivery> {
+  const { data } = await api.get(`/webhooks/${webhookId}/history/${deliveryId}`)
+  return data
+}
+
+export async function getWebhookTemplates(): Promise<WebhookTemplate> {
+  const { data } = await api.get('/webhooks/templates')
+  return data
 }
