@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Row, Col, Card, Table, Tag, Select, Spin, Tabs, Progress, Statistic, Empty, Tooltip } from 'antd'
+import { Row, Col, Card, Table, Tag, Select, Spin, Tabs, Progress, Statistic, Empty, Tooltip, Skeleton } from 'antd'
 import {
   DashboardOutlined,
   ClusterOutlined,
@@ -214,7 +214,9 @@ export default function MetricsPage() {
                 }
               >
                 <Spin spinning={historyLoading}>
-                  {chartData.length > 1 ? (
+                  {historyLoading ? (
+                    <Skeleton active paragraph={{ rows: 6 }} />
+                  ) : chartData.length > 1 ? (
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
@@ -237,7 +239,7 @@ export default function MetricsPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
-                    <Empty description="No history data yet. Metrics are collected every 60 seconds." />
+                    <Empty description="No history data yet" />
                   )}
                 </Spin>
                 <div style={{ marginTop: 8, color: '#94a3b8', fontSize: 12, textAlign: 'center' }}>
