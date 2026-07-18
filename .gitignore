@@ -26,4 +26,5 @@ CLAUDE.md
 todo.md
 backend/data/
 backend/venv/
+backend/logs/
 backend/data.db
