@@ -52,6 +52,7 @@ function timeAgo(duration: string): number {
 
 export default function LogsPage() {
   const [lokiOk, setLokiOk] = useState<boolean | null>(null)
+  const [localAvailable, setLocalAvailable] = useState(false)
   const [query, setQuery] = useState('{job=~".+"}')
   const [timeRange, setTimeRange] = useState('1h')
   const [limit, setLimit] = useState(500)
@@ -66,7 +67,10 @@ export default function LogsPage() {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    getLokiStatus().then(r => setLokiOk(r.ok)).catch(() => setLokiOk(false))
+    getLokiStatus().then(r => {
+      setLokiOk(r.ok)
+      setLocalAvailable(r.local_logs_available || false)
+    }).catch(() => setLokiOk(false))
     getLokiLabels().then(setLabels).catch(() => {})
   }, [])
 
@@ -92,7 +96,6 @@ export default function LogsPage() {
   }
 
   const fetchLogs = useCallback(async () => {
-    if (lokiOk === false) return
     setLoading(true)
     try {
       const now = Math.floor(Date.now()) * 1000000
@@ -101,7 +104,7 @@ export default function LogsPage() {
       setResults(data.result || [])
     } catch {}
     setLoading(false)
-  }, [lokiOk, query, timeRange, limit, selectedLabels])
+  }, [query, timeRange, limit, selectedLabels])
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
@@ -259,7 +262,7 @@ export default function LogsPage() {
               })}
             </div>
           ) : (
-            <Empty description={lokiOk === false ? 'Loki not reachable. Check settings.' : 'No logs. Try a different query.'} />
+            <Empty description={lokiOk === false && !localAvailable ? 'Loki not reachable. Check settings.' : 'No logs. Try a different query.'} />
           )}
         </Spin>
       </Card>
