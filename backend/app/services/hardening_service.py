@@ -1,12 +1,11 @@
 import asyncio
 import time
-import json
 
 import paramiko
 
 from app.config import settings
 from app.database import get_db
-from app.settings_service import get_setting, get_setting_int, update_setting
+from app.settings_service import get_setting
 from app.logging_config import get_logger
 
 logger = get_logger("hardening_service")

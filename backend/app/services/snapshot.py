@@ -2,9 +2,7 @@ import asyncio
 import time
 import json
 
-import httpx
 
-from app.config import settings
 from app.database import get_db
 from app.services.seaweed_client import get_seaweed_client
 from app.settings_service import get_setting_int
@@ -89,7 +87,7 @@ class SnapshotService:
             return
 
         topology = topology_data.get("Topology", {})
-        volume_size_mb = topology_data.get("VolumeSizeLimit", 30 * 1024) / (1024 * 1024)
+        topology_data.get("VolumeSizeLimit", 30 * 1024) / (1024 * 1024)
 
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):

@@ -52,7 +52,8 @@ class TestBackupService:
     @pytest.mark.asyncio
     async def test_cleanup_old_backups(self):
         from app.services.backup_service import cleanup_old_backups
-        import tempfile, os
+        import tempfile
+        import os
         tmpdir = tempfile.mkdtemp()
         try:
             mock_db = AsyncMock()
@@ -66,8 +67,10 @@ class TestBackupService:
                             result = await cleanup_old_backups()
                             assert "deleted" in result
         finally:
-            try: os.rmdir(tmpdir)
-            except: pass
+            try:
+                os.rmdir(tmpdir)
+            except OSError:
+                pass
 
 
 class TestGatewayService:

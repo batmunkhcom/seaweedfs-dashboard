@@ -76,7 +76,8 @@ class DiskHealthService:
 
     async def _scan_all_nodes(self):
         hosts = settings.all_node_hosts
-        import os as _os, paramiko
+        import os as _os
+        import paramiko
 
         key_path = _os.path.expanduser(settings.disk_health_ssh_key_path)
 
@@ -184,7 +185,6 @@ class DiskHealthService:
 
     async def _evaluate_smart_alerts(self):
         try:
-            from app.services.alert_engine import get_alert_engine
             temp_warn = await get_setting_int("disk_health_temp_warn_c", 55)
             temp_crit = await get_setting_int("disk_health_temp_crit_c", 65)
             wear_warn = await get_setting_int("disk_health_wear_warn_pct", 85)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 import json
 
 from app.services.seaweed_client import get_seaweed_client
-from app.settings_service import get_setting, get_setting_int, update_setting
+from app.settings_service import get_setting, update_setting
 from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 
@@ -70,7 +70,7 @@ async def cluster_health():
                     url = node.get("Url", "")
                     native_max = node.get("Max", 0)
                     configured = node_limits.get(url, 9999)
-                    effective_max = min(native_max, configured) if native_max > 0 else configured
+                    min(native_max, configured) if native_max > 0 else configured
                     nodes.append({
                           "url": url,
                           "volumes": node.get("Volumes", 0),

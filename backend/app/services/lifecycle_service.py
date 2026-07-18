@@ -2,6 +2,7 @@ import time
 import asyncio
 from datetime import datetime, timedelta
 
+from app.config import settings
 from app.database import get_db
 from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
@@ -222,7 +223,7 @@ class LifecycleEngine:
                 continue
             try:
                 await self._evaluate_policy(p)
-            except Exception as e:
+            except Exception:
                 logger.error("lifecycle_eval_policy_failed", bucket=p.get("bucket"), exc_info=True)
 
     async def _evaluate_policy(self, policy: dict):

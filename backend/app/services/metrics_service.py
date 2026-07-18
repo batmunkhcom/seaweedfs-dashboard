@@ -3,7 +3,6 @@ import time
 
 import httpx
 
-from app.config import settings
 from app.database import get_db
 from app.services.seaweed_client import get_seaweed_client
 from app.settings_service import get_setting_int, get_setting

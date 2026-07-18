@@ -2,7 +2,6 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
-import json
 
 from app.logging_config import get_logger
 from app.services.chatbot_service import chat_stream, is_ai_enabled, _get_setting

@@ -3,8 +3,7 @@ from fastapi import APIRouter, Depends
 from app.middleware.auth_middleware import require_admin
 from app.services.tier_service import (
     get_tiers, save_tier, delete_tier, get_tier_stats,
-    test_tier_connection, test_tier_connection_full, test_gcs_connection, test_azure_connection,
-    configure_tier_on_cluster, sync_all_tiers, get_tier_usage_per_node,
+    test_tier_connection, test_tier_connection_full, configure_tier_on_cluster, sync_all_tiers, get_tier_usage_per_node,
     TIER_TYPES, PROVIDERS,
 )
 

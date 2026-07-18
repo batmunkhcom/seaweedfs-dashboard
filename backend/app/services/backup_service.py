@@ -5,7 +5,6 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from app.config import settings
-from app.config import settings
 from app.database import get_db
 from app.logging_config import get_logger
 from app.settings_service import get_setting, get_setting_int

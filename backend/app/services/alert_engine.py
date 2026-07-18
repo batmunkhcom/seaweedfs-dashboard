@@ -4,7 +4,6 @@ from datetime import datetime
 
 import httpx
 
-from app.config import settings
 from app.database import get_db
 from app.services.seaweed_client import get_seaweed_client
 from app.settings_service import get_setting_int, get_setting
@@ -100,9 +99,8 @@ class AlertEngine:
 
         disk_pct = await get_setting_int("alert_disk_usage_pct", 90)
         max_readonly = await get_setting_int("alert_max_readonly_volumes", 3)
-        garbage_ratio = 0.5
         try:
-            garbage_ratio = float(await get_setting("alert_garbage_ratio", "0.5"))
+            float(await get_setting("alert_garbage_ratio", "0.5"))
         except ValueError:
             pass
 

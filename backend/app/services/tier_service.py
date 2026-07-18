@@ -1,10 +1,9 @@
 import asyncio
 import json
-import time
 import os
 
 from app.database import get_db
-from app.settings_service import get_setting, get_setting_int
+from app.settings_service import get_setting
 from app.config import settings
 from app.logging_config import get_logger
 
@@ -69,7 +68,7 @@ async def test_tier_connection(provider: str, config: dict) -> dict:
 
 async def test_gcs_connection(config: dict) -> dict:
     bucket = config.get("bucket", "")
-    project = config.get("project_id", "")
+    config.get("project_id", "")
     creds = config.get("credentials_json", "")
     if not bucket:
         return {"ok": False, "error": "bucket required"}

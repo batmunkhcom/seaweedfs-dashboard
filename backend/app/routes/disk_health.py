@@ -43,7 +43,6 @@ else:
 
     @router.get("/{node}/{device}")
     async def disk_health_detail(node: str, device: str):
-        import json
         db = await get_db()
         cursor = await db.execute(
             "SELECT node, device, timestamp, smart_json FROM disk_health WHERE node = ? AND device = ? ORDER BY timestamp DESC LIMIT 1",
@@ -57,7 +56,8 @@ else:
 
     @router.get("/history/{node}/{device}")
     async def disk_health_history(node: str, device: str, days: int = 30):
-        import time, json
+        import time
+        import json
         db = await get_db()
         cutoff = time.time() - days * 86400
         cursor = await db.execute(

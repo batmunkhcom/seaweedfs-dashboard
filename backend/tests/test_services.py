@@ -83,7 +83,6 @@ class TestAlertEngine:
         from app.services.alert_engine import AlertEngine
         engine = AlertEngine()
 
-        import httpx
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"DiskStatuses": [{"percent_used": 50.0}]}
@@ -218,7 +217,6 @@ class TestSeaweedClient:
         from app.services.seaweed_client import SeaweedClient
         client = SeaweedClient()
 
-        import httpx
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"ok": True}

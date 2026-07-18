@@ -1,5 +1,3 @@
-import json
-import time
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -118,11 +116,11 @@ async def test_webhook(webhook_id: int, _: bool = Depends(require_admin)):
         raise HTTPException(404, "Webhook not found")
 
     test_data = {"test": True, "message": f"Test webhook from SeaweedFS Dashboard — {wh['name']}"}
-    payload = build_payload(wh["platform"], "test_event", test_data)
+    build_payload(wh["platform"], "test_event", test_data)
 
     try:
         await publish_webhook_event("test_event", test_data)
-        svc = get_webhook_service()
+        get_webhook_service()
         import asyncio
         await asyncio.sleep(2)
     except Exception:

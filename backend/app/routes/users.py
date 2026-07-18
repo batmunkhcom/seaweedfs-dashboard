@@ -3,9 +3,10 @@ from pydantic import BaseModel
 import bcrypt
 import secrets
 
-from app.middleware.auth_middleware import require_permission, require_admin, get_current_user
+from app.middleware.auth_middleware import require_admin, get_current_user
 from app.middleware.rate_limit import limiter
 from app.database import get_db
+from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
 from app.rbac import get_roles, get_default_role
 import asyncio

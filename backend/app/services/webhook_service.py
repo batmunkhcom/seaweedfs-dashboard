@@ -207,7 +207,7 @@ class WebhookService:
             await db.commit()
 
             retention = await get_setting_int("webhooks_max_retention_days", 30)
-            cutoff = time.time() - (retention * 86400)
+            time.time() - (retention * 86400)
             await db.execute("DELETE FROM webhook_deliveries WHERE julianday('now') - julianday(created_at) > ?", (retention,))
             await db.commit()
         except Exception:

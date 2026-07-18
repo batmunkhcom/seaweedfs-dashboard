@@ -5,7 +5,6 @@ from app.middleware.auth_middleware import require_permission
 from app.logging_config import get_logger
 from app.models.workers import (
     WorkerNode,
-    WorkerJob,
     WorkerStatusResponse,
     ExecuteRequest,
     DetectResponse,

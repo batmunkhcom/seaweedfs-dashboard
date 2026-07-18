@@ -2,7 +2,6 @@ import time
 import json
 import os
 import re
-from urllib.parse import urlencode
 
 import httpx
 
@@ -175,7 +174,7 @@ def _query_local_logs(query: str, start: str | None = None, end: str | None = No
                         continue
 
                     level = entry.get("level", "").lower()
-                    event = entry.get("event", "")
+                    entry.get("event", "")
                     logname = entry.get("logger", "")
 
                     if filters["level"] and filters["level"].lower() != level:

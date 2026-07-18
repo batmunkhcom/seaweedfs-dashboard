@@ -66,19 +66,18 @@ def require_permission(permission: str):
     def checker(request: Request) -> bool:
         role = getattr(request.state, "role", None)
         permissions = getattr(request.state, "permissions", [])
-        
+
          # API key users need explicit permission
         if role == "backup_admin":
             if permission not in permissions:
                 raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
             return True
-        
+
          # Session-based auth uses RBAC
-        from app.rbac import has_permission
         if not has_permission(role, permission):
             raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
         return True
-    
+
     return checker
 
 

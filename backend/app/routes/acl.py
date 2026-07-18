@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.middleware.auth_middleware import require_admin
 from app.services.acl_service import (
     get_policies, create_policy, update_policy, delete_policy,
-    reorder_policies, test_permission, get_audit_log, PERMISSIONS, PERMISSION_LABELS,
+    reorder_policies, test_permission, get_audit_log, PERMISSION_LABELS,
     push_acl_to_filer, get_sync_status, auto_sync_on_change,
 )
 from app.logging_config import get_logger

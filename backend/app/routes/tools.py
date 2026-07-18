@@ -1,11 +1,10 @@
 import asyncio
 import os
-import subprocess
 import time
 import re
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -257,7 +256,7 @@ async def _ping_host_async(host: str, count: int = 3) -> dict:
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
         out = stdout.decode(errors="replace")
-        err = stderr.decode(errors="replace")
+        stderr.decode(errors="replace")
 
         ms_match = re.search(r'avg[ /]*([\d.]+)', out)
         latency = float(ms_match.group(1)) if ms_match else 0
@@ -283,7 +282,7 @@ async def _traceroute_async(host: str) -> dict:
         elapsed = (time.monotonic() - t0) * 1000
         out = stdout.decode(errors="replace")
 
-        hop_count = len([l for l in out.split("\n") if l.strip() and l[0].isdigit()])
+        hop_count = len([line for line in out.split("\n") if line.strip() and line[0].isdigit()])
         return {"ok": True, "host": host, "hops": hop_count, "output": out[:2000],
                 "elapsed_ms": round(elapsed, 1), "reachable": True, "latency_ms": round(elapsed, 1)}
     except asyncio.TimeoutError:

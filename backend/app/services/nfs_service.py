@@ -98,7 +98,7 @@ async def delete_export(export_id: int) -> dict:
 async def get_clients(node: str) -> dict:
     try:
         _, out, err = await _ssh(node, "showmount -a --no-headers 2>/dev/null || showmount -a 2>/dev/null | tail -n +2 || true", 10)
-        lines = [l.strip() for l in out.split('\n') if l.strip()] if out else []
+        lines = [line.strip() for line in out.split('\n') if line.strip()] if out else []
         clients = []
         for line in lines:
             parts = line.split(':') if ':' in line else line.split()
@@ -115,7 +115,7 @@ async def _apply_exports(node: str):
     rows = await cursor.fetchall()
 
     if not rows:
-        await _ssh(node, f"sed -i '/^\\/data\\/dc03/d' /etc/exports 2>/dev/null || true; exportfs -ra 2>/dev/null || true", 15)
+        await _ssh(node, "sed -i '/^\\/data\\/dc03/d' /etc/exports 2>/dev/null || true; exportfs -ra 2>/dev/null || true", 15)
         return
 
     export_lines = "\n".join(f"{r['path']} {r['options']}" for r in rows)
