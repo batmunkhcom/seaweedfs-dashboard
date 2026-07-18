@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Row, Col, Card, Tag, Tooltip } from 'antd'
-import { QuestionCircleOutlined } from '@ant-design/icons'
-import { getDashboardStats, getAlerts } from '../../services/api'
+import { Row, Col, Card, Tag, Tooltip, Statistic } from 'antd'
+import { QuestionCircleOutlined, ApiOutlined, SafetyCertificateOutlined, CloudSyncOutlined, ClockCircleOutlined, WarningOutlined } from '@ant-design/icons'
+import { getDashboardStats, getAlerts, getDiskUsage, getKpiExtras } from '../../services/api'
 import { useSSE } from '../../hooks/useSSE'
 import StatCards from '../../components/StatCard'
 import DiskUsageChart from '../../components/DiskUsageChart'
@@ -11,6 +11,22 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [alerts, setAlerts] = useState<AlertEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [diskUsage, setDiskUsage] = useState<{ node: string; usage_pct: number }[]>([])
+  const [kpiExtras, setKpiExtras] = useState<Record<string, number>>({})
+
+  const fetchDiskUsage = useCallback(async () => {
+    try {
+      const data = await getDiskUsage()
+      setDiskUsage(data.nodes || [])
+    } catch {}
+  }, [])
+
+  const fetchKpiExtras = useCallback(async () => {
+    try {
+      const data = await getKpiExtras()
+      setKpiExtras(data)
+    } catch {}
+  }, [])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -30,7 +46,9 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchStats()
     fetchAlerts()
-  }, [fetchStats, fetchAlerts])
+    fetchDiskUsage()
+    fetchKpiExtras()
+  }, [fetchStats, fetchAlerts, fetchDiskUsage, fetchKpiExtras])
 
   useSSE('stats_update', (data) => {
     setStats(data as DashboardStats)
@@ -42,16 +60,34 @@ export default function DashboardPage() {
 
   const severityColor: Record<string, string> = { critical: 'red', warning: 'orange', info: 'blue' }
 
-  const pieData = stats
-    ? Array.from({ length: stats.volumeServers }, (_, i) => ({
-        name: `Server ${i + 1}`,
-        value: Math.floor(Math.random() * 60) + 10,
+  const pieData = diskUsage.length > 0
+    ? diskUsage.map(n => ({
+        name: n.node,
+        value: n.usage_pct,
       }))
-    : []
+    : (stats ? [{ name: 'Used', value: stats.maxSpace - stats.freeSpace }, { name: 'Free', value: stats.freeSpace }] : [])
 
   return (
     <div>
       <StatCards stats={stats} loading={loading} />
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={12} sm={4}>
+          <Card size="small"><Statistic title="Webhooks" value={kpiExtras.webhooks || 0} prefix={<ApiOutlined />} /></Card>
+        </Col>
+        <Col xs={12} sm={4}>
+          <Card size="small"><Statistic title="ACL Policies" value={kpiExtras.acl_policies || 0} prefix={<SafetyCertificateOutlined />} /></Card>
+        </Col>
+        <Col xs={12} sm={4}>
+          <Card size="small"><Statistic title="Tiers" value={kpiExtras.tier_configs || 0} prefix={<CloudSyncOutlined />} /></Card>
+        </Col>
+        <Col xs={12} sm={4}>
+          <Card size="small"><Statistic title="Lifecycle" value={kpiExtras.lifecycle_policies || 0} prefix={<ClockCircleOutlined />} /></Card>
+        </Col>
+        <Col xs={12} sm={4}>
+          <Card size="small"><Statistic title="Alerts" value={kpiExtras.active_alerts || 0} prefix={<WarningOutlined />} valueStyle={{ color: (kpiExtras.active_alerts || 0) > 0 ? '#ef4444' : '#22c55e' }} /></Card>
+        </Col>
+      </Row>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>

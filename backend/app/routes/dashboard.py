@@ -139,3 +139,32 @@ async def dashboard_history(hours: int = 24):
     )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+@router.get("/disk-usage")
+async def disk_usage():
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT node, value, timestamp FROM metrics_history WHERE metric_type = 'disk_usage_pct' AND rowid IN (SELECT MAX(rowid) FROM metrics_history WHERE metric_type = 'disk_usage_pct' GROUP BY node)"
+    )
+    rows = await cursor.fetchall()
+    nodes = []
+    for r in rows:
+        nodes.append({"node": r["node"], "usage_pct": round(r["value"], 2), "timestamp": r["timestamp"]})
+    return {"nodes": nodes}
+
+
+@router.get("/kpi-extras")
+async def kpi_extras():
+    db = await get_db()
+    extras = {}
+    for table in ["webhooks", "acl_policies", "tier_configs", "lifecycle_policies"]:
+        cursor = await db.execute(f"SELECT COUNT(*) as cnt FROM {table}")
+        row = await cursor.fetchone()
+        extras[table] = row["cnt"] if row else 0
+
+    cursor = await db.execute("SELECT COUNT(*) as cnt FROM alerts WHERE status = 'new'")
+    row = await cursor.fetchone()
+    extras["active_alerts"] = row["cnt"] if row else 0
+
+    return extras

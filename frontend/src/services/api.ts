@@ -330,6 +330,16 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   return data
 }
 
+export async function getDiskUsage(): Promise<{ nodes: { node: string; usage_pct: number }[] }> {
+  const { data } = await api.get('/dashboard/disk-usage')
+  return data
+}
+
+export async function getKpiExtras(): Promise<Record<string, number>> {
+  const { data } = await api.get('/dashboard/kpi-extras')
+  return data
+}
+
 export async function getAlerts(params?: Record<string, string>): Promise<AlertEvent[]> {
   const { data } = await api.get('/dashboard/alerts', { params })
   return data
