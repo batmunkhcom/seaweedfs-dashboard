@@ -14,3 +14,4 @@ paramiko>=3.4.0
 redis>=5.0
 hiredis>=2.3
 asyncpg>=0.30.0
+prometheus-client>=0.20.0

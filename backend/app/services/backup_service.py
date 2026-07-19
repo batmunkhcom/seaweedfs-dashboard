@@ -201,7 +201,10 @@ async def create_backup(name: str | None = None, upload_s3: bool = False, s3_buc
 
 
 async def list_backups() -> list[dict]:
-    Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
+    try:
+        Path("/srv/seaweed-backups").mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
 
     db = await get_db()
     cursor = await db.execute(
