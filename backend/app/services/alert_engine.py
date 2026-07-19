@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -74,18 +74,23 @@ class AlertEngine:
             rows = await cursor.fetchall()
 
             for row in rows:
+                name = row["name"]
+                if name == "disk_health":
+                    from app.config import settings
+                    if not settings.disk_health_enabled:
+                        continue
                 hb_str = row["last_heartbeat"]
                 try:
-                    hb = datetime.strptime(hb_str, "%Y-%m-%d %H:%M:%S") if hb_str else None
+                    hb = datetime.strptime(hb_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc) if hb_str else None
                 except Exception:
                     hb = None
                 ttl = row["ttl_seconds"] or 300
-                stale = not hb or (datetime.utcnow() - hb).total_seconds() > ttl
-                dedup_key = f"stale_heartbeat:{row['name']}"
+                stale = not hb or (datetime.now(timezone.utc) - hb).total_seconds() > ttl
+                dedup_key = f"stale_heartbeat:{name}"
                 if stale:
                     await self._create_alert(
                         "stale_heartbeat", "critical",
-                        f"Service {row['name']} heartbeat stale",
+                        f"Service {name} heartbeat stale",
                         f"Last heartbeat: {hb_str}, TTL: {ttl}s",
                         "dashboard", dedup_key,
                     )

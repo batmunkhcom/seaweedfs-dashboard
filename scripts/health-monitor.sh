@@ -53,13 +53,13 @@ fi
 STALE=0
 echo "$HEALTH" | python3 -c "
 import sys, json
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 data = json.load(sys.stdin)
 for c in data.get('components', []):
     ttl = c.get('ttl_seconds', 300)
     try:
-        hb = datetime.strptime(c['last_heartbeat'], '%Y-%m-%d %H:%M:%S')
-        age = (datetime.utcnow() - hb).total_seconds()
+        hb = datetime.strptime(c['last_heartbeat'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - hb).total_seconds()
         if age > ttl:
             print(f'STALE:{c[\"name\"]}:{age:.0f}s/{ttl}s')
     except:

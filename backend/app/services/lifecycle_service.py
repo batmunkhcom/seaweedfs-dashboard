@@ -1,6 +1,6 @@
 import time
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.config import settings
 from app.database import get_db
@@ -237,7 +237,7 @@ class LifecycleEngine:
         rules_list = rules.get("rules", [])
 
         objects = await self._list_bucket_objects(bucket)
-        now_ts = datetime.utcnow()
+        now_ts = datetime.now(timezone.utc)
         transition_count = 0
 
         for obj in objects:
@@ -363,8 +363,8 @@ class LifecycleEngine:
     async def _update_policy_timestamps(self, bucket: str):
         try:
             db = await get_db()
-            now = datetime.utcnow().isoformat()
-            next_run = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+            now = datetime.now(timezone.utc).isoformat()
+            next_run = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
             await db.execute(
                 "UPDATE lifecycle_policies SET last_run_at=?, next_run_at=? WHERE bucket=?",
                 (now, next_run, bucket),
@@ -376,7 +376,7 @@ class LifecycleEngine:
     async def _cleanup_old_transitions(self, bucket: str):
         try:
             db = await get_db()
-            cutoff = (datetime.utcnow() - timedelta(days=90)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
             await db.execute(
                 "DELETE FROM lifecycle_transitions WHERE bucket=? AND created_at < ?",
                 (bucket, cutoff),
