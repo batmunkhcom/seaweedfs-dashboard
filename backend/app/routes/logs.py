@@ -1,13 +1,12 @@
 import asyncio
 import json
-import time
 
 from fastapi import APIRouter, Query, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
 from app.services.log_service import query_logs, get_labels, get_label_values, tail_logs, check_loki_status
 from app.middleware.auth_middleware import get_current_user
-from app.settings_service import get_setting, get_setting_int
+from app.settings_service import get_setting_int
 from app.logging_config import get_logger
 
 router = APIRouter(prefix="/logs", tags=["logs"])

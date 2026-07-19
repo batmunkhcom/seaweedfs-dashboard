@@ -1,9 +1,0 @@
-line-length = 200
-
-[lint]
-select = ["E", "F", "W"]
-ignore = ["E501"]
-
-[lint.per-file-ignores]
-"backend/app/main.py" = ["E402"]
-"backend/tests/*" = ["E701", "E722"]
