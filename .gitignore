@@ -28,3 +28,4 @@ backend/data/
 backend/venv/
 backend/logs/
 backend/data.db
+.env.test
