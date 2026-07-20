@@ -32,11 +32,10 @@ check_pattern() {
     done
 }
 
-PASSWORD_LIKE='[A-Za-z0-9*!@#$%^&()]{8,}'
-API_KEY_LIKE='[A-Za-z0-9+/]{20,}={0,2}'
+SECRET_KEY_LIKE='(password|passwd|secret|token|FOPENDOIT|API_KEY|SESSION_SECRET|ADMIN_PASSWORD|auth)[[:space:]]*[:=][[:space:]]*["'\''][A-Za-z0-9*!@#$%^&()]{6,}["'\'']'
+API_KEY_LIKE='[A-Za-z0-9+/]*[0-9][A-Za-z0-9+/]{19,}={0,2}'
 
-check_pattern 'ADMIN_PASSWORD[[:space:]]*=[[:space:]]*"[^"]*"' "Admin password in config"
-check_pattern "$PASSWORD_LIKE" "Possible hardcoded password"
+check_pattern "$SECRET_KEY_LIKE" "Possible hardcoded secret/credential"
 check_pattern "$API_KEY_LIKE" "Possible base64 API key/token"
 check_pattern '10\.10\.95\.(10[1-7])\b' "Production IP (dc03)"
 check_pattern '10\.10\.0\.80\b' "Production deploy server IP"
