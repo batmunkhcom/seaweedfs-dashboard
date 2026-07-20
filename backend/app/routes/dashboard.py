@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, Depends
 
 from app.services.seaweed_client import get_seaweed_client
 from app.database import get_db
-from app.settings_service import get_setting_int
+from app.settings_service import get_setting_int, get_setting_float
 from app.logging_config import get_logger
 from app.routes.sse import sse_endpoint, publish_stats
 from app.middleware.auth_middleware import require_permission, get_current_user
@@ -11,7 +11,42 @@ from app.middleware.auth_middleware import require_permission, get_current_user
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 logger = get_logger("dashboard")
 
-REPLICATION_FACTOR = 2
+DEFAULT_REPLICATION_FACTOR = 2.0
+
+
+async def _detect_storage_overhead(client) -> float:
+    ec_data_shards = await get_setting_float("ec_data_shards", 10)
+    ec_parity_shards = await get_setting_float("ec_parity_shards", 4)
+    ec_overhead = (ec_data_shards + ec_parity_shards) / ec_data_shards
+
+    try:
+        resp = await client.master_get("/vol/status")
+        data = resp.json()
+        has_ec = False
+        for dc in data.get("Volumes", {}).get("DataCenters", {}).values():
+            for rack in dc.values():
+                for node, vols in rack.items():
+                    if vols:
+                        for v in vols:
+                            if v.get("EcShards", 0) > 0 or v.get("Collection", "").startswith("ec_"):
+                                has_ec = True
+                                break
+                        if has_ec:
+                            break
+                if has_ec:
+                    break
+            if has_ec:
+                break
+        if has_ec:
+            return ec_overhead
+    except Exception:
+        pass
+
+    try:
+        resp = await client.master_get("/cluster/status")
+    except Exception:
+        return DEFAULT_REPLICATION_FACTOR
+    return DEFAULT_REPLICATION_FACTOR
 
 
 @router.get("/stats")
@@ -35,7 +70,11 @@ async def dashboard_stats():
         "totalUsableGB": 0,
         "physicalRawGB": 0,
         "physicalUsableGB": 0,
+        "storageOverhead": DEFAULT_REPLICATION_FACTOR,
     }
+
+    overhead_factor = await _detect_storage_overhead(client)
+    stats["storageOverhead"] = round(overhead_factor, 2)
 
     try:
         resp = await client.master_get("/dir/status?pretty=y")
@@ -55,11 +94,11 @@ async def dashboard_stats():
                     stats["healthyNodes"] += 1
 
         stats["totalDiskGB"] = round((total_max * volume_size_mb) / 1024, 1)
-        stats["totalUsableGB"] = round(stats["totalDiskGB"] / REPLICATION_FACTOR, 1)
+        stats["totalUsableGB"] = round(stats["totalDiskGB"] / overhead_factor, 1)
 
         physical_raw = stats["volumeServers"] * per_node_disk_gb
         stats["physicalRawGB"] = round(physical_raw, 1)
-        stats["physicalUsableGB"] = round(physical_raw / REPLICATION_FACTOR, 1)
+        stats["physicalUsableGB"] = round(physical_raw / overhead_factor, 1)
     except Exception:
         logger.error("stats_fetch_failed", exc_info=True)
 

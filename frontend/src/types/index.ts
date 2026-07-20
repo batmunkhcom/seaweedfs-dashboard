@@ -498,3 +498,4 @@ export interface FeatureComment {
   author: string
   body: string
   created_at: string
+}

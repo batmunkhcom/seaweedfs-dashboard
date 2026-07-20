@@ -4,6 +4,13 @@ import { PlusOutlined, DeleteOutlined, WarningOutlined, CheckCircleOutlined, Thu
 import { getVolumesStats, growVolumes, vacuumVolumes } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 
+interface DiskHealth {
+  device?: string
+  temp?: number | null
+  wear?: number | null
+  status: string
+}
+
 interface NodeStat {
   url: string
   dc: string
@@ -14,6 +21,7 @@ interface NodeStat {
   configured_limit: number
   pct: number
   status: string
+  disk_health?: DiskHealth | null
 }
 
 export default function VolumesPage() {
@@ -75,10 +83,16 @@ export default function VolumesPage() {
          }
     }
 
-  const statusTag = (status: string, pct: number) => {
-    if (status === 'critical') return <Tag color="red" icon={<WarningOutlined />}>{pct}% — Critical</Tag>
-    if (status === 'warning') return <Tag color="orange" icon={<WarningOutlined />}>{pct}% — Warning</Tag>
-    return <Tag color="green"><CheckCircleOutlined /> {pct}% — Healthy</Tag>
+  const statusTag = (status: string, pct: number, dh?: DiskHealth | null) => {
+    const dhInfo = dh?.temp != null || dh?.wear != null
+      ? ` | ${dh.temp != null ? `${dh.temp}\u00b0C` : ''}${dh.temp != null && dh.wear != null ? ' ' : ''}${dh.wear != null ? `Wear ${dh.wear}%` : ''}`
+      : ''
+    const label = status === 'critical' ? `Critical${dhInfo}`
+      : status === 'warning' ? `Warning${dhInfo}`
+      : `Healthy${dhInfo}`
+    if (status === 'critical') return <Tag color="red" icon={<WarningOutlined />}>{label}</Tag>
+    if (status === 'warning') return <Tag color="orange" icon={<WarningOutlined />}>{label}</Tag>
+    return <Tag color="green"><CheckCircleOutlined /> {label}</Tag>
     }
 
   const nodeColumns = [
@@ -120,7 +134,7 @@ export default function VolumesPage() {
       title: 'Status',
       key: 'status',
       width: 160,
-      render: (_: any, record: NodeStat) => statusTag(record.status, record.pct),
+      render: (_: any, record: NodeStat) => statusTag(record.status, record.pct, record.disk_health),
      },
      {
       title: 'Free Slots',
