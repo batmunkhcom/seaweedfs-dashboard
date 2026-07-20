@@ -353,7 +353,7 @@ export default function BackupPage() {
               <strong>What is backed up:</strong> Filer LevelDB metadata — all file/directory names, paths, sizes, permissions, timestamps, and directory structure from <code>/data/dc03/filer/filerldb2</code>. File content is stored separately on volume servers and not included in filer backups.
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
-              <strong>How it works:</strong> Connects to filer nodes via SSH <code>172.16.0.2, .104</code>, tars the LevelDB directory, and downloads via SFTP to <code>/srv/seaweed-backups/</code>.
+              <strong>How it works:</strong> Connects to filer nodes via SSH, tars the LevelDB directory, and downloads via SFTP to <code>/srv/seaweed-backups/</code>.
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
               <strong>Restore:</strong> Uploads the tar.gz back to the filer via SFTP and extracts into the LevelDB directory. After restore, restart filer service — it will reconnect to existing volumes and rebuild metadata-to-volume mappings automatically.
@@ -378,7 +378,7 @@ export default function BackupPage() {
             {uploadS3 && (
               <>
                 <div>Bucket: <Select showSearch value={s3Bucket || undefined} onChange={setS3Bucket} style={{ width: '100%' }} placeholder="Select S3 bucket" options={s3Buckets.map(b => ({ value: b, label: b }))} /></div>
-                <Input addonBefore="Endpoint" value={s3Endpoint} onChange={(e) => setS3Endpoint(e.target.value)} placeholder="http://172.16.0.2:8333" />
+                <Input addonBefore="Endpoint" value={s3Endpoint} onChange={(e) => setS3Endpoint(e.target.value)} placeholder="http://s3-node:8333" />
               </>
             )}
             <Text type="secondary" style={{ fontSize: 12 }}>

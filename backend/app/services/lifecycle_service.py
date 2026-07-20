@@ -1,8 +1,6 @@
 import time
 import asyncio
 from datetime import datetime, timedelta, timezone
-
-from app.config import settings
 from app.database import get_db
 from app.services.seaweed_client import get_seaweed_client
 from app.logging_config import get_logger
@@ -294,36 +292,19 @@ class LifecycleEngine:
 
     async def _list_bucket_objects(self, bucket: str, max_keys: int = 100) -> list[dict]:
         try:
-            s3_host = (await self._client.get_master()).replace(":9333", "")
-            for host in self._client._master_hosts:
-                try:
-                    from app.config import settings
-                except Exception:
-                    pass
-            s3_host = settings.filer_list[0].replace(":8888", ":8333") if hasattr(settings, 'filer_list') else "172.16.0.2:8333"
+            from app.config import settings
+            s3_host = settings.filer_list[0].replace(":8888", ":8333") if settings.filer_list else None
+            if not s3_host:
+                return []
             s3_resp = await self._client.client.get(
                 f"http://{s3_host}/{bucket}?list-type=2&max-keys={max_keys}",
                 timeout=10,
             )
             if s3_resp.status_code != 200:
-                return self._parse_s3_list(await self._get_any_s3_node(bucket, max_keys))
+                return []
             return self._parse_s3_list(s3_resp)
         except Exception:
-            return self._parse_s3_list(await self._get_any_s3_node(bucket, max_keys))
-
-    async def _get_any_s3_node(self, bucket: str, max_keys: int):
-        hosts = [h.split(":")[0] for h in settings.seaweedfs_s3_gateway_hosts.split(",")] if hasattr(settings, 'seaweedfs_s3_gateway_hosts') else ["172.16.0.2"]
-        for host in hosts:
-            try:
-                r = await self._client.client.get(
-                    f"http://{host}:8333/{bucket}?list-type=2&max-keys={max_keys}",
-                    timeout=10,
-                )
-                if r.status_code == 200:
-                    return r
-            except Exception:
-                continue
-        return None
+            return []
 
     def _parse_s3_list(self, resp) -> list[dict]:
         if resp is None:

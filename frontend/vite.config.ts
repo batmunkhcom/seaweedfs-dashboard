@@ -23,8 +23,8 @@ export default defineConfig({
           if (id.includes('node_modules/@ant-design/')) return 'antd-icons'
           if (id.includes('node_modules/')) return 'vendor'
           if (id.includes('/pages/')) {
-            const match = id.match(/\/pages\/([^/]+)/)
-            return match ? `page-${match[1].toLowerCase()}` : 'pages'
+            const match = id.match(/\/pages\/(.+?)\./)
+            return match ? `page-${match[1].toLowerCase().replace(/\//g, '-')}` : 'pages'
           }
         },
       },

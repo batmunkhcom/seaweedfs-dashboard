@@ -3,12 +3,10 @@ export interface ClusterStatus {
   peers: string[]
   version: string
 }
-
 export interface DataCenter {
   id: string
   racks: Rack[]
 }
-
 export interface Rack {
   id: string
   dataNodes: DataNode[]
@@ -204,28 +202,6 @@ export interface DiskHealthDetail {
   device?: string
   timestamp?: number
   smart?: string
-}
-
-export interface SmartAttribute {
-  id: number
-  name: string
-  value: number
-}
-export interface DiskHealthHistory {
-  timestamps: string[]
-  temperatures: number[]
-  wearPercents: (number | null)[]
-  reallocated: number[]
-}
-
-export interface SmartAttribute {
-  id: number
-  name: string
-  value: number
-  worst: number
-  threshold: number
-  raw: string
-  status: string
 }
 
 export interface DiskHealthHistory {
@@ -522,4 +498,3 @@ export interface FeatureComment {
   author: string
   body: string
   created_at: string
-}

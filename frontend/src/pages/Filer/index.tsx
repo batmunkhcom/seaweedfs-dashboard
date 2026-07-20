@@ -352,7 +352,7 @@ export default function FilerPage() {
           <Alert
             type="info"
             showIcon
-            message={`Large files (over 100MB) may fail via Cloudflare. For files up to ${maxUploadSize}MB, use VPN direct access: ${vpnUrl || 'http://172.16.0.10:8081'}`}
+            message={`Large files (over 100MB) may fail via Cloudflare. For files up to ${maxUploadSize}MB, use VPN direct access: ${vpnUrl || window.location.origin}`}
             style={{ marginBottom: 12 }}
           />
         )}

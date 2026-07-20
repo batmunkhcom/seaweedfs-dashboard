@@ -427,7 +427,7 @@ export default function ToolsPage() {
               value={netHost}
               onChange={(e) => setNetHost(e.target.value)}
               onPressEnter={handlePingHost}
-              placeholder="Hostname or IP (e.g. 172.16.0.1 or google.com)"
+              placeholder="Hostname or IP (e.g. localhost or google.com)"
               disabled={netLoading || inetLoading || traceLoading}
               allowClear
               style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}

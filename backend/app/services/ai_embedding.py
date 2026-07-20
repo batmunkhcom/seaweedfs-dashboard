@@ -250,6 +250,16 @@ async def start_index_scheduler():
     async def _loop():
         while True:
             try:
+                from app.database import get_db
+                db = await get_db()
+                await db.execute(
+                    "INSERT OR REPLACE INTO services_health (name, last_heartbeat, ttl_seconds) VALUES (?, datetime('now'), ?)",
+                    ("ai_embedding", 3600),
+                )
+                await db.commit()
+            except Exception:
+                pass
+            try:
                 from app.services.chatbot_service import _get_setting
                 enabled = await _get_setting("ai_enabled", "false") == "true"
                 if enabled:

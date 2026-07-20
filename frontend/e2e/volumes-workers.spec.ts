@@ -1,16 +1,21 @@
 import { test, expect } from '@playwright/test'
 
+const ADMIN_USER = process.env.TEST_ADMIN_USER || 'admin'
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'changeme'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:5173'
+const TEST_NODE = process.env.TEST_NODE_IP || '127.0.0.1'
+
 test.describe('Volumes', () => {
   test('volumes page loads after login', async ({ page }) => {
-    await page.goto('/')
+    await page.goto(BASE_URL)
     await page.waitForTimeout(3000)
 
     const url = page.url()
     if (url.includes('login') || url.includes('auth')) {
-      await page.fill('input[type="password"]', 'REDACTED_PASSWORD')
+      await page.fill('input[type="password"]', ADMIN_PASSWORD)
       const usernameField = page.locator('input[id="username"], input[placeholder*="Username"]')
       if (await usernameField.isVisible()) {
-        await usernameField.fill('admin')
+        await usernameField.fill(ADMIN_USER)
       }
       await page.click('button[type="submit"], button:has-text("Login")')
       await page.waitForTimeout(3000)
@@ -24,7 +29,7 @@ test.describe('Volumes', () => {
   })
 
   test('volumes page shows node filter if param present', async ({ page }) => {
-    await page.goto('/volumes?node=172.16.0.1')
+    await page.goto(`${BASE_URL}/volumes?node=${TEST_NODE}`)
     await page.waitForTimeout(3000)
 
     const url = page.url()
@@ -39,15 +44,15 @@ test.describe('Volumes', () => {
 
 test.describe('Workers', () => {
   test('workers page loads after login', async ({ page }) => {
-    await page.goto('/')
+    await page.goto(BASE_URL)
     await page.waitForTimeout(3000)
 
     const url = page.url()
     if (url.includes('login') || url.includes('auth')) {
-      await page.fill('input[type="password"]', 'REDACTED_PASSWORD')
+      await page.fill('input[type="password"]', ADMIN_PASSWORD)
       const usernameField = page.locator('input[id="username"], input[placeholder*="Username"]')
       if (await usernameField.isVisible()) {
-        await usernameField.fill('admin')
+        await usernameField.fill(ADMIN_USER)
       }
       await page.click('button[type="submit"], button:has-text("Login")')
       await page.waitForTimeout(3000)

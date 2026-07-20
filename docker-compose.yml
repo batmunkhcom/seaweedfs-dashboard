@@ -6,12 +6,14 @@ services:
     environment:
       - SEAWEEDFS_MASTER_HOSTS=${SEAWEEDFS_MASTER_HOSTS}
       - SEAWEEDFS_FILER_HOST=${SEAWEEDFS_FILER_HOST}
+      - SEAWEEDFS_VOLUME_HOSTS=${SEAWEEDFS_VOLUME_HOSTS:-}
+      - SEAWEEDFS_S3_GATEWAY_HOSTS=${SEAWEEDFS_S3_GATEWAY_HOSTS:-}
       - DATABASE_URL=sqlite:///data/data.db
       - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - READONLY_USER=${READONLY_USER:-viewer}
       - READONLY_PASSWORD=${READONLY_PASSWORD:-viewpass}
-      - SESSION_SECRET=${SESSION_SECRET:-random-secret-change-me}
+      - SESSION_SECRET=${SESSION_SECRET}
     volumes:
       - ./backend/data:/app/data
     restart: unless-stopped

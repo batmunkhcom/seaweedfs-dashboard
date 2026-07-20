@@ -133,8 +133,8 @@ status() {
 lint() {
   echo "Backend (ruff)..."
   (cd "$BACKEND_DIR" && "$VENV_PYTHON" -m ruff check . 2>/dev/null) || echo "  ruff not installed"
-  echo "Frontend (eslint)..."
-  (cd "$FRONTEND_DIR" && npx eslint . 2>/dev/null) || echo "  eslint not configured"
+  echo "Frontend (oxlint)..."
+  (cd "$FRONTEND_DIR" && npx oxlint . 2>/dev/null) || echo "  oxlint not configured"
 }
 
 test() {

@@ -32,15 +32,27 @@ SERVICE_CHECK_PATHS = {
     "s3": "/",
 }
 
-NODE_SERVICES = {
-    "172.16.0.1": [(9333, "master"), (8080, "volume")],
-    "172.16.0.2": [(8080, "volume"), (8888, "filer"), (8333, "s3")],
-    "172.16.0.3": [(9333, "master"), (8080, "volume")],
-    "172.16.0.4": [(8080, "volume"), (8888, "filer"), (8333, "s3")],
-    "172.16.0.5": [(9333, "master"), (8080, "volume")],
-    "172.16.0.6": [(8080, "volume"), (8333, "s3")],
-    "172.16.0.7": [(8080, "volume"), (8333, "s3")],
-}
+def _get_node_services() -> dict[str, list[tuple[int, str]]]:
+    services: dict[str, list[tuple[int, str]]] = {}
+    for hostport in settings.master_list:
+        ip = hostport.split(":")[0]
+        services.setdefault(ip, []).append((9333, "master"))
+    for hostport in settings.volume_list:
+        ip = hostport.split(":")[0]
+        entry = services.setdefault(ip, [])
+        if (8080, "volume") not in entry:
+            entry.append((8080, "volume"))
+    for hostport in settings.filer_list:
+        ip = hostport.split(":")[0]
+        entry = services.setdefault(ip, [])
+        if (8888, "filer") not in entry:
+            entry.append((8888, "filer"))
+    for hostport in settings.s3_list:
+        ip = hostport.split(":")[0]
+        entry = services.setdefault(ip, [])
+        if (8333, "s3") not in entry:
+            entry.append((8333, "s3"))
+    return services
 
 class PingResponse(BaseModel):
     ok: bool
@@ -140,8 +152,9 @@ async def ping_nodes():
 async def service_check():
     t0 = time.monotonic()
 
+    node_svcs = _get_node_services()
     checks = []
-    for host, svc_list in NODE_SERVICES.items():
+    for host, svc_list in node_svcs.items():
         if host not in settings.all_node_hosts:
             continue
         for port, svc in svc_list:
@@ -152,7 +165,7 @@ async def service_check():
     results = await asyncio.gather(*tasks)
 
     nodes = {}
-    for host, svc_list in NODE_SERVICES.items():
+    for host, svc_list in node_svcs.items():
         if host not in settings.all_node_hosts:
             continue
         nodes[host] = {"host": host, "checks": []}
@@ -200,10 +213,11 @@ async def tool_status():
     except Exception:
         pass
 
-    master_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "master")
-    volume_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "volume")
-    filer_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "filer")
-    s3_count = sum(1 for _, svcs in NODE_SERVICES.items() for _, s in svcs if s == "s3")
+    node_svcs = _get_node_services()
+    master_count = sum(1 for _, svcs in node_svcs.items() for _, s in svcs if s == "master")
+    volume_count = sum(1 for _, svcs in node_svcs.items() for _, s in svcs if s == "volume")
+    filer_count = sum(1 for _, svcs in node_svcs.items() for _, s in svcs if s == "filer")
+    s3_count = sum(1 for _, svcs in node_svcs.items() for _, s in svcs if s == "s3")
 
     return {
         "ok": True,

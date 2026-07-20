@@ -1,15 +1,19 @@
 import { test, expect } from '@playwright/test'
 
+const ADMIN_USER = process.env.TEST_ADMIN_USER || 'admin'
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'changeme'
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:5173'
+
 test.describe('Authentication', () => {
   test('login page loads', async ({ page }) => {
-    await page.goto('/')
+    await page.goto(BASE_URL)
     await expect(page).toHaveURL(/login|\/auth/)
   })
 
   test('login with valid credentials', async ({ page }) => {
-    await page.goto('/')
-    await page.fill('input[id="username"], input[placeholder*="Username"], input[placeholder*="username"]', 'admin')
-    await page.fill('input[type="password"]', 'REDACTED_PASSWORD')
+    await page.goto(BASE_URL)
+    await page.fill('input[id="username"], input[placeholder*="Username"], input[placeholder*="username"]', ADMIN_USER)
+    await page.fill('input[type="password"]', ADMIN_PASSWORD)
     await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign")')
     await page.waitForTimeout(3000)
 
@@ -19,7 +23,7 @@ test.describe('Authentication', () => {
   })
 
   test('invalid credentials shows error', async ({ page }) => {
-    await page.goto('/')
+    await page.goto(BASE_URL)
     const visible = await page.isVisible('input[type="password"]')
     if (!visible) {
       test.skip(true, 'No login form visible — already authenticated or different setup')
@@ -35,14 +39,14 @@ test.describe('Authentication', () => {
 
 test.describe('Dashboard', () => {
   test('dashboard loads after login', async ({ page }) => {
-    await page.goto('/')
+    await page.goto(BASE_URL)
     await page.waitForTimeout(5000)
     const url = page.url()
     if (url.includes('login') || url.includes('auth')) {
-      await page.fill('input[type="password"]', 'REDACTED_PASSWORD')
+      await page.fill('input[type="password"]', ADMIN_PASSWORD)
       const usernameField = page.locator('input[id="username"], input[placeholder*="Username"]')
       if (await usernameField.isVisible()) {
-        await usernameField.fill('admin')
+        await usernameField.fill(ADMIN_USER)
       }
       await page.click('button[type="submit"], button:has-text("Login")')
       await page.waitForTimeout(3000)

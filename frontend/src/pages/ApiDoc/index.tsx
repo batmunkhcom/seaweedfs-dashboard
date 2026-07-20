@@ -12,11 +12,11 @@ export default function ApiDocPage() {
     api.get('/info').then((r) => setInfo(r.data)).catch(() => {})
   }, [])
 
-  const baseUrl = info?.endpoints?.public_dashboard || 'https://seaweed.mbm.mn'
-  const s3Url = info?.endpoints?.public_s3 || 'https://s3.mbm.mn'
+  const baseUrl = info?.endpoints?.public_dashboard || window.location.origin
+  const s3Url = info?.endpoints?.public_s3 || ''
 
   const authEndpoints = [
-    { method: 'POST', path: '/api/auth/login', auth: 'None (rate 5/15min)', desc: 'Login. Body: {username, password}. Returns: {user, csrfToken}', example: `curl -X POST ${baseUrl}/api/auth/login -d '{"username":"admin","password":"changeme"}'` },
+    { method: 'POST', path: '/api/auth/login', auth: 'None (rate 5/15min)', desc: 'Login. Body: {username, password}. Returns: {user, csrfToken}', example: `curl -X POST ${baseUrl}/api/auth/login -d '{"username":"admin","password":"your-password"}'` },
     { method: 'POST', path: '/api/auth/logout', auth: 'Session', desc: 'Clear session' },
     { method: 'GET', path: '/api/auth/me', auth: 'Session', desc: 'Current user info', example: `curl ${baseUrl}/api/auth/me -b cookies.txt` },
     { method: 'GET', path: '/api/auth/csrf-token', auth: 'None', desc: 'Get CSRF token' },
