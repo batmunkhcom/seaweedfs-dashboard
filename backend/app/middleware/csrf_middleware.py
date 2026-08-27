@@ -13,7 +13,7 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         if request.method.upper() in CSRF_SAFE_METHODS:
             return await call_next(request)
 
-        if request.url.path.startswith("/api/auth"):
+        if request.url.path in ("/api/auth/login", "/api/auth/csrf-token"):
             return await call_next(request)
 
         csrf_header = request.headers.get(CSRF_HEADER, "")
