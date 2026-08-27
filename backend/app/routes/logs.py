@@ -47,7 +47,7 @@ async def logs_stream(
 ):
     async def event_generator():
         interval = await get_setting_int("loki_tail_interval_seconds", 3)
-        last_ids: set[str] = set()
+        last_ids: dict[str, None] = {}
         while True:
             if await request.is_disconnected():
                 break
@@ -58,7 +58,7 @@ async def logs_stream(
                     for entry in stream.get("values", []):
                         entry_id = f"{stream.get('stream', {})}-{entry[0]}"
                         if entry_id not in last_ids:
-                            last_ids.add(entry_id)
+                            last_ids[entry_id] = None
                             yield {
                                 "event": "log_entry",
                                 "data": json.dumps({
@@ -68,7 +68,8 @@ async def logs_stream(
                                 }),
                             }
                 if len(last_ids) > 2000:
-                    last_ids = set(list(last_ids)[-1000:])
+                    keys = list(last_ids.keys())
+                    last_ids = {k: None for k in keys[-1000:]}
             except Exception as e:
                 logger.error("log_stream_error", exc_info=True)
                 yield {"event": "error", "data": json.dumps({"error": str(e)})}
