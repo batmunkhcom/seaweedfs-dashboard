@@ -74,6 +74,8 @@ async def start_webdav(node: str, port: int | None = None) -> dict:
     if not port:
         port = await get_setting_int("webdav_default_port", 9001)
 
+    if not settings.filer_list:
+        return {"ok": False, "error": "No filer hosts configured"}
     filer = next((h for h in settings.filer_list if h.startswith(node)), settings.filer_list[0])
     cmd = f"nohup weed webdav -filer={filer} -port={port} > /dev/null 2>&1 &"
 
@@ -122,6 +124,8 @@ async def mount_fuse(node: str, mount_path: str | None = None) -> dict:
     if not mount_path:
         mount_path = await get_setting("fuse_default_mount", "/mnt/seaweedfs")
 
+    if not settings.filer_list:
+        return {"ok": False, "error": "No filer hosts configured"}
     filer = next((h for h in settings.filer_list if h.startswith(node)), settings.filer_list[0])
 
     mkdir_cmd = f"mkdir -p {mount_path}"
