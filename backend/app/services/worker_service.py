@@ -110,9 +110,10 @@ async def detect_workers() -> dict:
     try:
         resp = await client.master_get("/dir/status")
         topology = resp.json().get("Topology", {})
-        dc = topology.get("DataCenters", [{}])[0]
-        rack = dc.get("Racks", [{}])[0]
-        data_nodes = rack.get("DataNodes", [])
+        data_nodes = []
+        for dc in topology.get("DataCenters", []):
+            for rack in dc.get("Racks", []):
+                data_nodes.extend(rack.get("DataNodes", []))
 
         async with httpx.AsyncClient(timeout=10) as probe_client:
             tasks = []
@@ -218,9 +219,10 @@ async def execute_job(job_type: str, node: str = "", volume_param: str = "") -> 
         elif job_type == "rebalance":
             resp = await client.master_get("/dir/status")
             topology = resp.json().get("Topology", {})
-            dc = topology.get("DataCenters", [{}])[0]
-            rack = dc.get("Racks", [{}])[0]
-            data_nodes = rack.get("DataNodes", [])
+            data_nodes = []
+            for dc in topology.get("DataCenters", []):
+                for rack in dc.get("Racks", []):
+                    data_nodes.extend(rack.get("DataNodes", []))
 
             vol_counts = [dn.get("Volumes", 0) for dn in data_nodes]
             max_count = max(vol_counts) if vol_counts else 0
