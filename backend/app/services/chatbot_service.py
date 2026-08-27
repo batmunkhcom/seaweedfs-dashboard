@@ -112,10 +112,11 @@ async def _build_context(user_prompt: str = "") -> tuple[str, list[dict]]:
     citations = []
     try:
         from app.services.ai_embedding import search_similar
-        rag_context, citations = await search_similar(user_prompt) if user_prompt else ([], [])
-        if rag_context:
-            lines.append("\n--- Wiki Documentation (RAG) ---")
-            lines.append(rag_context)
+        if user_prompt:
+            rag_context, citations = await search_similar(user_prompt)
+            if rag_context:
+                lines.append("\n--- Wiki Documentation (RAG) ---")
+                lines.append(rag_context)
     except Exception:
         logger.warning("rag_search_failed", exc_info=True)
 
