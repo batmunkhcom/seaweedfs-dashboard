@@ -70,13 +70,14 @@ async def cluster_health():
                     url = node.get("Url", "")
                     native_max = node.get("Max", 0)
                     configured = node_limits.get(url, 9999)
-                    min(native_max, configured) if native_max > 0 else configured
+                    effective_max = min(native_max, configured) if native_max > 0 else configured
+                    used = node.get("Volumes", 0)
                     nodes.append({
                           "url": url,
-                          "volumes": node.get("Volumes", 0),
+                          "volumes": used,
                           "max_native": native_max,
                           "max_configured": configured,
-                          "free": node_limits.get(url, native_max - node.get("Volumes", 0)),
+                          "free": effective_max - used,
                           "status": "healthy",
                           "dc": dc.get("Id", ""),
                           "rack": rack.get("Id", ""),
