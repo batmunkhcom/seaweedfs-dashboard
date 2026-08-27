@@ -81,8 +81,13 @@ async def test_permission(user: str, path: str, action: str) -> dict:
         rule_path = row["path"]
         if pattern != "*" and pattern != user:
             continue
-        if rule_path != "/" and not path.startswith(rule_path.rstrip("*")):
-            continue
+        if rule_path != "/":
+            if rule_path.endswith("*"):
+                prefix = rule_path.rstrip("*")
+                if not path.startswith(prefix):
+                    continue
+            elif path != rule_path:
+                continue
         if action.upper() in (row["permissions"] or "").upper():
             matched_rule = dict(row)
             break
