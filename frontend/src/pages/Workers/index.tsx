@@ -89,7 +89,21 @@ export default function WorkersPage() {
   useEffect(() => {
     fetch()
     intervalRef.current = setInterval(fetch, 15000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (intervalRef.current) clearInterval(intervalRef.current)
+      } else {
+        fetch()
+        intervalRef.current = setInterval(fetch, 15000)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [fetch])
 
   const loadNodeVolumes = async (node: string) => {

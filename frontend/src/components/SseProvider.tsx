@@ -29,6 +29,8 @@ export function SseProvider({ children }: { children: React.ReactNode }) {
     let eventSource: EventSource | null = null
     let reconnectTimer: ReturnType<typeof setTimeout>
     let reconnectDelay = 1000
+    let retryCount = 0
+    const MAX_RETRIES = 50
 
     function connect() {
       eventSource = new EventSource('/api/dashboard/sse')
@@ -44,10 +46,13 @@ export function SseProvider({ children }: { children: React.ReactNode }) {
 
       eventSource.onopen = () => {
         reconnectDelay = 1000
+        retryCount = 0
       }
 
       eventSource.onerror = () => {
         eventSource?.close()
+        if (retryCount >= MAX_RETRIES) return
+        retryCount++
         reconnectTimer = setTimeout(() => {
           reconnectDelay = Math.min(reconnectDelay * 2, 30000)
           connect()

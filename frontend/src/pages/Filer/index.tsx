@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Table, Button, Breadcrumb, Modal, Input, Upload, message, Space, Tag, Progress, List, Typography, Alert } from 'antd'
 import {
   FolderAddOutlined,
@@ -48,6 +48,11 @@ export default function FilerPage() {
   const role = useAuthStore((s) => s.user?.role)
   const csrfToken = useAuthStore((s) => s.csrfToken)
   const canWrite = role === 'admin' || role === 'operator'
+  const xhrRef = useRef<XMLHttpRequest | null>(null)
+
+  useEffect(() => {
+    return () => { xhrRef.current?.abort() }
+  }, [])
 
   const fetch = () => {
     setLoading(true)
@@ -140,6 +145,7 @@ export default function FilerPage() {
     setUploading(true)
 
     const xhr = new XMLHttpRequest()
+    xhrRef.current = xhr
     const formData = new FormData()
     fileList.forEach((f: any) => {
       if (f instanceof File) {
