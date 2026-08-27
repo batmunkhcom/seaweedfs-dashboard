@@ -28,6 +28,8 @@ class SeaweedClient:
 
     async def get_master(self) -> str:
         masters = settings.master_list
+        if not masters:
+            raise RuntimeError("No master hosts configured")
         for attempt in range(len(masters)):
             idx = (self._master_index + attempt) % len(masters)
             host = masters[idx]
@@ -44,6 +46,8 @@ class SeaweedClient:
 
     async def get_filer(self) -> str:
         filers = settings.filer_list
+        if not filers:
+            raise RuntimeError("No filer hosts configured")
         for attempt in range(len(filers)):
             idx = (self._filer_index + attempt) % len(filers)
             host = filers[idx]
