@@ -169,7 +169,7 @@ async def update_alert_config(config: list[dict], _: bool = Depends(require_perm
 
 
 @router.get("/history")
-async def dashboard_history(hours: int = 24):
+async def dashboard_history(hours: int = Query(24, ge=1, le=720)):
     db = await get_db()
     cutoff = time.time() - hours * 3600
     cursor = await db.execute(

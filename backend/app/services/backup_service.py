@@ -224,6 +224,7 @@ async def list_backups() -> list[dict]:
                 actual_size = file_path.stat().st_size
                 if d["size"] == 0:
                     await db.execute("UPDATE backup_snapshots SET size_bytes=? WHERE id=?", (actual_size, d["id"]))
+                    await db.commit()
                     d["size"] = actual_size
             else:
                 d["status"] = "missing"

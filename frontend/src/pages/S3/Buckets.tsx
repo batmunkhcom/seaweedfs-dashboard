@@ -33,8 +33,13 @@ export default function S3BucketsPage() {
       render: (_: any, r: any) => {
         const pol = lifecycleMap[r.name]
         if (!pol) return <Tag color="default">none</Tag>
+        let ruleCount = '?'
+        try {
+          const parsed = JSON.parse(pol.policy_json || '{}')
+          ruleCount = String(Object.keys(parsed.rules || {}).length)
+        } catch { /* malformed JSON */ }
         return (
-          <Tooltip title={`${Object.keys(JSON.parse(pol.policy_json || '{}').rules || {}).length || '?'} rules`}>
+          <Tooltip title={`${ruleCount} rules`}>
             <Tag color={pol.enabled ? 'green' : 'orange'}>
               {pol.enabled ? 'active' : 'disabled'}
             </Tag>

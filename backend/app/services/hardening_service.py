@@ -79,7 +79,7 @@ class HardeningService:
         client.connect(hostname="", username=SSH_USER, pkey=key)
         return client
 
-    async def _ssh_exec(self, host: str, command: str, timeout: int = 60) -> tuple[str, str, int]:
+    async def _ssh_exec(self, host: str, command: str, timeout: int = 60, env: dict | None = None) -> tuple[str, str, int]:
         loop = asyncio.get_event_loop()
 
         def _run():
@@ -91,6 +91,9 @@ class HardeningService:
             key = paramiko.RSAKey.from_private_key_file(key_path)
             client.connect(hostname=host, username=SSH_USER, pkey=key, timeout=10)
             try:
+                if env:
+                    env_prefix = " ".join(f"{k}={v}" for k, v in env.items())
+                    command = f"{env_prefix} {command}"
                 stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
                 exit_code = stdout.channel.recv_exit_status()
                 return stdout.read().decode(), stderr.read().decode(), exit_code
@@ -159,8 +162,8 @@ class HardeningService:
 
         results = {}
         for host in settings.all_node_hosts:
-            cmd = f"weed volume.configure -encryptVolumeKey={key} -volumeServer={host}:8080"
-            stdout, stderr, exit_code = await self._ssh_exec(host, cmd)
+            cmd = f"weed volume.configure -encryptVolumeKey=$ENCRYPT_KEY -volumeServer={host}:8080"
+            stdout, stderr, exit_code = await self._ssh_exec(host, cmd, env={"ENCRYPT_KEY": key})
             results[host] = {"ok": exit_code == 0, "output": (stdout or stderr)[:300]}
         return {"ok": all(r.get("ok") for r in results.values()), "results": results}
 

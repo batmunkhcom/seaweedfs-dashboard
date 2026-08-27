@@ -11,6 +11,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons'
 import { getTopology, getClusterHealth, updateNodeLimits } from '../../services/api'
+import { getNodeLimits } from '../../services/apiData'
 import { useAuthStore } from '../../stores/authStore'
 
 const { Title, Text } = Typography
@@ -64,25 +65,20 @@ export default function ClusterPage() {
      }
     setSavingNodeId(state.nodeUrl)
     try {
-       // Fetch current limits first
-      const resp = await fetch('/api/cluster/node-limits')
-      const data = await resp.json()
-      const currentLimits = data.limits || {}
-      currentLimits[state.nodeUrl] = state.limit
-      
-      await updateNodeLimits(currentLimits)
-      message.success(`Limit set to ${state.limit} for ${state.nodeUrl.replace(':8080', '')}`)
-      
-      // Refresh nodes
-      const healthResp = await fetch('/api/cluster/health')
-      const healthData = await healthResp.json()
-      setNodes(healthData.nodes || [])
-      
-      handleCancelEdit(state.nodeUrl)
+       const currentLimits = await getNodeLimits()
+       currentLimits[state.nodeUrl] = state.limit
+       
+       await updateNodeLimits(currentLimits)
+       message.success(`Limit set to ${state.limit} for ${state.nodeUrl.replace(':8080', '')}`)
+       
+       const healthData = await getClusterHealth()
+       setNodes(healthData.nodes || [])
+       
+       handleCancelEdit(state.nodeUrl)
      } catch {
       message.error('Failed to save limit')
      } finally {
-      setSavingNodeId(null)
+       setSavingNodeId(null)
      }
     }
 

@@ -8,7 +8,7 @@ from app.logging_config import get_logger
 
 logger = get_logger("s3_sync")
 
-S3_GATEWAY_HOSTS = [h.split(":")[0] for h in settings.seaweedfs_s3_gateway_hosts.split(",")]
+S3_GATEWAY_HOSTS = [h.split(":")[0] for h in settings.seaweedfs_s3_gateway_hosts.split(",") if h.strip()]
 S3_JSON_PATH = "/etc/seaweedfs/s3.json"
 
 

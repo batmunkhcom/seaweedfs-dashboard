@@ -124,11 +124,15 @@ export default function FilerPage() {
 
   const doMkdir = async () => {
     const fullPath = `${path === '/' ? '' : path}/${mkdirName}`
-    await createFilerDir(fullPath)
-    message.success('Directory created')
-    setMkdirOpen(false)
-    setMkdirName('')
-    fetch()
+    try {
+      await createFilerDir(fullPath)
+      message.success('Directory created')
+      setMkdirOpen(false)
+      setMkdirName('')
+      fetch()
+    } catch {
+      message.error('Failed to create directory')
+    }
   }
 
   const handleUpload = () => {

@@ -33,7 +33,9 @@ async def new_policy(body: dict, _: bool = Depends(require_admin)):
 
 @router.put("/policies/{policy_id}")
 async def edit_policy(policy_id: int, body: dict, _: bool = Depends(require_admin)):
-    result = await update_policy(policy_id, **body)
+    allowed_keys = {"name", "description", "path", "user_pattern", "permissions", "priority", "enabled"}
+    filtered = {k: body[k] for k in allowed_keys if k in body}
+    result = await update_policy(policy_id, **filtered)
     await auto_sync_on_change()
     return result
 

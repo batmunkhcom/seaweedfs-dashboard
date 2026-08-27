@@ -30,43 +30,91 @@ async def lifespan(app: FastAPI):
         await start_index_scheduler()
     except Exception:
         logger.warning("index_scheduler_start_failed", exc_info=True)
-    from app.services.disk_health import start_disk_health
-    await start_disk_health()
-    from app.services.metrics_service import start_metrics_service
-    await start_metrics_service()
-    from app.services.webhook_service import start_webhook_service
-    await start_webhook_service()
-    from app.services.alert_engine import start_alert_engine
-    await start_alert_engine()
-    from app.services.snapshot import start_snapshot_service
-    await start_snapshot_service()
-    from app.services.lifecycle_service import start_lifecycle_engine
-    await start_lifecycle_engine()
-    from app.services.hardening_service import start_hardening_service
-    await start_hardening_service()
+    try:
+        from app.services.disk_health import start_disk_health
+        await start_disk_health()
+    except Exception:
+        logger.warning("disk_health_start_failed", exc_info=True)
+    try:
+        from app.services.metrics_service import start_metrics_service
+        await start_metrics_service()
+    except Exception:
+        logger.warning("metrics_service_start_failed", exc_info=True)
+    try:
+        from app.services.webhook_service import start_webhook_service
+        await start_webhook_service()
+    except Exception:
+        logger.warning("webhook_service_start_failed", exc_info=True)
+    try:
+        from app.services.alert_engine import start_alert_engine
+        await start_alert_engine()
+    except Exception:
+        logger.warning("alert_engine_start_failed", exc_info=True)
+    try:
+        from app.services.snapshot import start_snapshot_service
+        await start_snapshot_service()
+    except Exception:
+        logger.warning("snapshot_service_start_failed", exc_info=True)
+    try:
+        from app.services.lifecycle_service import start_lifecycle_engine
+        await start_lifecycle_engine()
+    except Exception:
+        logger.warning("lifecycle_engine_start_failed", exc_info=True)
+    try:
+        from app.services.hardening_service import start_hardening_service
+        await start_hardening_service()
+    except Exception:
+        logger.warning("hardening_service_start_failed", exc_info=True)
     yield
     logger.info("shutdown")
-    from app.services.hardening_service import stop_hardening_service
-    await stop_hardening_service()
-    from app.services.lifecycle_service import stop_lifecycle_engine
-    await stop_lifecycle_engine()
-    from app.services.snapshot import stop_snapshot_service
-    await stop_snapshot_service()
-    from app.services.alert_engine import stop_alert_engine
-    await stop_alert_engine()
-    from app.services.webhook_service import stop_webhook_service
-    await stop_webhook_service()
-    from app.services.metrics_service import stop_metrics_service
-    await stop_metrics_service()
-    from app.services.disk_health import stop_disk_health
-    await stop_disk_health()
-    await shutdown_seaweed_client()
+    try:
+        from app.services.hardening_service import stop_hardening_service
+        await stop_hardening_service()
+    except Exception:
+        logger.warning("hardening_service_stop_failed", exc_info=True)
+    try:
+        from app.services.lifecycle_service import stop_lifecycle_engine
+        await stop_lifecycle_engine()
+    except Exception:
+        logger.warning("lifecycle_engine_stop_failed", exc_info=True)
+    try:
+        from app.services.snapshot import stop_snapshot_service
+        await stop_snapshot_service()
+    except Exception:
+        logger.warning("snapshot_service_stop_failed", exc_info=True)
+    try:
+        from app.services.alert_engine import stop_alert_engine
+        await stop_alert_engine()
+    except Exception:
+        logger.warning("alert_engine_stop_failed", exc_info=True)
+    try:
+        from app.services.webhook_service import stop_webhook_service
+        await stop_webhook_service()
+    except Exception:
+        logger.warning("webhook_service_stop_failed", exc_info=True)
+    try:
+        from app.services.metrics_service import stop_metrics_service
+        await stop_metrics_service()
+    except Exception:
+        logger.warning("metrics_service_stop_failed", exc_info=True)
+    try:
+        from app.services.disk_health import stop_disk_health
+        await stop_disk_health()
+    except Exception:
+        logger.warning("disk_health_stop_failed", exc_info=True)
+    try:
+        await shutdown_seaweed_client()
+    except Exception:
+        logger.warning("seaweed_client_stop_failed", exc_info=True)
     try:
         from app.services.ai_embedding import stop_index_scheduler
         await stop_index_scheduler()
     except Exception:
         pass
-    await shutdown_database()
+    try:
+        await shutdown_database()
+    except Exception:
+        logger.warning("database_stop_failed", exc_info=True)
 
 
 app = FastAPI(title="SeaweedFS Dashboard", version="0.1.0", lifespan=lifespan)

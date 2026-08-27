@@ -29,9 +29,13 @@ export default function CollectionsPage() {
       message.warning('Cannot delete default collection')
       return
     }
-    await deleteCollection(name)
-    message.success(`Collection "${name}" deleted`)
-    fetch()
+    try {
+      await deleteCollection(name)
+      message.success(`Collection "${name}" deleted`)
+      fetch()
+    } catch {
+      message.error(`Failed to delete collection "${name}"`)
+    }
   }
 
   const columns = [

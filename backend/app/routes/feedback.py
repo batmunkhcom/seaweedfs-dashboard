@@ -55,7 +55,8 @@ async def vote(request_id: int, user: dict = Depends(get_current_user)):
         await db.commit()
         return {"ok": True}
     except Exception:
-        return {"ok": True}
+        logger.error("vote_failed", exc_info=True)
+        return {"ok": False, "error": "Vote failed"}
 
 
 @router.delete("/requests/{request_id}/vote")

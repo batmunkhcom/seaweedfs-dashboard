@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 
 import paramiko
 
@@ -8,6 +9,19 @@ from app.settings_service import get_setting
 from app.logging_config import get_logger
 
 logger = get_logger("nfs_service")
+
+_PATH_RE = re.compile(r"^/[a-zA-Z0-9._/\-]+$")
+_OPTIONS_RE = re.compile(r"^[a-zA-Z0-9,._=()\-/]+$")
+
+
+def _validate_path(path: str) -> None:
+    if not _PATH_RE.match(path):
+        raise ValueError(f"Invalid NFS export path: {path}")
+
+
+def _validate_options(options: str) -> None:
+    if not _OPTIONS_RE.match(options):
+        raise ValueError(f"Invalid NFS export options: {options}")
 
 
 async def _ssh_user() -> tuple[str, str]:
@@ -44,6 +58,9 @@ async def get_exports() -> list[dict]:
 
 
 async def add_export(node: str, path: str, options: str = "*(rw,sync,no_subtree_check)") -> dict:
+    _validate_path(path)
+    _validate_options(options)
+
     db = await get_db()
     await db.execute(
         "INSERT OR REPLACE INTO nfs_exports (node, path, options, enabled) VALUES (?, ?, ?, 1)",
@@ -62,6 +79,8 @@ async def add_export(node: str, path: str, options: str = "*(rw,sync,no_subtree_
 
 
 async def update_export(export_id: int, options: str) -> dict:
+    _validate_options(options)
+
     db = await get_db()
     cursor = await db.execute("SELECT * FROM nfs_exports WHERE id=?", (export_id,))
     row = await cursor.fetchone()
@@ -118,7 +137,19 @@ async def _apply_exports(node: str):
         await _ssh(node, "sed -i '/^\\/data\\/dc03/d' /etc/exports 2>/dev/null || true; exportfs -ra 2>/dev/null || true", 15)
         return
 
-    export_lines = "\n".join(f"{r['path']} {r['options']}" for r in rows)
+    safe_lines = []
+    for r in rows:
+        try:
+            _validate_path(r["path"])
+            _validate_options(r["options"])
+            safe_lines.append(f"{r['path']} {r['options']}")
+        except ValueError:
+            logger.warning("nfs_export_skipped_invalid", node=node, path=r["path"])
+
+    if not safe_lines:
+        return
+
+    export_lines = "\n".join(safe_lines)
     script = f"""cat > /etc/exports.d/seaweedfs.exports << 'NFS_EOF'
 {export_lines}
 NFS_EOF

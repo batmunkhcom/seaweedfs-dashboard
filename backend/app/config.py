@@ -1,3 +1,6 @@
+import secrets
+import warnings
+
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -21,6 +24,15 @@ class Settings(BaseSettings):
     disk_health_enabled: bool = False
     disk_health_ssh_user: str = "root"
     disk_health_ssh_key_path: str = "~/.ssh/id_rsa"
+
+    def model_post_init(self, __context) -> None:
+        if not self.session_secret:
+            self.session_secret = secrets.token_hex(32)
+            warnings.warn(
+                "SESSION_SECRET is not set! A random secret was generated. "
+                "Sessions will be invalidated on restart. Set SESSION_SECRET in .env!",
+                stacklevel=2,
+            )
 
     @property
     def master_list(self) -> list[str]:

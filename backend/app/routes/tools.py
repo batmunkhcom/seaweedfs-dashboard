@@ -1,7 +1,9 @@
 import asyncio
+import ipaddress
 import os
 import time
 import re
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -16,6 +18,33 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 logger = get_logger("tools")
 
 ALLOWED_HOSTNAME = re.compile(r'^[a-zA-Z0-9.\-_]{1,253}$')
+
+
+def _is_safe_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        if hostname in ("localhost",):
+            return False
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        except ValueError:
+            pass
+        if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168."):
+            return False
+        if hostname.startswith("172."):
+            parts = hostname.split(".")
+            if len(parts) >= 2:
+                second = int(parts[1]) if parts[1].isdigit() else 0
+                if 16 <= second <= 31:
+                    return False
+        return True
+    except Exception:
+        return False
 
 
 SERVICE_PORTS = [
@@ -374,6 +403,8 @@ async def http_head(body: HttpCheckRequest):
     url = body.url.strip()
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
+    if not _is_safe_url(url):
+        return {"ok": False, "url": url, "error": "URL not allowed (private/reserved IP ranges blocked)"}
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
             t0 = time.monotonic()

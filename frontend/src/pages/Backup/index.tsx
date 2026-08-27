@@ -77,7 +77,8 @@ export default function BackupPage() {
       message.error('API key required. Enter key above.')
       return
      }
-    setApiKey(apiKey)
+    localStorage.setItem('backup_api_key', apiKey.trim())
+    setKeySaved(true)
     setSyncing(true)
     const hideMsg = message.loading('Syncing backup — connecting to filer nodes via SSH...', 0)
     try {
@@ -97,7 +98,8 @@ export default function BackupPage() {
       message.error('API key required. Enter key above.')
       return
      }
-    setApiKey(apiKey)
+    localStorage.setItem('backup_api_key', apiKey.trim())
+    setKeySaved(true)
     setCreateOpen(false)
     setCreating(true)
     const autoName = !snapName.trim()
@@ -130,7 +132,8 @@ export default function BackupPage() {
       setShowApiConfig(true)
       return
      }
-    setApiKey(apiKey) // save to localStorage
+    localStorage.setItem('backup_api_key', apiKey.trim())
+    setKeySaved(true)
     try {
       await deleteSnapshot(name)
       message.success(`Backup deleted: ${name}`)
@@ -147,7 +150,8 @@ export default function BackupPage() {
       setShowApiConfig(true)
       return
      }
-    setApiKey(apiKey) // save to localStorage
+    localStorage.setItem('backup_api_key', apiKey.trim())
+    setKeySaved(true)
     setRestoring(true)
     try {
       const r = await restoreBackup(restoringName)

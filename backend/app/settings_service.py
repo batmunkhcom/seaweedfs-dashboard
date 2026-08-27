@@ -1,16 +1,22 @@
+import asyncio
+
 from app.database import get_db
 
 _cache: dict[str, str] = {}
 _cache_loaded = False
+_lock = asyncio.Lock()
 
 
 async def load_runtime_settings():
     global _cache_loaded, _cache
-    db = await get_db()
-    cursor = await db.execute("SELECT key, value FROM runtime_settings")
-    rows = await cursor.fetchall()
-    _cache = {row["key"]: row["value"] for row in rows}
-    _cache_loaded = True
+    async with _lock:
+        if _cache_loaded:
+            return
+        db = await get_db()
+        cursor = await db.execute("SELECT key, value FROM runtime_settings")
+        rows = await cursor.fetchall()
+        _cache = {row["key"]: row["value"] for row in rows}
+        _cache_loaded = True
 
 
 async def get_setting(key: str, default: str = "") -> str:

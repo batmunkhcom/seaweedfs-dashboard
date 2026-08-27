@@ -62,9 +62,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkSession: async () => {
     try {
       const user = await getMe()
-      const token = await getCsrfToken()
-      saveSession(user, token)
-      set({ isLoggedIn: true, user, csrfToken: token, loading: false })
+      set({ isLoggedIn: true, user, loading: false })
+      try {
+        const token = await getCsrfToken()
+        saveSession(user, token)
+        set({ csrfToken: token })
+      } catch {
+        saveSession(user, '')
+      }
     } catch {
       saveSession(null, '')
       set({ isLoggedIn: false, user: null, csrfToken: '', loading: false })

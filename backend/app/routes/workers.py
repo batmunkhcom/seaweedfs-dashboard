@@ -46,7 +46,10 @@ async def list_worker_jobs(limit: int = Query(50, ge=1, le=200)):
 @router.get("/jobs/{job_id}")
 async def get_worker_job(job_id: str):
     await _ensure_table()
-    job = await get_job(int(job_id))
+    try:
+        job = await get_job(int(job_id))
+    except ValueError:
+        return {"id": job_id, "type": "unknown", "status": "missing", "durationMs": None, "error": "invalid job id", "result": None, "createdAt": "", "node": ""}
     if not job:
         return {"id": job_id, "type": "unknown", "status": "missing", "durationMs": None, "error": "not found", "result": None, "createdAt": "", "node": ""}
     return job

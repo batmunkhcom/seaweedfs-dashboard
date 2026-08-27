@@ -1,4 +1,6 @@
 
+from time import strftime
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
@@ -86,7 +88,7 @@ async def update_webhook(webhook_id: int, body: UpdateBody, _: bool = Depends(re
         updates["secret"] = body.secret
 
     if updates:
-        updates["updated_at"] = "datetime('now')"
+        updates["updated_at"] = strftime("%Y-%m-%dT%H:%M:%SZ")
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         vals = list(updates.values())
         vals.append(webhook_id)

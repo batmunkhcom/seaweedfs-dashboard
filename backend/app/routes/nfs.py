@@ -20,7 +20,10 @@ async def create_export(body: dict, _: bool = Depends(require_admin)):
     options = body.get("options", "*(rw,sync,no_subtree_check)")
     if not node or not path:
         raise HTTPException(400, "node and path required")
-    return await add_export(node, path, options)
+    try:
+        return await add_export(node, path, options)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.put("/exports/{export_id}")
@@ -28,7 +31,10 @@ async def edit_export(export_id: int, body: dict, _: bool = Depends(require_admi
     options = body.get("options", "")
     if not options:
         raise HTTPException(400, "options required")
-    return await update_export(export_id, options)
+    try:
+        return await update_export(export_id, options)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.delete("/exports/{export_id}")

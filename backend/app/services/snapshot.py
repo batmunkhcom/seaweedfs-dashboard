@@ -87,7 +87,6 @@ class SnapshotService:
             return
 
         topology = topology_data.get("Topology", {})
-        topology_data.get("VolumeSizeLimit", 30 * 1024) / (1024 * 1024)
 
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):
@@ -106,16 +105,15 @@ class SnapshotService:
             pass
 
         try:
-            filer_client = await self._client.get_filer()
-            r = await filer_client.get(f"http://{self._client._filer_host}/?stats")
+            filer_host = await self._client.get_filer()
+            r = await self._client.client.get(f"http://{filer_host}/?stats")
             if r.status_code == 200:
                 fs = r.json()
                 stats["totalFiles"] = fs.get("Total", 0)
                 stats["remoteSizeBytes"] = fs.get("Disk", {}).get("Used", 0)
+                stats["filerStatus"] = "connected"
         except Exception:
-            pass
-        else:
-            stats["filerStatus"] = "connected"
+            logger.warning("snapshot_filer_stats_failed", exc_info=True)
 
         try:
             stats["version"] = topology_data.get("Version", "")

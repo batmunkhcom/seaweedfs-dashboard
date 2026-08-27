@@ -8,8 +8,8 @@ router = APIRouter(prefix="/info", tags=["info"])
 
 @router.get("")
 async def get_info():
-    dashboard_url = await sv_get("public_dashboard_url", "https://seaweed.mbm.mn")
-    s3_url = await sv_get("public_s3_url", "https://s3.mbm.mn")
+    dashboard_url = await sv_get("public_dashboard_url", "")
+    s3_url = await sv_get("public_s3_url", "")
 
     return {
         "version": VERSION,
@@ -25,8 +25,8 @@ async def get_info():
         "endpoints": {
             "public_dashboard": dashboard_url,
             "public_s3": s3_url,
-            "internal_filer": f"http://{settings.filer_list[0].split(':')[0]}:8888",
-            "internal_master": f"http://{settings.master_list[0].split(':')[0]}:9333",
+            "internal_filer": f"http://{settings.filer_list[0].split(':')[0]}:8888" if settings.filer_list else "",
+            "internal_master": f"http://{settings.master_list[0].split(':')[0]}:9333" if settings.master_list else "",
         },
         "about": {
             "name": "SeaweedFS Dashboard",

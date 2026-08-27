@@ -1,3 +1,5 @@
+from time import strftime
+
 from app.database import get_db
 from app.config import settings
 from app.services.seaweed_client import get_seaweed_client
@@ -42,7 +44,7 @@ async def update_policy(policy_id: int, **kwargs) -> dict:
         updates["permissions"] = updates["permissions"].upper()
 
     if updates:
-        updates["updated_at"] = "datetime('now')"
+        updates["updated_at"] = strftime("%Y-%m-%dT%H:%M:%SZ")
         set_clause = ", ".join(f"{k}=?" for k in updates)
         vals = list(updates.values()) + [policy_id]
         await db.execute(f"UPDATE acl_policies SET {set_clause} WHERE id=?", vals)
