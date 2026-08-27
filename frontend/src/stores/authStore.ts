@@ -43,14 +43,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: !cached?.user,
 
   login: async (username: string, password: string) => {
-    const data = await apiLogin({ username, password })
-    saveSession(data.user, data.csrfToken)
-    set({
-      isLoggedIn: true,
-      user: data.user,
-      csrfToken: data.csrfToken,
-      loading: false,
-    })
+    set({ loading: true })
+    try {
+      const data = await apiLogin({ username, password })
+      saveSession(data.user, data.csrfToken)
+      set({
+        isLoggedIn: true,
+        user: data.user,
+        csrfToken: data.csrfToken,
+        loading: false,
+      })
+    } catch {
+      set({ loading: false })
+      throw new Error('Login failed')
+    }
   },
 
   logout: async () => {
