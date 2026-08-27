@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, Query
+from fastapi import APIRouter, Depends, Request, Query, HTTPException
 import json
 
 from app.services.seaweed_client import get_seaweed_client
@@ -185,7 +185,7 @@ async def get_volume(volume_id: int):
         if v["Id"] == volume_id:
             v["locateUrl"] = f"/dir/lookup?volumeId={volume_id}"
             return v
-    return {"error": "volume not found"}
+    raise HTTPException(404, "Volume not found")
 
 @router.post("/grow")
 @limiter.limit("5/minute")
