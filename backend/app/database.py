@@ -56,10 +56,18 @@ async def _run_migrations(db: aiosqlite.Connection, logger: BoundLogger):
         with open(path) as f:
             sql = f.read()
 
-        await db.executescript(sql)
-        await db.execute("INSERT INTO _migrations (name) VALUES (?)", (fname,))
-        await db.commit()
-        logger.info("migration_applied", name=fname)
+        try:
+            for statement in sql.split(";"):
+                statement = statement.strip()
+                if statement:
+                    await db.execute(statement)
+            await db.execute("INSERT INTO _migrations (name) VALUES (?)", (fname,))
+            await db.commit()
+            logger.info("migration_applied", name=fname)
+        except Exception:
+            logger.error("migration_failed", name=fname, exc_info=True)
+            await db.rollback()
+            raise
 
 
 async def shutdown_database():
