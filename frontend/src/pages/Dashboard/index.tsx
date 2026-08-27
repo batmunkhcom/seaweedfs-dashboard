@@ -50,13 +50,13 @@ export default function DashboardPage() {
     fetchKpiExtras()
   }, [fetchStats, fetchAlerts, fetchDiskUsage, fetchKpiExtras])
 
-  useSSE('stats_update', (data) => {
+  useSSE('stats_update', useCallback((data) => {
     setStats(data as DashboardStats)
-  })
+  }, []))
 
-  useSSE('alert_new', () => {
+  useSSE('alert_new', useCallback(() => {
     fetchAlerts()
-  })
+  }, [fetchAlerts]))
 
   const severityColor: Record<string, string> = { critical: 'red', warning: 'orange', info: 'blue' }
 
