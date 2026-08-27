@@ -1,4 +1,4 @@
-import { useEffect, Suspense, lazy } from 'react'
+import { useEffect, useRef, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider, App as AntApp, theme, Spin } from 'antd'
 import { useAuthStore } from './stores/authStore'
@@ -65,10 +65,13 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
 
 function App() {
   const { checkSession, refreshCsrf } = useAuthStore()
+  const initialized = useRef(false)
 
   useEffect(() => {
+    if (initialized.current) return
+    initialized.current = true
     checkSession().then(() => refreshCsrf())
-  }, [])
+  }, [checkSession, refreshCsrf])
 
   return (
     <ConfigProvider theme={darkTheme}>
