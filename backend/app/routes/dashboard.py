@@ -160,9 +160,13 @@ async def get_alert_config():
 async def update_alert_config(config: list[dict], _: bool = Depends(require_permission("alerts:write"))):
     db = await get_db()
     for item in config:
+        key = item.get("key")
+        value = item.get("value")
+        if key is None or value is None:
+            continue
         await db.execute(
             "UPDATE runtime_settings SET value = ? WHERE key = ? AND category = 'alerts'",
-            (item["value"], item["key"]),
+            (value, key),
         )
     await db.commit()
     return {"ok": True}
