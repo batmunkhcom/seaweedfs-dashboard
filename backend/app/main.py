@@ -195,6 +195,7 @@ app.include_router(feedback_router, prefix="/api")
 @app.get("/api/health")
 async def health():
     db_ok = False
+    db = None
     try:
         db = await get_db()
         await db.execute("SELECT 1")
@@ -204,7 +205,8 @@ async def health():
 
     components = []
     try:
-        db = await get_db()
+        if db is None:
+            db = await get_db()
         cursor = await db.execute("SELECT name, last_heartbeat, ttl_seconds FROM services_health")
         rows = await cursor.fetchall()
         for row in rows:

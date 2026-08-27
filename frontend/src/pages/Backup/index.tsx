@@ -127,13 +127,10 @@ export default function BackupPage() {
     }
 
   const doDelete = async (name: string) => {
-    if (!apiKey.trim()) {
-      message.error('API key required. Click "⚙️ Settings" to configure.')
-      setShowApiConfig(true)
-      return
-     }
-    localStorage.setItem('backup_api_key', apiKey.trim())
-    setKeySaved(true)
+    if (apiKey.trim()) {
+      localStorage.setItem('backup_api_key', apiKey.trim())
+      setKeySaved(true)
+    }
     try {
       await deleteSnapshot(name)
       message.success(`Backup deleted: ${name}`)
@@ -145,13 +142,10 @@ export default function BackupPage() {
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
 
   const doRestore = async () => {
-    if (!apiKey.trim()) {
-      message.error('API key required. Click "⚙️ Settings" to configure.')
-      setShowApiConfig(true)
-      return
-     }
-    localStorage.setItem('backup_api_key', apiKey.trim())
-    setKeySaved(true)
+    if (apiKey.trim()) {
+      localStorage.setItem('backup_api_key', apiKey.trim())
+      setKeySaved(true)
+    }
     setRestoring(true)
     try {
       const r = await restoreBackup(restoringName)

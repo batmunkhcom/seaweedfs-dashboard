@@ -48,7 +48,7 @@ async def list_webhooks():
 def _mask_url(url: str) -> str:
     if len(url) > 60 and "/" in url:
         import re
-        masked = re.sub(r'(token=|key=|secret=|sig=|api_key=)[^&\s]+', r'\1****', url)
+        masked = re.sub(r'(token=|key=|secret=|sig=|api_key=|password=|bearer\s+)[^&\s]+', r'\1****', url, flags=re.IGNORECASE)
         if masked != url:
             return masked
         return url[:50] + "..." + url[-10:]
