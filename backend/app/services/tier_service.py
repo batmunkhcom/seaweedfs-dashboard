@@ -89,6 +89,7 @@ async def test_gcs_connection(config: dict) -> dict:
             key = paramiko.RSAKey.from_private_key_file(key_path)
             client.connect(hostname=host, username=settings.disk_health_ssh_user, pkey=key, timeout=10)
             try:
+                cred_path = None
                 if creds:
                     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
                         f.write(creds)
@@ -102,6 +103,8 @@ async def test_gcs_connection(config: dict) -> dict:
                 client.close()
                 return {"ok": exit_code == 0, "exit_code": exit_code, "output": out[:300]}
             finally:
+                if cred_path and os.path.exists(cred_path):
+                    os.unlink(cred_path)
                 try:
                     client.close()
                 except Exception:
