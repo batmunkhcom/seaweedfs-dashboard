@@ -218,6 +218,8 @@ async def search_similar(query: str, top_k: int = 5) -> tuple[str, list[dict]]:
         sim = _cosine_similarity(query_embedding, emb)
         scored.append((sim, row["chunk_text"], row["source"], row.get("cluster_snapshot", "")))
 
+    del rows
+
     scored.sort(key=lambda x: x[0], reverse=True)
     results = []
     citations = []
