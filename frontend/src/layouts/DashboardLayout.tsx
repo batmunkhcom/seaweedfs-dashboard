@@ -231,7 +231,7 @@ export default function DashboardLayout() {
       icon: <LogoutOutlined />,
       label: 'Logout',
       danger: true,
-      onClick: () => logout(),
+      onClick: async () => { await logout() },
     },
   ]
 

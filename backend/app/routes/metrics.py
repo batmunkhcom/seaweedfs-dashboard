@@ -164,7 +164,7 @@ async def metrics_alive():
             status = {"node": ip, "alive": False, "latency_ms": None, "error": None}
             try:
                 t0 = time.monotonic()
-                r = await hc.get(f"http://{ip}:8080/status", timeout=5.0)
+                r = await hc.get(f"http://{ip}:8080/status")
                 latency = round((time.monotonic() - t0) * 1000, 1)
                 status["alive"] = r.status_code == 200
                 status["latency_ms"] = latency

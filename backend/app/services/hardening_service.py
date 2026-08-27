@@ -24,6 +24,10 @@ class HardeningService:
         _instance_count += 1
         self._running = False
 
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
     async def start(self):
         global _eval_task, _last_restart_at
         now = time.time()
@@ -68,16 +72,6 @@ class HardeningService:
         checksum_enabled = (await get_setting("hardening_checksum_enabled", "false")) == "true"
         if checksum_enabled:
             await self.verify_checksums_all()
-
-    def _ssh_client(self) -> paramiko.SSHClient:
-        import os
-        key_path = os.path.expanduser(SSH_KEY_PATH)
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.WarningPolicy())
-        client.load_system_host_keys()
-        key = paramiko.RSAKey.from_private_key_file(key_path)
-        client.connect(hostname="", username=SSH_USER, pkey=key)
-        return client
 
     async def _ssh_exec(self, host: str, command: str, timeout: int = 60, env: dict | None = None) -> tuple[str, str, int]:
         loop = asyncio.get_event_loop()

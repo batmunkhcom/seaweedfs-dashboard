@@ -48,7 +48,7 @@ async def update_hardening(body: dict, _: bool = Depends(require_admin)):
 @router.post("/checksums/verify")
 async def trigger_checksum(_: bool = Depends(require_admin)):
     svc = get_hardening_service()
-    if not svc._running:
+    if not svc.is_running:
         await svc.start()
     result = await svc.verify_checksums_all()
     return result
