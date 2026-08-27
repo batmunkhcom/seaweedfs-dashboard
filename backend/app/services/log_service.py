@@ -146,9 +146,11 @@ def _query_local_logs(query: str, start: str | None = None, end: str | None = No
     for fmeta in files[:3]:
         try:
             with open(fmeta["path"]) as f:
-                lines = f.readlines()
                 if direction == "backward":
+                    lines = list(f)
                     lines.reverse()
+                else:
+                    lines = f
                 for line in lines:
                     line = line.strip()
                     if not line:
