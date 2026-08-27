@@ -237,7 +237,7 @@ export default function VolumesPage() {
          </div>
          <div style={{ marginBottom: 8 }}>
            <Typography.Text style={{ display: 'block', marginBottom: 4 }}>Count:</Typography.Text>
-           <InputNumber min={1} max={totalFree || 999} value={growCount} onChange={(v) => setGrowCount(v || 1)} style={{ width: '100%' }} />
+            <InputNumber min={1} max={Math.max(totalFree, 1)} value={growCount} onChange={(v) => setGrowCount(v || 1)} disabled={totalFree <= 0} style={{ width: '100%' }} />
          </div>
          <div>
            <Typography.Text style={{ display: 'block', marginBottom: 4 }}>Collection (optional):</Typography.Text>

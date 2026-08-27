@@ -8,6 +8,14 @@ interface Props {
 }
 
 export default function DiskUsageChart({ data }: Props) {
+  const total = data.reduce((s, d) => s + d.value, 0)
+  if (!data.length || total === 0) {
+    return (
+      <Card title="Disk Usage by Server">
+        <div style={{ textAlign: 'center', padding: 60, color: '#999' }}>No disk usage data available</div>
+      </Card>
+    )
+  }
   return (
     <Card title="Disk Usage by Server">
       <ResponsiveContainer width="100%" height={300}>
