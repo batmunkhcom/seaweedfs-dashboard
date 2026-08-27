@@ -20,8 +20,13 @@ JOB_TYPES = {
 
 ALLOWED_JOB_TYPES = set(JOB_TYPES.keys())
 
+_table_ensured = False
+
 
 async def _ensure_table():
+    global _table_ensured
+    if _table_ensured:
+        return
     db = await get_db()
     await db.execute(
         """
@@ -42,6 +47,7 @@ async def _ensure_table():
     except Exception:
         pass
     await db.commit()
+    _table_ensured = True
 
 
 async def _record_job(job_type: str, node: str = "") -> int:
