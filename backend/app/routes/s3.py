@@ -1,3 +1,4 @@
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -54,7 +55,7 @@ async def create_bucket(body: dict, _: bool = Depends(require_permission("s3:wri
     if not name:
         raise HTTPException(400, "Bucket name is required")
     try:
-        await client.request("POST", f"/buckets/{name}/?op=mkdir", master=False)
+        await client.request("POST", f"/buckets/{quote(name, safe='')}/?op=mkdir", master=False)
         return {"ok": True, "name": name}
     except Exception:
         logger.error("s3_bucket_create_failed", name=name, exc_info=True)
@@ -65,7 +66,7 @@ async def create_bucket(body: dict, _: bool = Depends(require_permission("s3:wri
 async def delete_bucket(name: str, _: bool = Depends(require_permission("s3:write"))):
     client = get_seaweed_client()
     try:
-        await client.request("DELETE", f"/buckets/{name}?recursive=true", master=False)
+        await client.request("DELETE", f"/buckets/{quote(name, safe='')}?recursive=true", master=False)
         return {"ok": True}
     except Exception:
         logger.error("s3_bucket_delete_failed", name=name, exc_info=True)
@@ -77,7 +78,7 @@ async def set_bucket_quota(name: str, body: dict, _: bool = Depends(require_perm
     client = get_seaweed_client()
     quota_bytes = body.get("quota", 0)
     try:
-        await client.request("POST", f"/buckets/{name}/configure?hardQuota={quota_bytes}", master=False)
+        await client.request("POST", f"/buckets/{quote(name, safe='')}/configure?hardQuota={quota_bytes}", master=False)
         return {"ok": True, "quota": quota_bytes}
     except Exception:
         logger.error("s3_bucket_quota_failed", name=name, exc_info=True)

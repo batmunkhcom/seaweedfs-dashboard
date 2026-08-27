@@ -27,7 +27,7 @@ async def trigger_sync(request: Request, body: dict | None = None, _: bool = Dep
         s3_bucket = (body or {}).get("s3_bucket", "")
         s3_endpoint = (body or {}).get("s3_endpoint", "")
         result = await create_backup(upload_s3=bool(s3_bucket), s3_bucket=s3_bucket, s3_endpoint=s3_endpoint)
-        logger.info("backup_sync_result", ok=result["ok"], sync_id=result.get("syncId"), bytes_synced=result.get("bytesSynced", 0))
+        logger.info("backup_sync_result", ok=result.get("ok"), sync_id=result.get("syncId"), bytes_synced=result.get("bytesSynced", 0))
         try:
             from app.services.webhook_service import publish_webhook_event
             await publish_webhook_event("backup_completed", result)
