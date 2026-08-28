@@ -326,12 +326,12 @@ async def _upload_to_s3(file_path: Path, bucket: str, endpoint: str = "") -> dic
     try:
         import httpx
         async with httpx.AsyncClient(timeout=300) as hc:
-            with open(file_path, "rb") as f:
-                data = f.read()
             key = file_path.name
+            file_size = file_path.stat().st_size
 
             s3_url = f"{endpoint or 'http://' + settings.filer_list[0].replace(':8888',':8333')}/{bucket}/{key}"
-            resp = await hc.put(s3_url, content=data, headers={"Content-Type": "application/octet-stream"})
+            with open(file_path, "rb") as f:
+                resp = await hc.put(s3_url, content=f, headers={"Content-Type": "application/octet-stream", "Content-Length": str(file_size)})
 
             filer_success = False
             if resp.status_code >= 400:
@@ -339,7 +339,8 @@ async def _upload_to_s3(file_path: Path, bucket: str, endpoint: str = "") -> dic
                 for host in filer_hosts:
                     try:
                         filer_url = f"http://{host}/{bucket}/{key}"
-                        fresp = await hc.put(filer_url, content=data, headers={"Content-Type": "application/octet-stream"})
+                        with open(file_path, "rb") as f:
+                            fresp = await hc.put(filer_url, content=f, headers={"Content-Type": "application/octet-stream", "Content-Length": str(file_size)})
                         if fresp.status_code in (200, 201, 204):
                             filer_success = True
                             break

@@ -180,11 +180,18 @@ async def list_volumes(
 @router.get("/{volume_id}")
 async def get_volume(volume_id: int):
     client = get_seaweed_client()
-    data = await _fetch_volume_stats(client)
-    for v in data["volumes"]:
-        if v["Id"] == volume_id:
-            v["locateUrl"] = f"/dir/lookup?volumeId={volume_id}"
-            return v
+    try:
+        resp = await client.master_get(f"/dir/lookup?volumeId={volume_id}")
+        data = resp.json()
+        locations = data.get("Locations", [])
+        if locations:
+            return {
+                "Id": volume_id,
+                "Locations": locations,
+                "locateUrl": f"/dir/lookup?volumeId={volume_id}",
+            }
+    except Exception:
+        pass
     raise HTTPException(404, "Volume not found")
 
 @router.post("/grow")
