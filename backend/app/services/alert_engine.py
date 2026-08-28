@@ -104,8 +104,9 @@ class AlertEngine:
 
         disk_pct = await get_setting_int("alert_disk_usage_pct", 90)
         max_readonly = await get_setting_int("alert_max_readonly_volumes", 3)
+        garbage_threshold = 0.5
         try:
-            float(await get_setting("alert_garbage_ratio", "0.5"))
+            garbage_threshold = float(await get_setting("alert_garbage_ratio", "0.5"))
         except ValueError:
             pass
 
@@ -118,6 +119,7 @@ class AlertEngine:
             return
 
         topology = topology_data.get("Topology", {})
+        high_garbage_nodes = set()
 
         for dc in topology.get("DataCenters", []):
             for rack in dc.get("Racks", []):
@@ -128,6 +130,20 @@ class AlertEngine:
                     self._check_node_disk(node_ip, node, disk_pct)
                     self._check_node_alive(node_ip)
                     self._check_readonly_volumes(node_ip, node, max_readonly)
+
+                    for vol in node.get("Volumes", []):
+                        garbage_ratio = vol.get("GarbageRatio", 0)
+                        if isinstance(garbage_ratio, (int, float)) and garbage_ratio > garbage_threshold:
+                            high_garbage_nodes.add(node_ip)
+
+        for node_ip in high_garbage_nodes:
+            dedup_key = f"high_garbage:{node_ip}"
+            await self._create_alert(
+                "high_garbage", "warning",
+                f"High garbage ratio on {node_ip}",
+                f"Threshold: {garbage_threshold}",
+                node_ip, dedup_key,
+            )
 
     def _check_node_disk(self, node_ip: str, node: dict, threshold: int):
         dedup_key = f"disk_usage:{node_ip}"
