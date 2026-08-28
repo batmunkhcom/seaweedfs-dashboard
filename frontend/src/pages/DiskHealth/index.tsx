@@ -75,8 +75,7 @@ export default function DiskHealthPage() {
       const data = await getDiskHealthStatus()
       setStatus(data)
       if (data?.enabled && Array.isArray(data.devices)) {
-            const enriched: DiskDevice[] = []
-        for (const d of data.devices) {
+        const enriched: DiskDevice[] = await Promise.all(data.devices.map(async (d: any) => {
           try {
             const deviceName = d.device.split('/').pop() || d.device
             const detail = await getDiskHealthDetail(d.node, deviceName)
@@ -87,7 +86,7 @@ export default function DiskHealthPage() {
             const wearAttr = wearId ? findAttr(wearId) : null
             const wearPct = wearAttr ? (100 - (typeof wearAttr.value === 'number' ? wearAttr.value : 0)) : undefined
             const poh = findAttr(9)?.raw?.value || 0
-            enriched.push({
+            return {
               node: d.node,
               device: d.device,
               last_scan: d.last_scan,
@@ -102,11 +101,11 @@ export default function DiskHealthPage() {
               tbw_bytes: findAttr(241)?.raw?.value ? (findAttr(241).raw.value * 512) : 0,
               usage: smart?.usage || null,
               lifetime: estimateLifetime(wearPct, poh),
-            })
+            }
           } catch {
-            enriched.push({ node: d.node, device: d.device, last_scan: d.last_scan, health: 'ok' })
+            return { node: d.node, device: d.device, last_scan: d.last_scan, health: 'ok' }
           }
-        }
+        }))
         setDevices(enriched)
       }
     } catch { } finally { setLoading(false) }

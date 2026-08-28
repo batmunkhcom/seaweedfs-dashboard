@@ -76,15 +76,23 @@ async def metrics_node(ip: str):
     metrics = ["volumes", "free_slots", "max_slots", "disk_usage_pct", "ec_shards", "disk_total_gb", "disk_free_gb"]
     result = {"node": ip, "alive": False, "last_seen": 0}
 
+    placeholders = ",".join("?" * len(metrics))
+    cursor = await db.execute(
+        f"SELECT metric_type, value, timestamp FROM metrics_history WHERE node = ? AND metric_type IN ({placeholders}) ORDER BY timestamp DESC",
+        [ip] + metrics,
+    )
+    rows = await cursor.fetchall()
+    seen = set()
+    for row in rows:
+        mt = row["metric_type"]
+        if mt not in seen:
+            seen.add(mt)
+            result[mt] = row["value"]
+            if mt == "disk_usage_pct":
+                result["last_seen"] = row["timestamp"]
     for m in metrics:
-        cursor = await db.execute(
-            "SELECT value, timestamp FROM metrics_history WHERE node = ? AND metric_type = ? ORDER BY timestamp DESC LIMIT 1",
-            (ip, m),
-        )
-        row = await cursor.fetchone()
-        result[m] = row["value"] if row else 0
-        if m == "disk_usage_pct" and row:
-            result["last_seen"] = row["timestamp"]
+        if m not in seen:
+            result[m] = 0
 
     cursor = await db.execute(
         "SELECT COUNT(*) as cnt FROM metrics_history WHERE node = ? AND timestamp > ?",

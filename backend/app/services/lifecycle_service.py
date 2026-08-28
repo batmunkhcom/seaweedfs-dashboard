@@ -290,19 +290,32 @@ class LifecycleEngine:
 
         await self._cleanup_old_transitions(bucket)
 
-    async def _list_bucket_objects(self, bucket: str, max_keys: int = 100) -> list[dict]:
+    async def _list_bucket_objects(self, bucket: str, max_keys: int = 1000) -> list[dict]:
         try:
             from app.config import settings
             s3_host = settings.filer_list[0].replace(":8888", ":8333") if settings.filer_list else None
             if not s3_host:
                 return []
-            s3_resp = await self._client.client.get(
-                f"http://{s3_host}/{bucket}?list-type=2&max-keys={max_keys}",
-                timeout=10,
-            )
-            if s3_resp.status_code != 200:
-                return []
-            return self._parse_s3_list(s3_resp)
+            all_objects = []
+            continuation_token = None
+            while True:
+                url = f"http://{s3_host}/{bucket}?list-type=2&max-keys={max_keys}"
+                if continuation_token:
+                    url += f"&continuation-token={continuation_token}"
+                s3_resp = await self._client.client.get(url, timeout=10)
+                if s3_resp.status_code != 200:
+                    break
+                objects = self._parse_s3_list(s3_resp)
+                all_objects.extend(objects)
+                try:
+                    data = s3_resp.json()
+                    is_truncated = data.get("IsTruncated") or data.get("isTruncated")
+                    continuation_token = data.get("NextContinuationToken") or data.get("nextContinuationToken")
+                    if not is_truncated or not continuation_token:
+                        break
+                except Exception:
+                    break
+            return all_objects
         except Exception:
             return []
 

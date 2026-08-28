@@ -15,14 +15,19 @@ router = APIRouter(prefix="/users", tags=["users"])
 logger = get_logger("users")
 
 
+_sync_tasks: set[asyncio.Task] = set()
+
+
 def _trigger_sync():
     async def _do():
         try:
             from app.services.s3_sync import sync_to_all_gateways
             await sync_to_all_gateways()
         except Exception:
-            pass
-    asyncio.create_task(_do())
+            logger.error("s3_sync_failed", exc_info=True)
+    task = asyncio.create_task(_do())
+    _sync_tasks.add(task)
+    task.add_done_callback(_sync_tasks.discard)
 
 class CreateUserRequest(BaseModel):
     username: str

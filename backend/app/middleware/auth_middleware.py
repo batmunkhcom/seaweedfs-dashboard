@@ -33,7 +33,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/api/health"):
             return await call_next(request)
 
-         # Try API key first (for backend service access)
         api_key = request.headers.get("X-API-Key")
         if api_key:
             key_data = await validate_api_key(api_key)
@@ -43,6 +42,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 request.state.permissions = key_data["permissions"].split(",")
                 request.state.api_key_id = key_data["id"]
                 await record_usage(key_data["id"], request.url.path)
+                path = request.url.path
+                for prefix in ADMIN_ONLY_PREFIXES:
+                    if path.startswith(prefix):
+                        return JSONResponse(status_code=403, content={"detail": "Admin access required"})
                 return await call_next(request)
 
         # Fallback to session-based auth

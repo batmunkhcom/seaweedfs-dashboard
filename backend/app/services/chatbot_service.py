@@ -5,29 +5,21 @@ from typing import AsyncGenerator
 from app.database import get_db
 from app.logging_config import get_logger
 from app.services.seaweed_client import get_seaweed_client
+from app.settings_service import get_setting, get_setting_int, get_setting_float
 
 logger = get_logger("chatbot")
 
 
 async def _get_setting(key: str, default: str = "") -> str:
-    db = await get_db()
-    cursor = await db.execute("SELECT value FROM runtime_settings WHERE key=?", (key,))
-    row = await cursor.fetchone()
-    return row[0] if row else default
+    return await get_setting(key, default)
 
 
 async def _get_setting_int(key: str, default: int = 0) -> int:
-    try:
-        return int(await _get_setting(key, str(default)))
-    except (ValueError, TypeError):
-        return default
+    return await get_setting_int(key, default)
 
 
 async def _get_setting_float(key: str, default: float = 0.0) -> float:
-    try:
-        return float(await _get_setting(key, str(default)))
-    except (ValueError, TypeError):
-        return default
+    return await get_setting_float(key, default)
 
 
 async def is_ai_enabled() -> bool:
