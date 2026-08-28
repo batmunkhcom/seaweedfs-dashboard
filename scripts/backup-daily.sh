@@ -1,7 +1,7 @@
 #!/bin/bash
 # SeaweedFS Dashboard — Daily Backup Cron Script
 # Backs up filer metadata to SeaweedFS S3 bucket (and local)
-# Place in crontab: 0 3 * * * /home/seaweed-dashboard/scripts/backup-daily.sh
+# Place in crontab: 0 3 * * * /home/seaweed/seaweed-dashboard/scripts/backup-daily.sh
 
 set -euo pipefail
 
@@ -12,7 +12,7 @@ if [ -f "$ENV_FILE" ]; then
   export $(grep -v '^#' "$ENV_FILE" | xargs)
 fi
 
-LOG_DIR="/home/seaweed-dashboard/backend/logs"
+LOG_DIR="$SCRIPT_DIR/../backend/logs"
 LOG_FILE="$LOG_DIR/backup-cron-$(date +%Y%m%d).log"
 BACKEND_URL="http://127.0.0.1:8000"
 ADMIN_USER="${ADMIN_USER:-admin}"

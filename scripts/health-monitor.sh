@@ -1,9 +1,10 @@
 #!/bin/bash
 # SeaweedFS Dashboard — Health Monitor Cron Script
 # Checks /api/health every 5 minutes, logs failures, can send webhook alerts
-# Place in crontab: */5 * * * * /home/seaweed-dashboard/scripts/health-monitor.sh
+# Place in crontab: */5 * * * * /home/seaweed/seaweed-dashboard/scripts/health-monitor.sh
 
-LOG_DIR="/home/seaweed-dashboard/backend/logs"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/../backend/logs"
 LOG_FILE="$LOG_DIR/health-monitor.log"
 BACKEND_URL="http://127.0.0.1:8000"
 FRONTEND_URL="http://127.0.0.1:8081"
